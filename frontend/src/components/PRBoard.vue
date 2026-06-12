@@ -32,9 +32,20 @@ const STATE_LABEL: Record<string, string> = {
 }
 
 const SKIP_STATES = new Set(['disabled', 'excluded', 'locked'])
+const BUILDING_STATES = new Set(['building', 'finished', 'scheduled'])
 
-function failingTargets(pkg: Package) {
+function activeTargets(pkg: Package) {
   return pkg.targets.filter(t => !SKIP_STATES.has(t.state) && t.state !== 'succeeded')
+}
+
+function targetSummary(pkg: Package): string {
+  const targets = activeTargets(pkg)
+  const building = targets.filter(t => BUILDING_STATES.has(t.state)).length
+  const failing = targets.filter(t => !BUILDING_STATES.has(t.state)).length
+  const parts = []
+  if (failing > 0) parts.push(`${failing} failing`)
+  if (building > 0) parts.push(`${building} building`)
+  return parts.join(', ')
 }
 
 function subprojectLabel(project: string): string {
@@ -134,11 +145,11 @@ function prProjectUrl(pr: string): string {
               flexShrink: '0',
             }">{{ STATE_LABEL[pkg.rollup_state] ?? pkg.rollup_state }}</span>
 
-            <!-- Failing targets summary -->
+            <!-- Active targets summary -->
             <span
-              v-if="failingTargets(pkg).length > 0"
+              v-if="activeTargets(pkg).length > 0"
               style="font-size: 10.5px; color: var(--text-muted); flex-shrink: 0;"
-            >{{ failingTargets(pkg).length }} failing</span>
+            >{{ targetSummary(pkg) }}</span>
 
             <!-- OBS link -->
             <a
