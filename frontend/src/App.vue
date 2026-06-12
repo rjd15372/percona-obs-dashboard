@@ -4,8 +4,10 @@ import AppHeader from './components/AppHeader.vue'
 import ContextBar from './components/ContextBar.vue'
 import HealthHeader from './components/HealthHeader.vue'
 import MainGrid from './components/MainGrid.vue'
+import PRBoard from './components/PRBoard.vue'
 import { usePackages } from './composables/usePackages'
 import { useEvents } from './composables/useEvents'
+import { usePRPackages } from './composables/usePRPackages'
 
 // Theme
 const theme = ref<'light' | 'dark'>('light')
@@ -42,6 +44,7 @@ const customTo = ref<string | null>(null)
 // Data fetching
 const { data: allPackages, refresh: refreshPackages, filterByScope } = usePackages('ppg', version)
 const { data: events, refresh: refreshEvents } = useEvents('ppg', version)
+const { data: prGroups, refresh: refreshPR } = usePRPackages()
 
 const filteredPackages = computed(() => filterByScope(activeScopes.value))
 const updatedAt = ref<string | null>(null)
@@ -53,7 +56,8 @@ async function refresh() {
       windowMin.value === -1 && customFrom.value && customTo.value
         ? { from: customFrom.value, to: customTo.value }
         : { window: windowMin.value }
-    )
+    ),
+    refreshPR(),
   ])
   updatedAt.value = new Date().toISOString()
 }
@@ -92,6 +96,7 @@ watch([windowMin, customFrom, customTo], () => refresh())
         @update:custom-from="customFrom = $event"
         @update:custom-to="customTo = $event"
       />
+      <PRBoard :groups="prGroups" />
     </div>
   </div>
 </template>

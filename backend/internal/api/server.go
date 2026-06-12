@@ -19,5 +19,7 @@ func NewRouter(db *sql.DB) http.Handler {
 		r.Get("/events", eventsHandler(db))
 	})
 
+	r.Get("/api/pr/packages", prPackagesHandler(db))
+
 	return r
 }

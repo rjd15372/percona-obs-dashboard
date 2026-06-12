@@ -1,5 +1,5 @@
 export type BuildState = 'succeeded' | 'failed' | 'unresolvable' | 'broken' | 'blocked' | 'scheduled' | 'building'
-export type PackageScope = 'common' | 'ppgcommon' | 'version' | 'container' | 'release'
+export type PackageScope = 'common' | 'ppgcommon' | 'version' | 'container' | 'release' | 'pr'
 export type EventType = 'triggered' | 'started' | 'succeeded' | 'failed' | 'unresolvable' | 'broken' | 'blocked' | 'published'
 
 export interface Trigger {
@@ -24,6 +24,12 @@ export interface Package {
   trigger?: Trigger // optional
   targets: Target[]
   updated_at: string // ISO 8601
+}
+
+export interface PRGroup {
+  pr: string
+  rollup_state: BuildState
+  packages: Package[]
 }
 
 export interface Event {

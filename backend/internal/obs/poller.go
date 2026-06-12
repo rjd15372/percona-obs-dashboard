@@ -108,6 +108,9 @@ func (p *Poller) discoverProjects(ctx context.Context, root string) ([]string, e
 func InferScope(project string) model.Scope {
 	lower := strings.ToLower(project)
 	switch {
+	// PR projects: isv:percona:PR:pr-<number>[:<subproject>]
+	case strings.HasPrefix(lower, "isv:percona:pr:"):
+		return model.ScopePR
 	case strings.Contains(lower, "container"):
 		return model.ScopeContainer
 	case strings.Contains(lower, "release"):
@@ -124,6 +127,20 @@ func InferScope(project string) model.Scope {
 		}
 		return model.ScopeCommon
 	}
+}
+
+// PRNumber extracts the PR number from a PR project path.
+// Returns "" if the project is not a PR project.
+// Example: "isv:percona:PR:pr-42:ppg17" → "42"
+func PRNumber(project string) string {
+	parts := strings.Split(project, ":")
+	for i, p := range parts {
+		if strings.EqualFold(p, "PR") && i+1 < len(parts) {
+			prSegment := parts[i+1]
+			return strings.TrimPrefix(strings.ToLower(prSegment), "pr-")
+		}
+	}
+	return ""
 }
 
 // skipState returns true for OBS states that represent a build being intentionally

@@ -39,6 +39,7 @@ const (
 	ScopeVersion   Scope = "version"
 	ScopeContainer Scope = "container"
 	ScopeRelease   Scope = "release"
+	ScopePR        Scope = "pr"
 )
 
 type Target struct {
