@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/percona/obs-dashboard/internal/hub"
 	"github.com/percona/obs-dashboard/internal/store"
 )
 
@@ -16,7 +17,7 @@ func setupTestServer(t *testing.T) http.Handler {
 		t.Fatalf("store.Open: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
-	return NewRouter(db)
+	return NewRouter(db, hub.New())
 }
 
 func TestPackagesHandler_EmptyDB(t *testing.T) {
