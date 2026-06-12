@@ -149,16 +149,16 @@ Version tabs are no longer hardcoded. The available versions are derived from th
 
 A version segment is any colon-delimited part of a project path that is a bare integer (e.g. `17` in `isv:percona:ppg:17:containers` or `isv:percona:PR:pr-92:ppg:17`). Packages whose project path contains no such segment (common packages like `isv:percona:ppg:common`) contribute no version and are always shown regardless of the selected version tab.
 
+The version segment always appears immediately after the context prefix in the project path. For `isv:percona:ppg` (3 segments), the version is at index 3; for `isv:percona:PR:pr-92:ppg` (5 segments), it is at index 5. Any purely numeric value at that position is a version; anything else (`common`, `containers`, etc.) is not. No whitelist is needed.
+
 ```typescript
 // derived in App.vue from the loaded packages for the current context
-const KNOWN_VERSIONS = new Set(['16', '17', '18', '19']) // guard against noise
-
 const availableVersions = computed<string[]>(() => {
+  const prefixDepth = selectedContext.value.prefix.split(':').length
   const found = new Set<string>()
   for (const pkg of allPackages.value) {
-    for (const seg of pkg.project.split(':')) {
-      if (KNOWN_VERSIONS.has(seg)) found.add(seg)
-    }
+    const seg = pkg.project.split(':')[prefixDepth]
+    if (seg && /^\d+$/.test(seg)) found.add(seg)
   }
   // Sort descending (newest first)
   return [...found].sort((a, b) => parseInt(b) - parseInt(a))
@@ -167,7 +167,7 @@ const availableVersions = computed<string[]>(() => {
 
 `availableVersions` is passed to `ContextBar` as a prop replacing the hardcoded `VERSIONS` constant. When the selected context changes and `availableVersions` updates, `version` is reset to `availableVersions[0]` (the highest available version). If `availableVersions` is empty (context has only common packages), the version tab row is hidden.
 
-`matchesVersion` in `usePackages` is updated to use `availableVersions` instead of the hardcoded `['16', '17', '18']` constant for the exclusion list.
+`matchesVersion` in `usePackages` is updated to use `availableVersions` instead of the hardcoded `['16', '17', '18']` constant for the exclusion list. The same positional logic applies: a package belongs to the selected version if the segment at `prefixDepth` in its project path is either absent (common package) or matches the selected version.
 
 ---
 
