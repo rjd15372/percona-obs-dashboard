@@ -79,5 +79,5 @@ export function usePackages(
     return sorted.value.filter(p => scopes.includes(p.scope))
   }
 
-  return { data: sorted, availableVersions, loading, error, refresh, filterByScope }
+  return { data: sorted, rawData: data, availableVersions, loading, error, refresh, filterByScope }
 }

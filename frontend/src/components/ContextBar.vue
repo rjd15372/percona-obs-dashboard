@@ -95,7 +95,7 @@ function scopeStyle(_id: string, active: boolean): string {
       <div style="margin-left: auto; display: flex; align-items: center; gap: 16px; font-size: 12px; color: var(--text-muted);">
         <span>Updated <strong style="color: var(--text-secondary); font-weight: 600;">{{ formatTime(updatedAt) }}</strong></span>
         <span style="display: inline-flex; align-items: center; gap: 6px;">
-          <span style="width: 7px; height: 7px; border-radius: 99px; background: var(--ok);"></span>Auto-refresh 5 min
+          <span style="width: 7px; height: 7px; border-radius: 99px; background: var(--ok);"></span>Live
         </span>
       </div>
     </div>

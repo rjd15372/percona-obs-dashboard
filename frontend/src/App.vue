@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import AppHeader from './components/AppHeader.vue'
 import ContextBar from './components/ContextBar.vue'
 import HealthHeader from './components/HealthHeader.vue'
@@ -8,6 +8,7 @@ import type { Context } from './types/api'
 import { usePackages } from './composables/usePackages'
 import { useEvents } from './composables/useEvents'
 import { usePRPackages } from './composables/usePRPackages'
+import { useRealtimeStream } from './composables/useRealtimeStream'
 
 // Theme
 const theme = ref<'light' | 'dark'>('light')
@@ -61,7 +62,7 @@ const customTo = ref<string | null>(null)
 
 // Data fetching
 const apiBase = computed(() => selectedContext.value.apiBase)
-const { data: allPackages, availableVersions, refresh: refreshPackages, filterByScope } = usePackages(apiBase, version, prefixDepth)
+const { data: allPackages, rawData: rawPackages, availableVersions, refresh: refreshPackages, filterByScope } = usePackages(apiBase, version, prefixDepth)
 const { data: events, refresh: refreshEvents } = useEvents(apiBase, version)
 const { data: prGroups, refresh: refreshPR } = usePRPackages()
 
@@ -121,13 +122,11 @@ async function refresh() {
   updatedAt.value = new Date().toISOString()
 }
 
-// Initial fetch + 5-min auto-refresh
-let timer: ReturnType<typeof setInterval>
+// Initial fetch + SSE real-time stream
 onMounted(() => {
   refresh()
-  timer = setInterval(refresh, 5 * 60 * 1000)
 })
-onUnmounted(() => clearInterval(timer))
+useRealtimeStream(rawPackages, events, refresh)
 
 // Re-fetch on version change
 watch(version, () => refresh())
