@@ -1,0 +1,18 @@
+obs:
+  username: ""
+  password: ""
+  base_url: "https://build.opensuse.org"
+
+mq:
+  url: "amqps://opensuse:opensuse@rabbit.opensuse.org:5671/"
+
+poller:
+  interval: "5m"
+
+store:
+  db_path: "/data/obsboard.db"
+  event_retention: "7d"
+
+server:
+  http_port: 8080
+  frontend_dir: ""
