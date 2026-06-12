@@ -41,9 +41,9 @@ function tabStyle(v: string, selected: string): string {
     : 'background: transparent; color: var(--text-muted); font-weight: 500; padding: 4px 12px; border-radius: 7px; border: none; font-size: 13px; cursor: pointer; font-family: inherit;'
 }
 
-function scopeStyle(id: string, active: boolean): string {
+function scopeStyle(_id: string, active: boolean): string {
   return active
-    ? 'background: var(--brand-purple); color: #fff; padding: 4px 11px; border-radius: 8px; border: none; font-size: 11.5px; font-weight: 600; cursor: pointer; font-family: inherit;'
+    ? 'background: var(--brand-purple-tint); color: var(--brand-purple); padding: 3px 10px; border-radius: 8px; border: 2px solid var(--brand-purple); font-size: 11.5px; font-weight: 600; cursor: pointer; font-family: inherit;'
     : 'background: transparent; color: var(--text-secondary); padding: 4px 11px; border-radius: 8px; border: 1px solid var(--border); font-size: 11.5px; font-weight: 500; cursor: pointer; font-family: inherit;'
 }
 </script>
@@ -53,10 +53,14 @@ function scopeStyle(id: string, active: boolean): string {
     <!-- Top row: tech badge + context selector + version tabs + updated -->
     <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
       <span style="display: inline-flex; align-items: center; gap: 7px; padding: 5px 12px; border-radius: 8px; background: var(--tint-postgres); color: var(--tech-postgres); font-size: 12px; font-weight: 700; border: 1px solid rgba(0,94,214,0.15);">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style="flex-shrink:0;">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill="currentColor" opacity="0.15"/>
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="currentColor"/>
-          <text x="7" y="16" font-size="10" font-weight="800" fill="currentColor" font-family="monospace">pg</text>
+        <svg width="14" height="14" viewBox="0 0 1123.51 1123.51" style="flex-shrink:0;">
+          <path fill="currentColor" fill-rule="evenodd" d="M1082.02,1010.89H41.49L561.75,109.77l520.26,901.12ZM69.93,994.47h983.65L561.75,142.61,69.93,994.47Z"/>
+          <polygon fill="currentColor" points="681.51 899.1 625.22 899.1 567.09 798.9 609.3 726.62 620.68 791.4 681.51 899.1"/>
+          <path fill="currentColor" d="M718.7,562.3h-14.61l-6.06,10.37-45.26,78.39-33.43,57.9-3.84,6.66h107.44l32.67,32.67v59.03h-52.4c-5.34,0-9.67,4.33-9.67,9.67v39.11h62.55c26.37,0,47.78-21.13,48.27-47.38h.02v-160.72c0-47.33-38.37-85.7-85.7-85.7ZM740.29,646.03c0,5.32-4.35,9.67-9.67,9.67h-8.99c-5.32,0-9.67-4.35-9.67-9.67v-8.99c0-5.32,4.35-9.67,9.67-9.67h8.99c5.32,0,9.67,4.35,9.67,9.67v8.99Z"/>
+          <polygon fill="currentColor" points="305.31 827.37 328.46 787.35 378.35 787.35 442.63 898.29 498.94 898.29 433.67 787.35 548.29 787.45 573.7 743.44 516.78 645.54 473.31 569.38 374.65 570.25 305.94 688.19 305.88 704.68 279.05 752.33 279.05 799.28 306.72 752.18"/>
+          <polygon fill="currentColor" points="586.76 720.72 689.75 542.35 483.78 542.35 586.76 720.72"/>
+          <path fill="currentColor" d="M557.54,809.88h-30.45v79.55c0,5.34,4.33,9.67,9.67,9.67h46.53l-.23-44.84-25.52-44.38Z"/>
+          <path fill="currentColor" d="M362.46,867.89l23.21-40.05-10.35-17.95h-43.93l-22.88,39.62v39.32c0,5.34,4.33,9.67,9.67,9.67h61.73l-17.45-30.6Z"/>
         </svg>
         PostgreSQL
       </span>

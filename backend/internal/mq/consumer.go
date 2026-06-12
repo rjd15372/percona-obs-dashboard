@@ -360,6 +360,11 @@ func (c *Consumer) mergePackageTarget(m mqMessage, scope model.Scope, newState m
 		}
 	}
 
+	var trigger *model.Trigger
+	if m.Reason != "" {
+		trigger = &model.Trigger{What: m.Reason, Kind: "obs", At: time.Now().UTC()}
+	}
+
 	return &model.Package{
 		Project:      m.Project,
 		Name:         m.Package,
@@ -367,6 +372,7 @@ func (c *Consumer) mergePackageTarget(m mqMessage, scope model.Scope, newState m
 		RollupState:  worst,
 		OKTargets:    okCount,
 		TotalTargets: len(targets),
+		Trigger:      trigger,
 		Targets:      targets,
 		UpdatedAt:    time.Now().UTC(),
 	}
