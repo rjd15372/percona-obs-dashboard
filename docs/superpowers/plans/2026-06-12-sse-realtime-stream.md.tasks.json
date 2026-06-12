@@ -1,0 +1,53 @@
+{
+  "planPath": "docs/superpowers/plans/2026-06-12-sse-realtime-stream.md",
+  "tasks": [
+    {
+      "id": 45,
+      "subject": "Task 1: Hub package with unit tests",
+      "status": "pending",
+      "description": "**Goal:** Create `internal/hub` with the Hub struct, typed message helpers, and passing unit tests.\n\n**Files:**\n- Create: `backend/internal/hub/hub.go`\n- Create: `backend/internal/hub/message.go`\n- Create: `backend/internal/hub/hub_test.go`\n\n**Acceptance Criteria:**\n- [ ] `go test ./internal/hub/...` exits 0 with all tests passing\n- [ ] `Hub.Notify` fans out to all registered channels\n- [ ] `Hub.Notify` drops the message for a full/slow client without blocking\n- [ ] `Hub.Unregister` stops delivery to that channel\n- [ ] `PackageUpdate` and `NewEvent` produce valid JSON with `\"type\"` and `\"data\"` fields\n\n**Verify:** `cd backend && go test ./internal/hub/... -v` → `PASS` for all three test functions\n\n```json:metadata\n{\"files\": [\"backend/internal/hub/hub.go\", \"backend/internal/hub/message.go\", \"backend/internal/hub/hub_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/hub/... -v\", \"acceptanceCriteria\": [\"go test ./internal/hub/... exits 0\", \"Notify fans out to all registered channels\", \"Notify drops message for full/slow client without blocking\", \"Unregister stops delivery\", \"PackageUpdate and NewEvent produce valid JSON with type and data fields\"], \"modelTier\": \"mechanical\"}\n```"
+    },
+    {
+      "id": 46,
+      "subject": "Task 2: SSE stream handler in API server",
+      "status": "pending",
+      "blockedBy": [45],
+      "description": "**Goal:** Add `GET /api/stream` to the chi router that upgrades the connection to SSE and streams hub payloads.\n\n**Files:**\n- Modify: `backend/internal/api/server.go`\n- Create: `backend/internal/api/stream_test.go`\n\n**Acceptance Criteria:**\n- [ ] `go test ./internal/api/... -run TestStreamHandler` exits 0\n- [ ] `GET /api/stream` response has `Content-Type: text/event-stream`\n- [ ] A payload sent via `hub.Notify` appears in the response body as `data: <payload>\\n\\n`\n- [ ] The handler returns when the request context is cancelled\n- [ ] `NewRouter` signature is `func NewRouter(db *sql.DB, h *hub.Hub) http.Handler`\n\n**Verify:** `cd backend && go test ./internal/api/... -run TestStreamHandler -v` → `PASS`\n\n```json:metadata\n{\"files\": [\"backend/internal/api/server.go\", \"backend/internal/api/stream_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/api/... -run TestStreamHandler -v\", \"acceptanceCriteria\": [\"go test ./internal/api/... -run TestStreamHandler exits 0\", \"GET /api/stream response has Content-Type: text/event-stream\", \"payload sent via hub.Notify appears in response as data: <payload>\\\\n\\\\n\", \"handler returns when request context is cancelled\", \"NewRouter signature is func NewRouter(db *sql.DB, h *hub.Hub) http.Handler\"], \"modelTier\": \"mechanical\"}\n```"
+    },
+    {
+      "id": 47,
+      "subject": "Task 3: Wire MQ consumer to hub",
+      "status": "pending",
+      "blockedBy": [45],
+      "description": "**Goal:** Modify `mq/consumer.go` to accept a `*hub.Hub` and notify it after each successful store write.\n\n**Files:**\n- Modify: `backend/internal/mq/consumer.go`\n\n**Acceptance Criteria:**\n- [ ] `go build ./internal/mq/...` exits 0\n- [ ] `Consumer` struct has a `hub *hubpkg.Hub` field\n- [ ] `NewConsumer` signature is `func NewConsumer(url string, db *sql.DB, h *hubpkg.Hub) *Consumer`\n- [ ] Helper `appendEvent(evt)` calls `hub.Notify` after successful `store.AppendEvent`\n- [ ] Helper `upsertPackage(pkg)` calls `hub.Notify` after successful `store.UpsertPackageState`\n- [ ] All 8 `store.AppendEvent` + error-log patterns replaced with `c.appendEvent`\n- [ ] The `store.UpsertPackageState` call in the build event branch replaced with `c.upsertPackage`\n\n**Verify:** `cd backend && go build ./internal/mq/...` → exits 0 (no output)\n\n```json:metadata\n{\"files\": [\"backend/internal/mq/consumer.go\"], \"verifyCommand\": \"cd backend && go build ./internal/mq/...\", \"acceptanceCriteria\": [\"go build ./internal/mq/... exits 0\", \"Consumer struct has hub field\", \"NewConsumer accepts *hub.Hub\", \"appendEvent helper notifies hub after successful store write\", \"upsertPackage helper notifies hub after successful store write\", \"all 8 AppendEvent call sites use c.appendEvent\", \"UpsertPackageState call uses c.upsertPackage\"], \"modelTier\": \"mechanical\"}\n```"
+    },
+    {
+      "id": 48,
+      "subject": "Task 4: Wire OBS poller to hub",
+      "status": "pending",
+      "blockedBy": [45],
+      "description": "**Goal:** Modify `obs/poller.go` to accept a `*hub.Hub` and notify it after each successful store write.\n\n**Files:**\n- Modify: `backend/internal/obs/poller.go`\n\n**Acceptance Criteria:**\n- [ ] `go build ./internal/obs/...` exits 0\n- [ ] `Poller` struct has a `hub *hubpkg.Hub` field\n- [ ] `NewPoller` signature is `func NewPoller(client *Client, db *sql.DB, interval time.Duration, h *hubpkg.Hub) *Poller`\n- [ ] After successful `UpsertPackageState` in `tick()`, `p.hub.Notify(hubpkg.PackageUpdate(pkg))` is called\n- [ ] After successful `AppendEvent` in `tick()`, `p.hub.Notify(hubpkg.NewEvent(evt))` is called\n\n**Verify:** `cd backend && go build ./internal/obs/...` → exits 0 (no output)\n\n```json:metadata\n{\"files\": [\"backend/internal/obs/poller.go\"], \"verifyCommand\": \"cd backend && go build ./internal/obs/...\", \"acceptanceCriteria\": [\"go build ./internal/obs/... exits 0\", \"Poller struct has hub field\", \"NewPoller accepts *hub.Hub\", \"Notify called after successful UpsertPackageState\", \"Notify called after successful AppendEvent\"], \"modelTier\": \"mechanical\"}\n```"
+    },
+    {
+      "id": 49,
+      "subject": "Task 5: Wire hub into main and verify full backend build",
+      "status": "pending",
+      "blockedBy": [46, 47, 48],
+      "description": "**Goal:** Construct the Hub in `main.go`, pass it to NewRouter/NewPoller/NewConsumer, and verify the full backend builds and tests pass.\n\n**Files:**\n- Modify: `backend/cmd/obsboard/main.go`\n\n**Acceptance Criteria:**\n- [ ] `go build ./...` from `backend/` exits 0\n- [ ] `go test ./...` from `backend/` exits 0 (all existing + new tests pass)\n- [ ] `main.go` imports `internal/hub` and constructs `hub.New()` before the poller/consumer/router\n\n**Verify:** `cd backend && go build ./... && go test ./...` → exits 0\n\n```json:metadata\n{\"files\": [\"backend/cmd/obsboard/main.go\"], \"verifyCommand\": \"cd backend && go build ./... && go test ./...\", \"acceptanceCriteria\": [\"go build ./... exits 0\", \"go test ./... exits 0\", \"main.go imports internal/hub\", \"hub.New() constructed before poller/consumer/router\"], \"modelTier\": \"mechanical\"}\n```"
+    },
+    {
+      "id": 50,
+      "subject": "Task 6: Frontend realtime stream composable",
+      "status": "pending",
+      "description": "**Goal:** Create `useRealtimeStream.ts` that opens an `EventSource`, dispatches typed deltas to the composable state refs, and triggers a full refresh on reconnect.\n\n**Files:**\n- Create: `frontend/src/composables/useRealtimeStream.ts`\n\n**Acceptance Criteria:**\n- [ ] `cd frontend && ./node_modules/.bin/vue-tsc --noEmit` exits 0\n- [ ] `package_update` messages upsert into the packages ref (update by project+name, or append if new)\n- [ ] `new_event` messages prepend into the events ref and cap at 200 entries\n- [ ] A full refresh is triggered once on the first reconnect after a connection error\n- [ ] The `EventSource` is closed on component unmount\n\n**Verify:** `cd frontend && ./node_modules/.bin/vue-tsc --noEmit` → exits 0, no output\n\n```json:metadata\n{\"files\": [\"frontend/src/composables/useRealtimeStream.ts\"], \"verifyCommand\": \"cd frontend && ./node_modules/.bin/vue-tsc --noEmit\", \"acceptanceCriteria\": [\"vue-tsc --noEmit exits 0\", \"package_update upserts into packages ref by project+name\", \"new_event prepends into events ref capped at 200\", \"refresh called once on first reconnect after error\", \"EventSource closed on unmount\"], \"modelTier\": \"mechanical\"}\n```"
+    },
+    {
+      "id": 51,
+      "subject": "Task 7: Wire frontend App.vue and ContextBar",
+      "status": "pending",
+      "blockedBy": [50],
+      "description": "**Goal:** Remove the 5-minute `setInterval` from `App.vue`, call `useRealtimeStream`, and update the ContextBar status label to \"Live\".\n\n**Files:**\n- Modify: `frontend/src/App.vue`\n- Modify: `frontend/src/components/ContextBar.vue`\n\n**Acceptance Criteria:**\n- [ ] `cd frontend && ./node_modules/.bin/vue-tsc --noEmit` exits 0\n- [ ] `App.vue` no longer contains `setInterval` or `clearInterval`\n- [ ] `App.vue` imports and calls `useRealtimeStream(allPackages, events, refresh)`\n- [ ] The initial `refresh()` call on mount is preserved\n- [ ] `ContextBar.vue` shows \"Live\" instead of \"Auto-refresh 5 min\"\n\n**Verify:** `cd frontend && ./node_modules/.bin/vue-tsc --noEmit` → exits 0, no output\n\n```json:metadata\n{\"files\": [\"frontend/src/App.vue\", \"frontend/src/components/ContextBar.vue\"], \"verifyCommand\": \"cd frontend && ./node_modules/.bin/vue-tsc --noEmit\", \"acceptanceCriteria\": [\"vue-tsc --noEmit exits 0\", \"App.vue contains no setInterval or clearInterval\", \"App.vue calls useRealtimeStream(allPackages, events, refresh)\", \"initial refresh() on mount preserved\", \"ContextBar shows Live instead of Auto-refresh 5 min\"], \"modelTier\": \"mechanical\"}\n```"
+    }
+  ],
+  "lastUpdated": "2026-06-12T00:00:00Z"
+}
