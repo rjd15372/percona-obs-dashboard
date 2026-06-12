@@ -34,9 +34,9 @@ function packageUrl(project: string, name: string): string {
     </div>
     <!-- Per-project groups -->
     <div
-      v-for="group in groups"
+      v-for="(group, index) in groups"
       :key="group.project"
-      style="display: flex; flex-direction: column; gap: 7px; border-top: 1px solid var(--border); padding-top: 10px;"
+      :style="`display: flex; flex-direction: column; gap: 7px;${index > 0 ? ' border-top: 1px solid var(--border); padding-top: 10px;' : ''}`"
     >
       <!-- Group header: full OBS project path linking to project page -->
       <a
@@ -50,7 +50,7 @@ function packageUrl(project: string, name: string): string {
       <div style="display: flex; gap: 7px; flex-wrap: wrap;">
         <a
           v-for="pkg in group.pkgs"
-          :key="`${pkg.name}/${pkg.scope}`"
+          :key="pkg.name"
           :href="packageUrl(group.project, pkg.name)"
           target="_blank"
           rel="noopener"
