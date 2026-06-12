@@ -48,8 +48,7 @@ function toggleScope(scope: string) {
 function selectContext(ctx: Context) {
   selectedContext.value = ctx
   activeScopes.value = []
-  // version is reset by the availableVersions watcher below
-  refresh()
+  // availableVersions watcher resets version, which triggers a fetch via watch(version)
 }
 
 // Event window state
@@ -95,8 +94,8 @@ const contexts = computed<Context[]>(() => {
   }
 
   prContexts.sort((a, b) => {
-    const na = parseInt(a.prefix.split(':')[4]?.replace(/^pr-/i, '') ?? '0')
-    const nb = parseInt(b.prefix.split(':')[4]?.replace(/^pr-/i, '') ?? '0')
+    const na = parseInt(a.prefix.split(':')[3]?.replace(/^pr-/i, '') ?? '0')
+    const nb = parseInt(b.prefix.split(':')[3]?.replace(/^pr-/i, '') ?? '0')
     return nb - na
   })
 
@@ -120,8 +119,11 @@ async function refresh() {
 }
 
 // Initial fetch + 5-min auto-refresh
-onMounted(() => { refresh() })
-const timer = setInterval(refresh, 5 * 60 * 1000)
+let timer: ReturnType<typeof setInterval>
+onMounted(() => {
+  refresh()
+  timer = setInterval(refresh, 5 * 60 * 1000)
+})
 onUnmounted(() => clearInterval(timer))
 
 // Re-fetch on version change
