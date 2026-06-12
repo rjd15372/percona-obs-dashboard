@@ -1,5 +1,6 @@
-/* ── Roboto (self-hosted via Google Fonts fallback — add font files later) ── */
-@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Roboto+Condensed:wght@400;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 /* ── Light theme (default) ── */
 :root {
