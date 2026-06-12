@@ -44,7 +44,7 @@ type ServerConfig struct {
 func Load() (*Config, error) {
 	v := viper.New()
 
-	v.SetDefault("obs.base_url", "https://build.opensuse.org")
+	v.SetDefault("obs.base_url", "https://api.opensuse.org")
 	v.SetDefault("mq.url", "amqps://opensuse:opensuse@rabbit.opensuse.org:5671/")
 	v.SetDefault("poller.interval", "5m")
 	v.SetDefault("store.db_path", "/data/obsboard.db")
