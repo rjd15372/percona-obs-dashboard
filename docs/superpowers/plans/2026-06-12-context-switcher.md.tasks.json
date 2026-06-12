@@ -1,0 +1,26 @@
+{
+  "planPath": "docs/superpowers/plans/2026-06-12-context-switcher.md",
+  "tasks": [
+    {
+      "id": 27,
+      "subject": "Task 1: Backend — PR context package and event routes",
+      "status": "pending",
+      "description": "**Goal:** Expose `/api/pr/{pr}/{subproject}/{version}/packages` and `/api/pr/{pr}/{subproject}/{version}/events` so the frontend can fetch packages and events for a specific PR+subproject context.\n\n**Files:**\n- Modify: `backend/internal/api/handlers.go`\n- Modify: `backend/internal/api/server.go`\n- Modify: `backend/internal/api/handlers_test.go`\n\n**Acceptance Criteria:**\n- [ ] `GET /api/pr/pr-92/ppg/17/packages` returns HTTP 200 with a JSON array\n- [ ] `GET /api/pr/pr-92/ppg/17/events` returns HTTP 200 with a JSON array\n- [ ] The handlers build the OBS prefix as `isv:percona:PR:pr-92:ppg`\n- [ ] All existing tests still pass\n\n**Verify:** `cd backend && go test ./internal/api/ -v -run TestPRContext` → all new tests PASS\n\n```json:metadata\n{\"files\": [\"backend/internal/api/handlers.go\", \"backend/internal/api/server.go\", \"backend/internal/api/handlers_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/api/ -v -run TestPRContext\", \"acceptanceCriteria\": [\"GET /api/pr/pr-92/ppg/17/packages returns 200 JSON array\", \"GET /api/pr/pr-92/ppg/17/events returns 200 JSON array\", \"prefix built as isv:percona:PR:pr-92:ppg\", \"all existing tests pass\"], \"modelTier\": \"mechanical\"}\n```"
+    },
+    {
+      "id": 28,
+      "subject": "Task 2: Frontend composables — replace product with apiBase",
+      "status": "pending",
+      "blockedBy": [27],
+      "description": "**Goal:** Refactor `usePackages` and `useEvents` to accept an `apiBase` URL string instead of a product name, and add dynamic version discovery to `usePackages`.\n\n**Files:**\n- Modify: `frontend/src/composables/usePackages.ts`\n- Modify: `frontend/src/composables/useEvents.ts`\n\n**Acceptance Criteria:**\n- [ ] `usePackages` accepts `apiBase: MaybeRef<string>` and `prefixDepth: MaybeRef<number>`\n- [ ] `usePackages` exports `availableVersions: ComputedRef<string[]>`\n- [ ] `matchesVersion` uses positional approach (no hardcoded list)\n- [ ] `useEvents` accepts `apiBase: MaybeRef<string>`\n- [ ] tsc no new errors\n\n**Verify:** `cd frontend && npx tsc --noEmit 2>&1 | grep -v \"Cannot find module './App.vue'\"` → no output\n\n```json:metadata\n{\"files\": [\"frontend/src/composables/usePackages.ts\", \"frontend/src/composables/useEvents.ts\"], \"verifyCommand\": \"cd frontend && npx tsc --noEmit 2>&1 | grep -v \\\"Cannot find module './App.vue'\\\"\", \"acceptanceCriteria\": [\"usePackages accepts apiBase and prefixDepth\", \"availableVersions computed from project paths\", \"useEvents accepts apiBase\", \"tsc no new errors\"], \"modelTier\": \"mechanical\"}\n```"
+    },
+    {
+      "id": 29,
+      "subject": "Task 3: Context switcher — types, App.vue, ContextBar",
+      "status": "pending",
+      "blockedBy": [28],
+      "description": "**Goal:** Wire up the context selector end-to-end: add the `Context` type, update `App.vue` to manage `selectedContext` and `contexts`, and update `ContextBar` to render a dropdown or badge and dynamic version tabs.\n\n**Files:**\n- Modify: `frontend/src/types/api.ts`\n- Modify: `frontend/src/App.vue`\n- Modify: `frontend/src/components/ContextBar.vue`\n\n**Acceptance Criteria:**\n- [ ] Default PPG context works identically to current UI\n- [ ] Dropdown appears when PR contexts exist\n- [ ] Selecting PR context updates board\n- [ ] Version tabs dynamic and hidden when no versions\n- [ ] Context switch resets scopes and version\n- [ ] PRBoard removed\n- [ ] tsc no new errors\n\n**Verify:** `cd frontend && npx tsc --noEmit 2>&1 | grep -v \"Cannot find module './App.vue'\"` → no output\n\n```json:metadata\n{\"files\": [\"frontend/src/types/api.ts\", \"frontend/src/App.vue\", \"frontend/src/components/ContextBar.vue\"], \"verifyCommand\": \"cd frontend && npx tsc --noEmit 2>&1 | grep -v \\\"Cannot find module './App.vue'\\\"\", \"acceptanceCriteria\": [\"PPG default context works identically\", \"dropdown appears when PR contexts exist\", \"selecting PR context updates board\", \"version tabs dynamic\", \"context switch resets state\", \"PRBoard removed\"], \"modelTier\": \"standard\"}\n```"
+    }
+  ],
+  "lastUpdated": "2026-06-12T00:00:00Z"
+}
