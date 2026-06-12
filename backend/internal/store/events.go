@@ -1,1 +1,63 @@
 package store
+
+import (
+	"database/sql"
+	"time"
+
+	"github.com/percona/obs-dashboard/internal/model"
+)
+
+// AppendEvent inserts a new event row.
+func AppendEvent(db *sql.DB, e *model.Event) error {
+	_, err := db.Exec(`
+		INSERT INTO events (id, type, scope, project, package, repo, arch, what, why, url, at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+		e.ID, string(e.Type), string(e.Scope),
+		e.Project, e.Package, nullStr(e.Repo), nullStr(e.Arch),
+		e.What, e.Why, e.URL, e.At,
+	)
+	return err
+}
+
+// QueryEvents returns events for a project prefix within [from, to], newest first.
+func QueryEvents(db *sql.DB, projectPrefix string, from, to time.Time) ([]*model.Event, error) {
+	rows, err := db.Query(`
+		SELECT id, type, scope, project, package,
+		       COALESCE(repo,''), COALESCE(arch,''),
+		       what, why, url, at
+		FROM events
+		WHERE project LIKE ? AND at >= ? AND at <= ?
+		ORDER BY at DESC`,
+		projectPrefix+"%", from, to,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	events := make([]*model.Event, 0)
+	for rows.Next() {
+		e := &model.Event{}
+		if err := rows.Scan(
+			&e.ID, &e.Type, &e.Scope, &e.Project, &e.Package,
+			&e.Repo, &e.Arch, &e.What, &e.Why, &e.URL, &e.At,
+		); err != nil {
+			return nil, err
+		}
+		events = append(events, e)
+	}
+	return events, rows.Err()
+}
+
+// PruneEvents deletes events older than cutoff.
+func PruneEvents(db *sql.DB, cutoff time.Time) error {
+	_, err := db.Exec("DELETE FROM events WHERE at < ?", cutoff)
+	return err
+}
+
+func nullStr(s string) interface{} {
+	if s == "" {
+		return nil
+	}
+	return s
+}
