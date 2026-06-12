@@ -157,17 +157,9 @@ type PRGroup struct {
 	Packages    []*model.Package  `json:"packages"`
 }
 
-// prStaleness is the cutoff for considering a PR project inactive.
-// Packages from deleted OBS projects receive no further MQ events, so their
-// updated_at timestamps freeze. 30 days gives enough headroom for slow-moving
-// PRs while reliably hiding projects deleted from OBS.
-const prStaleness = 30 * 24 * time.Hour
-
 // prPackagesHandler returns a handler for GET /api/pr/packages.
 // It returns all PR packages (isv:percona:PR:*) grouped by PR number,
 // sorted by PR number descending (newest first).
-// PR groups whose newest package update is older than prStaleness are omitted;
-// deleted OBS projects stop emitting events, so their rows go stale.
 func prPackagesHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		pkgs, err := store.QueryPackages(db, "isv:percona:PR")
@@ -175,8 +167,6 @@ func prPackagesHandler(db *sql.DB) http.HandlerFunc {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
-
-		cutoff := time.Now().UTC().Add(-prStaleness)
 
 		// Group by PR number.
 		byPR := map[string][]*model.Package{}
@@ -186,20 +176,6 @@ func prPackagesHandler(db *sql.DB) http.HandlerFunc {
 				continue
 			}
 			byPR[pr] = append(byPR[pr], p)
-		}
-
-		// Drop PR groups where every package is older than the staleness cutoff.
-		for pr, packages := range byPR {
-			allStale := true
-			for _, p := range packages {
-				if p.UpdatedAt.After(cutoff) {
-					allStale = false
-					break
-				}
-			}
-			if allStale {
-				delete(byPR, pr)
-			}
 		}
 
 		// Build sorted slice of groups (descending PR number so latest first).

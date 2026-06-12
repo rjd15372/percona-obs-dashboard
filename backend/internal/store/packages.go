@@ -39,6 +39,13 @@ func UpsertPackageState(db *sql.DB, p *model.Package) error {
 	return err
 }
 
+// DeletePackagesByProject removes all package rows for an exact project name.
+// Used by the poller to garbage-collect projects that no longer exist in OBS.
+func DeletePackagesByProject(db *sql.DB, project string) error {
+	_, err := db.Exec(`DELETE FROM packages WHERE project = ?`, project)
+	return err
+}
+
 // QueryPackages returns all packages for a given OBS project prefix.
 func QueryPackages(db *sql.DB, projectPrefix string) ([]*model.Package, error) {
 	rows, err := db.Query(`

@@ -48,6 +48,11 @@ func (p *Poller) tick(ctx context.Context) {
 		return
 	}
 
+	liveProjects := make(map[string]bool, len(projects))
+	for _, proj := range projects {
+		liveProjects[proj] = true
+	}
+
 	// Load current store state keyed by (project, package)
 	existing, err := store.QueryPackages(p.db, p.root)
 	if err != nil {
@@ -93,6 +98,23 @@ func (p *Poller) tick(ctx context.Context) {
 						slog.Error("poller: append event", "err", err)
 					}
 				}
+			}
+		}
+	}
+
+	// Garbage-collect packages for projects that no longer exist in OBS.
+	// We only do this when discovery succeeded (projects is non-empty or root
+	// itself returned no subprojects), so a transient API failure cannot wipe
+	// the store.
+	storedProjects := make(map[string]bool)
+	for _, pkg := range existing {
+		storedProjects[pkg.Project] = true
+	}
+	for proj := range storedProjects {
+		if !liveProjects[proj] {
+			slog.Info("poller: removing packages for deleted project", "project", proj)
+			if err := store.DeletePackagesByProject(p.db, proj); err != nil {
+				slog.Error("poller: delete packages", "project", proj, "err", err)
 			}
 		}
 	}
