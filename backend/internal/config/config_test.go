@@ -16,8 +16,8 @@ func TestLoadDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Poller.Interval != 5*time.Minute {
-		t.Errorf("expected 5m, got %v", cfg.Poller.Interval)
+	if cfg.Poller.Interval != 2*time.Minute {
+		t.Errorf("expected 2m, got %v", cfg.Poller.Interval)
 	}
 	if cfg.Store.EventRetention != 7*24*time.Hour {
 		t.Errorf("expected 168h, got %v", cfg.Store.EventRetention)

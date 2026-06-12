@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 )
 
@@ -14,12 +13,12 @@ func TestBasicAuth(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/xml")
-		w.Write([]byte(`<directory></directory>`))
+		w.Write([]byte(`<collection></collection>`))
 	}))
 	defer srv.Close()
 
 	c := NewClient(srv.URL, "user", "pass")
-	_, err := c.ListSubprojects(context.Background(), "isv:percona")
+	_, err := c.SearchProjects(context.Background(), "isv:percona")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,21 +29,18 @@ func TestBasicAuth(t *testing.T) {
 	}
 }
 
-func TestListSubprojects(t *testing.T) {
+func TestSearchProjects(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasSuffix(r.URL.Path, "/source/isv:percona") {
-			http.NotFound(w, r)
-			return
-		}
-		w.Write([]byte(`<directory>
-			<entry name="ppg"/>
-			<entry name="pmm"/>
-		</directory>`))
+		w.Header().Set("Content-Type", "application/xml")
+		w.Write([]byte(`<collection>
+			<project name="isv:percona:ppg"/>
+			<project name="isv:percona:pmm"/>
+		</collection>`))
 	}))
 	defer srv.Close()
 
 	c := NewClient(srv.URL, "u", "p")
-	projects, err := c.ListSubprojects(context.Background(), "isv:percona")
+	projects, err := c.SearchProjects(context.Background(), "isv:percona")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +59,7 @@ func TestNon200Error(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(srv.URL, "u", "p")
-	_, err := c.ListSubprojects(context.Background(), "isv:percona")
+	_, err := c.SearchProjects(context.Background(), "isv:percona")
 	if err == nil {
 		t.Fatal("expected error for 401")
 	}
