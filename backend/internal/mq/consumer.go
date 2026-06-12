@@ -9,25 +9,36 @@ import (
 	"strings"
 	"time"
 
-	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/oklog/ulid/v2"
 	"github.com/percona/obs-dashboard/internal/model"
 	"github.com/percona/obs-dashboard/internal/store"
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 const (
-	exchange        = "pubsub"
-	packageRouteKey = "opensuse.obs.package.#"
-	repoRouteKey    = "opensuse.obs.repo.published"
+	exchange             = "pubsub"
+	packageRouteKey      = "opensuse.obs.package.#"
+	repoRouteKey         = "opensuse.obs.repo.published"
+	repoBuildStartedKey  = "opensuse.obs.repo.build_started"
+	repoBuildFinishedKey = "opensuse.obs.repo.build_finished"
+	projectRouteKey      = "opensuse.obs.project.#"
 )
 
 // mqMessage is the JSON structure of OBS MQ events.
+// Fields are a union of all event payloads; unused fields are zero for any given event type.
 type mqMessage struct {
-	Project string `json:"project"`
-	Package string `json:"package"`
-	Repo    string `json:"repository"`
-	Arch    string `json:"arch"`
-	Reason  string `json:"reason"`
+	Project    string `json:"project"`
+	Package    string `json:"package"`
+	Repo       string `json:"repository"`
+	Arch       string `json:"arch"`
+	Reason     string `json:"reason"`
+	Sender     string `json:"sender"`
+	BuildID    string `json:"buildid"`
+	OldVersion string `json:"oldversion"`
+	NewVersion string `json:"newversion"`
+	Rev        string `json:"rev"`
+	User       string `json:"user"`
+	Comment    string `json:"comment"`
 }
 
 // Consumer subscribes to the OBS AMQP bus and updates the store on build events.
@@ -90,7 +101,13 @@ func (c *Consumer) run(ctx context.Context) error {
 		return fmt.Errorf("queue declare: %w", err)
 	}
 
-	for _, key := range []string{packageRouteKey, repoRouteKey} {
+	for _, key := range []string{
+		packageRouteKey,
+		repoRouteKey,
+		repoBuildStartedKey,
+		repoBuildFinishedKey,
+		projectRouteKey,
+	} {
 		if err := ch.QueueBind(q.Name, key, exchange, false, nil); err != nil {
 			return fmt.Errorf("queue bind %s: %w", key, err)
 		}
@@ -134,6 +151,13 @@ func (c *Consumer) handle(msg amqp.Delivery) {
 		return
 	}
 
+	var payload any
+	if err := json.Unmarshal(msg.Body, &payload); err != nil {
+		slog.Info("mq: received raw message", "key", msg.RoutingKey, "message", string(msg.Body), "err", err)
+	} else {
+		slog.Info("mq: received raw message", "key", msg.RoutingKey, "payload", payload)
+	}
+
 	key := msg.RoutingKey
 	switch {
 	case key == repoRouteKey:
@@ -147,6 +171,90 @@ func (c *Consumer) handle(msg amqp.Delivery) {
 			What:    fmt.Sprintf("%s published", m.Repo),
 			Why:     "repo published",
 			URL:     fmt.Sprintf("https://build.opensuse.org/project/show/%s", m.Project),
+			At:      time.Now().UTC(),
+		}
+		if err := store.AppendEvent(c.db, evt); err != nil {
+			slog.Error("mq: append event", "err", err)
+		}
+
+	case key == repoBuildStartedKey:
+		evt := &model.Event{
+			ID:      "evt_" + ulid.Make().String(),
+			Type:    model.EventBuildStarted,
+			Scope:   inferScopeFromProject(m.Project),
+			Project: m.Project,
+			Repo:    m.Repo,
+			Arch:    m.Arch,
+			What:    fmt.Sprintf("%s/%s build started", m.Repo, m.Arch),
+			Why:     m.BuildID,
+			URL:     fmt.Sprintf("https://build.opensuse.org/project/show/%s", m.Project),
+			At:      time.Now().UTC(),
+		}
+		if err := store.AppendEvent(c.db, evt); err != nil {
+			slog.Error("mq: append event", "err", err)
+		}
+
+	case key == repoBuildFinishedKey:
+		evt := &model.Event{
+			ID:      "evt_" + ulid.Make().String(),
+			Type:    model.EventBuildFinished,
+			Scope:   inferScopeFromProject(m.Project),
+			Project: m.Project,
+			Repo:    m.Repo,
+			Arch:    m.Arch,
+			What:    fmt.Sprintf("%s/%s build finished", m.Repo, m.Arch),
+			Why:     m.BuildID,
+			URL:     fmt.Sprintf("https://build.opensuse.org/project/show/%s", m.Project),
+			At:      time.Now().UTC(),
+		}
+		if err := store.AppendEvent(c.db, evt); err != nil {
+			slog.Error("mq: append event", "err", err)
+		}
+
+	case key == "opensuse.obs.project.create":
+		evt := &model.Event{
+			ID:      "evt_" + ulid.Make().String(),
+			Type:    model.EventCreated,
+			Scope:   inferScopeFromProject(m.Project),
+			Project: m.Project,
+			What:    fmt.Sprintf("project %s created", m.Project),
+			Why:     m.Sender,
+			URL:     fmt.Sprintf("https://build.opensuse.org/project/show/%s", m.Project),
+			At:      time.Now().UTC(),
+		}
+		if err := store.AppendEvent(c.db, evt); err != nil {
+			slog.Error("mq: append event", "err", err)
+		}
+
+	case key == "opensuse.obs.project.delete":
+		scope := inferScopeFromProject(m.Project)
+		if err := store.DeletePackagesByProject(c.db, m.Project); err != nil {
+			slog.Error("mq: delete packages for project", "project", m.Project, "err", err)
+		}
+		evt := &model.Event{
+			ID:      "evt_" + ulid.Make().String(),
+			Type:    model.EventDeleted,
+			Scope:   scope,
+			Project: m.Project,
+			What:    fmt.Sprintf("project %s deleted", m.Project),
+			Why:     m.Comment,
+			URL:     fmt.Sprintf("https://build.opensuse.org/project/show/%s", m.Project),
+			At:      time.Now().UTC(),
+		}
+		if err := store.AppendEvent(c.db, evt); err != nil {
+			slog.Error("mq: append event", "err", err)
+		}
+
+	case key == "opensuse.obs.package.version_change":
+		evt := &model.Event{
+			ID:      "evt_" + ulid.Make().String(),
+			Type:    model.EventVersionChange,
+			Scope:   inferScopeFromProject(m.Project),
+			Project: m.Project,
+			Package: m.Package,
+			What:    fmt.Sprintf("%s version %s → %s", m.Package, m.OldVersion, m.NewVersion),
+			Why:     m.Comment,
+			URL:     fmt.Sprintf("https://build.opensuse.org/package/show/%s/%s", m.Project, m.Package),
 			At:      time.Now().UTC(),
 		}
 		if err := store.AppendEvent(c.db, evt); err != nil {

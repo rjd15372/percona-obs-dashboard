@@ -81,6 +81,11 @@ const (
 	EventBroken       EventType = "broken"
 	EventBlocked      EventType = "blocked"
 	EventPublished    EventType = "published"
+	EventCreated      EventType = "created"
+	EventDeleted      EventType = "deleted"
+	EventBuildStarted EventType = "build_started"
+	EventBuildFinished EventType = "build_finished"
+	EventVersionChange EventType = "version_change"
 )
 
 type Event struct {
