@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -98,6 +99,21 @@ type PackageBuildState struct {
 	Arch    string
 	Package string
 	State   string
+}
+
+// BuildReasonResult represents the result of a build reason query.
+type BuildReasonResult struct {
+	Explain  string
+	Packages []string
+}
+
+type buildReasonChangeXML struct {
+	Name string `xml:",chardata"`
+}
+
+type buildReasonXML struct {
+	Explain string                 `xml:"explain"`
+	Changes []buildReasonChangeXML `xml:"packagechange>change"`
 }
 
 // SearchProjects returns all OBS projects whose names start with the given prefix
@@ -244,4 +260,66 @@ func (c *Client) SourceHistory(ctx context.Context, project, pkg string) ([]Sour
 		return nil, err
 	}
 	return hist.Revisions, nil
+}
+
+// PackageBuildResults fetches build states for a specific package across all targets.
+func (c *Client) PackageBuildResults(ctx context.Context, project, pkg string) ([]PackageBuildState, error) {
+	path := fmt.Sprintf("/build/%s/_result?package=%s",
+		url.PathEscape(project), url.QueryEscape(pkg))
+	resp, err := c.get(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var rl resultList
+	if err := xml.NewDecoder(resp.Body).Decode(&rl); err != nil {
+		return nil, fmt.Errorf("parse /build/%s/_result: %w", project, err)
+	}
+
+	var out []PackageBuildState
+	for _, r := range rl.Results {
+		for _, s := range r.Statuses {
+			out = append(out, PackageBuildState{
+				Project: project,
+				Repo:    r.Repository,
+				Arch:    r.Arch,
+				Package: s.Package,
+				State:   s.Code,
+			})
+		}
+	}
+	return out, nil
+}
+
+// PackageBuildReason fetches the build reason for a specific package target.
+func (c *Client) PackageBuildReason(ctx context.Context, project, repo, arch, pkg string) (BuildReasonResult, error) {
+	path := fmt.Sprintf("/build/%s/%s/%s/%s/_reason",
+		url.PathEscape(project), url.PathEscape(repo),
+		url.PathEscape(arch), url.PathEscape(pkg))
+	resp, err := c.get(ctx, path)
+	if err != nil {
+		return BuildReasonResult{}, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return BuildReasonResult{}, err
+	}
+
+	var raw buildReasonXML
+	if err := xml.Unmarshal(body, &raw); err != nil {
+		return BuildReasonResult{}, fmt.Errorf("parse build reason: %w", err)
+	}
+
+	result := BuildReasonResult{Explain: raw.Explain}
+	if raw.Explain == "meta change" {
+		for _, ch := range raw.Changes {
+			if ch.Name != "" {
+				result.Packages = append(result.Packages, ch.Name)
+			}
+		}
+	}
+	return result, nil
 }
