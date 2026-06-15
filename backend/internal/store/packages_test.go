@@ -86,3 +86,46 @@ func TestUpsertUpdatesExisting(t *testing.T) {
 		t.Errorf("expected succeeded after update, got %q", pkgs[0].RollupState)
 	}
 }
+
+func TestGetActivePackages(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	now := time.Now().UTC().Truncate(time.Second)
+
+	// Insert a succeeded package
+	succeeded := &model.Package{
+		Project: "isv:percona", Name: "pkg-ok", Scope: model.ScopeCommon,
+		RollupState: model.RollupSucceeded, OKTargets: 1, TotalTargets: 1,
+		Targets: []model.Target{{Repo: "repo", Arch: "x86_64", State: "succeeded"}},
+		UpdatedAt: now,
+	}
+	if err := UpsertPackageState(db, succeeded); err != nil {
+		t.Fatal(err)
+	}
+
+	// Insert a failing package
+	failing := &model.Package{
+		Project: "isv:percona", Name: "pkg-fail", Scope: model.ScopeCommon,
+		RollupState: model.RollupFailed, OKTargets: 0, TotalTargets: 1,
+		Targets: []model.Target{{Repo: "repo", Arch: "x86_64", State: "failed"}},
+		UpdatedAt: now,
+	}
+	if err := UpsertPackageState(db, failing); err != nil {
+		t.Fatal(err)
+	}
+
+	pkgs, err := GetActivePackages(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pkgs) != 1 {
+		t.Fatalf("expected 1 active package, got %d", len(pkgs))
+	}
+	if pkgs[0].Name != "pkg-fail" {
+		t.Errorf("expected pkg-fail, got %s", pkgs[0].Name)
+	}
+}

@@ -36,6 +36,8 @@ CREATE TABLE IF NOT EXISTS events (
 );
 
 CREATE INDEX IF NOT EXISTS events_at ON events(at);
+
+CREATE INDEX IF NOT EXISTS idx_packages_rollup_state ON packages(rollup_state);
 `
 
 // Open opens (or creates) the SQLite database at path and applies the schema.

@@ -46,19 +46,11 @@ func DeletePackagesByProject(db *sql.DB, project string) error {
 	return err
 }
 
-// QueryPackages returns all packages for a given OBS project prefix.
-func QueryPackages(db *sql.DB, projectPrefix string) ([]*model.Package, error) {
-	rows, err := db.Query(`
-		SELECT project, name, scope, rollup_state, ok_targets, total_targets,
-		       trigger_what, trigger_kind, trigger_at, targets_json, updated_at
-		FROM packages WHERE project LIKE ? ORDER BY project, name`,
-		projectPrefix+"%",
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
+// scanPackages is a helper that extracts the scan loop pattern used by multiple query functions.
+// It expects rows to have been created with the standard package column order:
+// project, name, scope, rollup_state, ok_targets, total_targets,
+// trigger_what, trigger_kind, trigger_at, targets_json, updated_at
+func scanPackages(rows *sql.Rows) ([]*model.Package, error) {
 	pkgs := make([]*model.Package, 0)
 	for rows.Next() {
 		p := &model.Package{}
@@ -86,4 +78,33 @@ func QueryPackages(db *sql.DB, projectPrefix string) ([]*model.Package, error) {
 		pkgs = append(pkgs, p)
 	}
 	return pkgs, rows.Err()
+}
+
+// QueryPackages returns all packages for a given OBS project prefix.
+func QueryPackages(db *sql.DB, projectPrefix string) ([]*model.Package, error) {
+	rows, err := db.Query(`
+		SELECT project, name, scope, rollup_state, ok_targets, total_targets,
+		       trigger_what, trigger_kind, trigger_at, targets_json, updated_at
+		FROM packages WHERE project LIKE ? ORDER BY project, name`,
+		projectPrefix+"%",
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanPackages(rows)
+}
+
+// GetActivePackages returns all packages where rollup_state is not 'succeeded'.
+func GetActivePackages(db *sql.DB) ([]*model.Package, error) {
+	rows, err := db.Query(`
+		SELECT project, name, scope, rollup_state, ok_targets, total_targets,
+		       trigger_what, trigger_kind, trigger_at, targets_json, updated_at
+		FROM packages WHERE rollup_state != 'succeeded' ORDER BY project, name`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanPackages(rows)
 }
