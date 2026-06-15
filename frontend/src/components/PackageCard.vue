@@ -58,15 +58,6 @@ const obsUrl = computed(() => `https://build.opensuse.org/package/show/${props.p
 function logUrl(repo: string, arch: string): string {
   return `https://build.opensuse.org/package/live_build_log/${props.pkg.project}/${props.pkg.name}/${repo}/${arch}`
 }
-
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
-  const minutes = Math.floor(diff / 60000)
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  return `${Math.floor(hours / 24)}d ago`
-}
 </script>
 
 <template>
@@ -97,16 +88,7 @@ function timeAgo(iso: string): string {
       <code style="font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ pkg.project }}</code>
     </div>
 
-    <!-- Row 3: trigger box -->
-    <div v-if="pkg.trigger" style="display: flex; align-items: flex-start; gap: 8px; background: var(--bg-card-2); border: 1px solid var(--border); border-radius: 9px; padding: 9px 11px;">
-      <span style="color: var(--warn); font-weight: 700; font-size: 13px; line-height: 1.3; flex-shrink: 0;">↻</span>
-      <div style="display: flex; flex-direction: column; gap: 1px; min-width: 0;">
-        <span style="font-size: 12px; color: var(--text-secondary);">Triggered by <strong style="color: var(--text-primary); font-weight: 700;">{{ pkg.trigger.what }}</strong></span>
-        <span style="font-size: 10.5px; color: var(--text-muted);">{{ pkg.trigger.kind }} · {{ timeAgo(pkg.trigger.at) }}</span>
-      </div>
-    </div>
-
-    <!-- Row 4: failing targets -->
+    <!-- Row 3: failing targets -->
     <div v-if="failingTargets.length > 0" style="display: flex; flex-direction: column; gap: 6px;">
       <span style="font-size: 10.5px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">
         {{ failingTargets.length }} failing target{{ failingTargets.length !== 1 ? 's' : '' }}
