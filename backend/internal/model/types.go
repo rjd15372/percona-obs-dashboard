@@ -89,6 +89,7 @@ const (
 	EventBuildStarted  EventType = "build_started"
 	EventBuildFinished EventType = "build_finished"
 	EventVersionChange EventType = "version_change"
+	EventUpdated       EventType = "updated"
 )
 
 type Event struct {

@@ -398,7 +398,7 @@ func isPackageBuildEvent(key string) bool {
 func mqStateToRollup(key string) model.RollupState {
 	switch key {
 	case "opensuse.obs.package.build_success":
-		return model.RollupSucceeded
+		return model.RollupFinished
 	case "opensuse.obs.package.build_fail":
 		return model.RollupFailed
 	default:
