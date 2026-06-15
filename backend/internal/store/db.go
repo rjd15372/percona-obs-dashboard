@@ -42,10 +42,11 @@ CREATE INDEX IF NOT EXISTS idx_packages_rollup_state ON packages(rollup_state);
 
 // Open opens (or creates) the SQLite database at path and applies the schema.
 func Open(path string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", path+"?_journal_mode=WAL&_foreign_keys=on")
+	db, err := sql.Open("sqlite", path+"?_journal_mode=WAL&_foreign_keys=on&_busy_timeout=5000")
 	if err != nil {
 		return nil, err
 	}
+	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
 		return nil, err
