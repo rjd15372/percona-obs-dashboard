@@ -50,6 +50,7 @@ type Target struct {
 	Repo                string   `json:"repo"`
 	Arch                string   `json:"arch"`
 	State               string   `json:"state"`
+	Details             string   `json:"details,omitempty"`
 	BlockedBy           string   `json:"blocked_by,omitempty"`
 	BuildReason         string   `json:"build_reason,omitempty"`
 	BuildReasonPackages []string `json:"build_reason_packages,omitempty"`

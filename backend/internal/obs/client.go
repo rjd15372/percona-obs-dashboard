@@ -100,6 +100,7 @@ type PackageBuildState struct {
 	Arch    string
 	Package string
 	State   string
+	Details string
 }
 
 // BuildReasonResult represents the result of a build reason query.
@@ -268,7 +269,7 @@ func (c *Client) SourceHistory(ctx context.Context, project, pkg string) ([]Sour
 
 // PackageBuildResults fetches build states for a specific package across all targets.
 func (c *Client) PackageBuildResults(ctx context.Context, project, pkg string) ([]PackageBuildState, error) {
-	path := fmt.Sprintf("/build/%s/_result?package=%s",
+	path := fmt.Sprintf("/build/%s/_result?package=%s&view=status",
 		url.PathEscape(project), url.QueryEscape(pkg))
 	resp, err := c.get(ctx, path)
 	if err != nil {
@@ -290,6 +291,7 @@ func (c *Client) PackageBuildResults(ctx context.Context, project, pkg string) (
 				Arch:    r.Arch,
 				Package: s.Package,
 				State:   s.Code,
+				Details: s.Details,
 			})
 		}
 	}

@@ -239,7 +239,7 @@ func buildPackage(project, name string, scope model.Scope, targets []PackageBuil
 	ok := 0
 	mTargets := make([]model.Target, len(active))
 	for i, t := range active {
-		mTargets[i] = model.Target{Repo: t.Repo, Arch: t.Arch, State: t.State}
+		mTargets[i] = model.Target{Repo: t.Repo, Arch: t.Arch, State: t.State, Details: t.Details}
 		if t.State == "succeeded" {
 			ok++
 		}

@@ -135,6 +135,12 @@ function timeAgo(iso: string): string {
             :title="t.blocked_by || t.build_reason"
             style="font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); padding-left: calc(8px + 9px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
           >{{ t.blocked_by || t.build_reason }}</span>
+          <span
+            v-if="t.state === 'finished' && t.details"
+            :title="t.details"
+            style="font-family: var(--font-mono); font-size: 10.5px; padding-left: calc(8px + 9px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
+            :style="{ color: t.details === 'succeeded' ? 'var(--succeeded)' : 'var(--failed)' }"
+          >{{ t.details }}</span>
         </a>
         <button
           v-if="!showAll && hiddenCount > 0"
