@@ -10,11 +10,12 @@ import (
 )
 
 type Config struct {
-	OBS    OBSConfig
-	MQ     MQConfig
-	Poller PollerConfig
-	Store  StoreConfig
-	Server ServerConfig
+	OBS        OBSConfig
+	MQ         MQConfig
+	Poller     PollerConfig
+	Store      StoreConfig
+	Server     ServerConfig
+	WorkerPool WorkerPoolConfig
 }
 
 type OBSConfig struct {
@@ -41,6 +42,12 @@ type ServerConfig struct {
 	FrontendDir string
 }
 
+type WorkerPoolConfig struct {
+	Size         int           `mapstructure:"size"`
+	PollInterval time.Duration `mapstructure:"poll_interval"`
+	QueueSize    int           `mapstructure:"queue_size"`
+}
+
 func Load() (*Config, error) {
 	v := viper.New()
 
@@ -51,6 +58,9 @@ func Load() (*Config, error) {
 	v.SetDefault("store.event_retention", "7d")
 	v.SetDefault("server.http_port", 8080)
 	v.SetDefault("server.frontend_dir", "")
+	v.SetDefault("worker_pool.size", 5)
+	v.SetDefault("worker_pool.poll_interval", 30*time.Second)
+	v.SetDefault("worker_pool.queue_size", 512)
 
 	// Config file (optional)
 	cfgFile := "config.yaml"
@@ -73,6 +83,9 @@ func Load() (*Config, error) {
 		{"store.event_retention", "EVENT_RETENTION"},
 		{"server.http_port", "HTTP_PORT"},
 		{"server.frontend_dir", "FRONTEND_DIR"},
+		{"worker_pool.size", "WORKER_POOL_SIZE"},
+		{"worker_pool.poll_interval", "WORKER_POOL_POLL_INTERVAL"},
+		{"worker_pool.queue_size", "WORKER_POOL_QUEUE_SIZE"},
 	} {
 		_ = v.BindEnv(pair[0], pair[1])
 	}
@@ -85,6 +98,11 @@ func Load() (*Config, error) {
 	retention, err := parseRetention(v.GetString("store.event_retention"))
 	if err != nil {
 		return nil, fmt.Errorf("invalid EVENT_RETENTION %q: %w", v.GetString("store.event_retention"), err)
+	}
+
+	pollIntervalWP, err := time.ParseDuration(v.GetString("worker_pool.poll_interval"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid WORKER_POOL_POLL_INTERVAL %q: %w", v.GetString("worker_pool.poll_interval"), err)
 	}
 
 	cfg := &Config{
@@ -102,6 +120,11 @@ func Load() (*Config, error) {
 		Server: ServerConfig{
 			HTTPPort:    v.GetInt("server.http_port"),
 			FrontendDir: v.GetString("server.frontend_dir"),
+		},
+		WorkerPool: WorkerPoolConfig{
+			Size:         v.GetInt("worker_pool.size"),
+			PollInterval: pollIntervalWP,
+			QueueSize:    v.GetInt("worker_pool.queue_size"),
 		},
 	}
 

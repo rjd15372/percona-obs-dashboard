@@ -1,0 +1,31 @@
+# OBS Dashboard Configuration Example
+
+# OBS (Open Build Service) API settings
+obs:
+  base_url: https://api.opensuse.org
+  username: ""  # Set via OBS_USERNAME env var
+  password: ""  # Set via OBS_PASSWORD env var
+
+# Message Queue settings
+mq:
+  url: amqps://opensuse:opensuse@rabbit.opensuse.org:5671/
+
+# Poller settings
+poller:
+  interval: 2m
+
+# Data store settings
+store:
+  db_path: /data/obsboard.db
+  event_retention: 7d
+
+# Server settings
+server:
+  http_port: 8080
+  frontend_dir: ""
+
+# Worker pool settings
+worker_pool:
+  size: 5
+  poll_interval: 30s
+  queue_size: 512
