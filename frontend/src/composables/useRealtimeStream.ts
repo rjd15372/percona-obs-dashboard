@@ -68,8 +68,6 @@ export function useRealtimeStream(
           )
           if (idx >= 0) {
             packages.value[idx] = pkg
-          } else {
-            packages.value.push(pkg)
           }
         }
       } else if (msg.type === 'new_event') {
