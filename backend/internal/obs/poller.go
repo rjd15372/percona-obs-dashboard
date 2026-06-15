@@ -209,6 +209,9 @@ func skipState(state string) bool {
 // EnrichBlockedTargets populates BlockedBy for each blocked target in pkg.
 // Errors are logged as warnings and do not stop enrichment of other targets.
 func EnrichBlockedTargets(ctx context.Context, client *Client, pkg *model.Package) {
+	if client == nil {
+		return
+	}
 	for i, t := range pkg.Targets {
 		if t.State != "blocked" {
 			continue
