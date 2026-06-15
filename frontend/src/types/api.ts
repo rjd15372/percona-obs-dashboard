@@ -18,6 +18,7 @@ export interface Target {
   repo: string
   arch: string
   state: BuildState
+  blocked_by?: string
 }
 
 export interface Package {

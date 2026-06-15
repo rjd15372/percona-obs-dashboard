@@ -119,15 +119,21 @@ function timeAgo(iso: string): string {
           target="_blank"
           rel="noopener"
           :style="{
-            display: 'flex', alignItems: 'center', gap: '9px',
+            display: 'flex', flexDirection: 'column', gap: '3px',
             textDecoration: 'none', padding: '5px 9px', borderRadius: '7px',
             background: STATE_BG[t.state] ?? 'var(--blocked-tint)',
           }"
         >
-          <span :style="{ width: '8px', height: '8px', borderRadius: '2px', background: STATE_COLOR[t.state] ?? 'var(--blocked)', flexShrink: '0' }"></span>
-          <code style="font-family: var(--font-mono); font-size: 11.5px; color: var(--text-primary); flex-shrink: 0;">{{ t.repo }}/{{ t.arch }}</code>
-          <span :style="{ fontSize: '11px', color: STATE_COLOR[t.state] ?? 'var(--text-secondary)', marginLeft: 'auto', fontWeight: '600', flexShrink: '0' }">{{ t.state }}</span>
-          <span style="font-size: 10.5px; color: var(--brand-purple); font-weight: 700; flex-shrink: 0;">log ↗</span>
+          <div style="display: flex; align-items: center; gap: 9px;">
+            <span :style="{ width: '8px', height: '8px', borderRadius: '2px', background: STATE_COLOR[t.state] ?? 'var(--blocked)', flexShrink: '0' }"></span>
+            <code style="font-family: var(--font-mono); font-size: 11.5px; color: var(--text-primary); flex-shrink: 0;">{{ t.repo }}/{{ t.arch }}</code>
+            <span :style="{ fontSize: '11px', color: STATE_COLOR[t.state] ?? 'var(--text-secondary)', marginLeft: 'auto', fontWeight: '600', flexShrink: '0' }">{{ t.state }}</span>
+            <span style="font-size: 10.5px; color: var(--brand-purple); font-weight: 700; flex-shrink: 0;">log ↗</span>
+          </div>
+          <span
+            v-if="t.state === 'blocked' && t.blocked_by"
+            style="font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); padding-left: 17px;"
+          >{{ t.blocked_by }}</span>
         </a>
         <button
           v-if="!showAll && hiddenCount > 0"
