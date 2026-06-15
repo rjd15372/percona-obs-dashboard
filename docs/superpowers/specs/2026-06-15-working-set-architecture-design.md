@@ -57,7 +57,7 @@ func (ws *WorkingSet) StartScheduler(ctx context.Context, interval time.Duration
 
 **Key:** `project + "/" + name`
 
-**`Add(pkg)`:** Acquires write lock. If key not present, inserts into map. Always attempts a non-blocking send to `dispatch`. No-op on already-present packages (periodic scheduler handles re-queuing).
+**`Add(pkg)`:** Acquires write lock. If key not present, inserts into map and attempts a non-blocking send to `dispatch`. If key already present, no-op — the periodic scheduler handles re-queuing for packages already in the set.
 
 **`Signal(pkg)`:** Acquires write lock. Inserts into map if not present. Always attempts a non-blocking send to `dispatch` (immediate trigger regardless of membership).
 
