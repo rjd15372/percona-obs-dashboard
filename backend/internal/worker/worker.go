@@ -33,19 +33,17 @@ func NewPool(size int, tasks []Task, client *obs.Client, db *sql.DB, hub *hubpkg
 }
 
 func (p *Pool) Start(ctx context.Context) {
-	dispatchCap := cap(p.ws.Dispatch())
 	for i := 0; i < p.size; i++ {
-		ch := p.ws.Subscribe(dispatchCap)
-		go p.run(ctx, ch)
+		go p.run(ctx)
 	}
 }
 
-func (p *Pool) run(ctx context.Context, ch <-chan *model.Package) {
+func (p *Pool) run(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case pkg, ok := <-ch:
+		case pkg, ok := <-p.ws.Dispatch():
 			if !ok {
 				return
 			}

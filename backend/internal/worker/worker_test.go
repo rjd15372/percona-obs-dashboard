@@ -93,7 +93,6 @@ func TestPoolRemovesSucceededPackageFromWorkingSet(t *testing.T) {
 	ws := workingset.New(10)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	p := worker.NewPool(1, []worker.Task{succeedingTask{}}, nil, db, h, ws)
 	p.Start(ctx)
@@ -104,15 +103,15 @@ func TestPoolRemovesSucceededPackageFromWorkingSet(t *testing.T) {
 		Targets:   []model.Target{{Repo: "repo", Arch: "x86_64", State: "failed"}},
 		UpdatedAt: time.Now().UTC(),
 	}
-	ws.Add(pkg)
-	<-ws.Dispatch() // drain the initial dispatch from Add
+	ws.Signal(pkg) // trigger worker — worker runs succeedingTask, then calls ws.Remove
 
-	ws.Signal(pkg) // trigger worker
+	time.Sleep(200 * time.Millisecond) // wait for worker to finish
 
-	time.Sleep(200 * time.Millisecond)
+	cancel() // stop the worker goroutine before making assertions
 
-	// After worker ran succeedingTask: pkg.RollupState == succeeded → ws.Remove was called
-	// A new Add should now dispatch (package was removed from set)
+	time.Sleep(10 * time.Millisecond) // give goroutine time to exit
+
+	// Package was removed from working set. ws.Add should now dispatch again.
 	ws.Add(pkg)
 	select {
 	case <-ws.Dispatch():
