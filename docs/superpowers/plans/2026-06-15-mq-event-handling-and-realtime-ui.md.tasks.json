@@ -1,0 +1,32 @@
+{
+  "planPath": "docs/superpowers/plans/2026-06-15-mq-event-handling-and-realtime-ui.md",
+  "tasks": [
+    {
+      "id": 63,
+      "subject": "Task 1: Add EventUpdated model constant and fix build_success rollup state",
+      "status": "pending",
+      "description": "**Goal:** Add `EventUpdated` to the event type enum and correct `mqStateToRollup` so `build_success` produces `RollupFinished` instead of `RollupSucceeded`.\n\n**Files:**\n- Modify: `backend/internal/model/types.go`\n- Modify: `backend/internal/mq/consumer.go` (`mqStateToRollup` function)\n\n**Acceptance Criteria:**\n- [ ] `model.EventUpdated` constant exists with value `\"updated\"`\n- [ ] `mqStateToRollup(\"opensuse.obs.package.build_success\")` returns `model.RollupFinished`\n- [ ] `mqStateToRollup(\"opensuse.obs.package.build_fail\")` still returns `model.RollupFailed`\n- [ ] `mqStateToRollup(\"opensuse.obs.package.build_unchanged\")` still returns `model.RollupSucceeded`\n- [ ] `go build ./...` passes with no errors\n\n**Verify:** `cd backend && go build ./...` → exits 0 with no output\n\n```json:metadata\n{\"files\": [\"backend/internal/model/types.go\", \"backend/internal/mq/consumer.go\"], \"verifyCommand\": \"cd backend && go build ./...\", \"acceptanceCriteria\": [\"model.EventUpdated constant exists with value updated\", \"mqStateToRollup build_success returns RollupFinished\", \"go build passes\"], \"modelTier\": \"mechanical\"}\n```"
+    },
+    {
+      "id": 64,
+      "subject": "Task 2: Add GetFinishedPackagesByProject to store",
+      "status": "pending",
+      "blockedBy": [63],
+      "description": "**Goal:** Add a store function that returns all packages for a given project with `rollup_state = 'finished'`.\n\n**Files:**\n- Modify: `backend/internal/store/packages.go`\n- Modify: `backend/internal/store/packages_test.go`\n\n**Acceptance Criteria:**\n- [ ] Returns only packages with `rollup_state = 'finished'` for the exact project\n- [ ] Returns empty slice (not error) when no packages match\n- [ ] Does not return packages from other projects\n- [ ] `go test ./internal/store/... -run TestGetFinishedPackagesByProject -v` passes\n\n**Verify:** `cd backend && go test ./internal/store/... -run TestGetFinishedPackagesByProject -v` → PASS\n\n```json:metadata\n{\"files\": [\"backend/internal/store/packages.go\", \"backend/internal/store/packages_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/store/... -run TestGetFinishedPackagesByProject -v\", \"acceptanceCriteria\": [\"GetFinishedPackagesByProject returns only finished packages for exact project\", \"empty slice not error for unknown project\", \"TestGetFinishedPackagesByProject passes\"], \"modelTier\": \"mechanical\"}\n```"
+    },
+    {
+      "id": 65,
+      "subject": "Task 3: Wire new MQ event cases and extend repo.published",
+      "status": "pending",
+      "blockedBy": [63, 64],
+      "description": "**Goal:** Add four new event cases to the MQ consumer and extend `repo.published` to signal `finished` packages.\n\n**Files:**\n- Modify: `backend/internal/mq/consumer.go`\n\n**Acceptance Criteria:**\n- [ ] `package.create` appends EventCreated and signals stub\n- [ ] `project.update` appends EventUpdated\n- [ ] `project.update_project_conf` appends EventUpdated\n- [ ] `package.commit` appends EventUpdated\n- [ ] `repo.published` signals finished packages via ws.Signal\n- [ ] `go test ./... -race` passes\n\n**Verify:** `cd backend && go test ./... -race` → all PASS\n\n```json:metadata\n{\"files\": [\"backend/internal/mq/consumer.go\"], \"verifyCommand\": \"cd backend && go test ./... -race\", \"acceptanceCriteria\": [\"package.create appends EventCreated and signals stub\", \"project.update appends EventUpdated\", \"repo.published signals finished packages\", \"all tests pass with -race\"], \"modelTier\": \"standard\"}\n```"
+    },
+    {
+      "id": 66,
+      "subject": "Task 4: Frontend real-time updates for PR dropdown and version tabs",
+      "status": "pending",
+      "description": "**Goal:** Extend `useRealtimeStream` to update `prGroups` in real-time and add `'updated'` to the `EventType` union.\n\n**Files:**\n- Modify: `frontend/src/types/api.ts`\n- Modify: `frontend/src/composables/useRealtimeStream.ts`\n- Modify: `frontend/src/App.vue`\n\n**Acceptance Criteria:**\n- [ ] `EventType` includes `'updated'`\n- [ ] `useRealtimeStream` signature: `(packages, events, prGroups, refresh, refreshPR)`\n- [ ] Unknown PR triggers `refreshPR()`\n- [ ] Known PR updated in-place with rollup recomputed\n- [ ] Non-PR packages update as before\n- [ ] `npx tsc --noEmit` exits 0\n\n**Verify:** `cd frontend && npx tsc --noEmit` → exits 0\n\n```json:metadata\n{\"files\": [\"frontend/src/types/api.ts\", \"frontend/src/composables/useRealtimeStream.ts\", \"frontend/src/App.vue\"], \"verifyCommand\": \"cd frontend && npx tsc --noEmit\", \"acceptanceCriteria\": [\"EventType includes updated\", \"useRealtimeStream accepts prGroups and refreshPR\", \"new PR triggers refreshPR\", \"known PR updated in-place\", \"tsc passes\"], \"modelTier\": \"mechanical\"}\n```"
+    }
+  ],
+  "lastUpdated": "2026-06-15T00:00:00Z"
+}
