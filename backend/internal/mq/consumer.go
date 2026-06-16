@@ -19,12 +19,10 @@ import (
 )
 
 const (
-	exchange             = "pubsub"
-	packageRouteKey      = "opensuse.obs.package.#"
-	repoRouteKey         = "opensuse.obs.repo.published"
-	repoBuildStartedKey  = "opensuse.obs.repo.build_started"
-	repoBuildFinishedKey = "opensuse.obs.repo.build_finished"
-	projectRouteKey      = "opensuse.obs.project.#"
+	exchange        = "pubsub"
+	packageRouteKey = "opensuse.obs.package.#"
+	repoRouteKey    = "opensuse.obs.repo.published"
+	projectRouteKey = "opensuse.obs.project.#"
 )
 
 // mqMessage is the JSON structure of OBS MQ events.
@@ -128,8 +126,6 @@ func (c *Consumer) run(ctx context.Context) error {
 	for _, key := range []string{
 		packageRouteKey,
 		repoRouteKey,
-		repoBuildStartedKey,
-		repoBuildFinishedKey,
 		projectRouteKey,
 	} {
 		if err := ch.QueueBind(q.Name, key, exchange, false, nil); err != nil {
@@ -185,19 +181,8 @@ func (c *Consumer) handle(ctx context.Context, msg amqp.Delivery) {
 	key := msg.RoutingKey
 	switch {
 	case key == repoRouteKey:
-		evt := &model.Event{
-			ID:      "evt_" + ulid.Make().String(),
-			Type:    model.EventPublished,
-			Scope:   model.ScopeRelease,
-			Project: m.Project,
-			Package: m.Package,
-			Repo:    m.Repo,
-			What:    fmt.Sprintf("%s published", m.Repo),
-			Why:     "repo published",
-			URL:     fmt.Sprintf("https://build.opensuse.org/project/show/%s", m.Project),
-			At:      time.Now().UTC(),
-		}
-		c.appendEvent(evt)
+		// No event emitted — published events come from PublishStateTask per target.
+		// Signal succeeded packages to re-check publish state immediately.
 		finished, err := store.GetFinishedPackagesByProject(c.db, m.Project)
 		if err != nil {
 			slog.Warn("mq: get finished packages for publish signal", "project", m.Project, "err", err)
@@ -207,38 +192,8 @@ func (c *Consumer) handle(ctx context.Context, msg amqp.Delivery) {
 			}
 		}
 
-	case key == repoBuildStartedKey:
-		evt := &model.Event{
-			ID:      "evt_" + ulid.Make().String(),
-			Type:    model.EventBuildStarted,
-			Scope:   inferScopeFromProject(m.Project),
-			Project: m.Project,
-			Repo:    m.Repo,
-			Arch:    m.Arch,
-			What:    fmt.Sprintf("%s/%s build started", m.Repo, m.Arch),
-			Why:     m.BuildID,
-			URL:     fmt.Sprintf("https://build.opensuse.org/project/show/%s", m.Project),
-			At:      time.Now().UTC(),
-		}
-		c.appendEvent(evt)
-
-	case key == repoBuildFinishedKey:
-		evt := &model.Event{
-			ID:      "evt_" + ulid.Make().String(),
-			Type:    model.EventBuildFinished,
-			Scope:   inferScopeFromProject(m.Project),
-			Project: m.Project,
-			Repo:    m.Repo,
-			Arch:    m.Arch,
-			What:    fmt.Sprintf("%s/%s build finished", m.Repo, m.Arch),
-			Why:     m.BuildID,
-			URL:     fmt.Sprintf("https://build.opensuse.org/project/show/%s", m.Project),
-			At:      time.Now().UTC(),
-		}
-		c.appendEvent(evt)
-
 	case key == "opensuse.obs.project.create":
-		evt := &model.Event{
+		c.appendEvent(&model.Event{
 			ID:      "evt_" + ulid.Make().String(),
 			Type:    model.EventCreated,
 			Scope:   inferScopeFromProject(m.Project),
@@ -247,15 +202,14 @@ func (c *Consumer) handle(ctx context.Context, msg amqp.Delivery) {
 			Why:     m.Sender,
 			URL:     fmt.Sprintf("https://build.opensuse.org/project/show/%s", m.Project),
 			At:      time.Now().UTC(),
-		}
-		c.appendEvent(evt)
+		})
 
 	case key == "opensuse.obs.project.delete":
 		scope := inferScopeFromProject(m.Project)
 		if err := store.DeletePackagesByProject(c.db, m.Project); err != nil {
 			slog.Error("mq: delete packages for project", "project", m.Project, "err", err)
 		}
-		evt := &model.Event{
+		c.appendEvent(&model.Event{
 			ID:      "evt_" + ulid.Make().String(),
 			Type:    model.EventDeleted,
 			Scope:   scope,
@@ -264,25 +218,10 @@ func (c *Consumer) handle(ctx context.Context, msg amqp.Delivery) {
 			Why:     m.Comment,
 			URL:     fmt.Sprintf("https://build.opensuse.org/project/show/%s", m.Project),
 			At:      time.Now().UTC(),
-		}
-		c.appendEvent(evt)
-
-	case key == "opensuse.obs.package.version_change":
-		evt := &model.Event{
-			ID:      "evt_" + ulid.Make().String(),
-			Type:    model.EventVersionChange,
-			Scope:   inferScopeFromProject(m.Project),
-			Project: m.Project,
-			Package: m.Package,
-			What:    fmt.Sprintf("%s version %s → %s", m.Package, m.OldVersion, m.NewVersion),
-			Why:     m.Comment,
-			URL:     fmt.Sprintf("https://build.opensuse.org/package/show/%s/%s", m.Project, m.Package),
-			At:      time.Now().UTC(),
-		}
-		c.appendEvent(evt)
+		})
 
 	case key == "opensuse.obs.package.create":
-		evt := &model.Event{
+		c.appendEvent(&model.Event{
 			ID:      "evt_" + ulid.Make().String(),
 			Type:    model.EventCreated,
 			Scope:   inferScopeFromProject(m.Project),
@@ -292,8 +231,7 @@ func (c *Consumer) handle(ctx context.Context, msg amqp.Delivery) {
 			Why:     m.Sender,
 			URL:     fmt.Sprintf("https://build.opensuse.org/package/show/%s/%s", m.Project, m.Package),
 			At:      time.Now().UTC(),
-		}
-		c.appendEvent(evt)
+		})
 		stub := &model.Package{
 			Project: m.Project,
 			Name:    m.Package,
@@ -301,96 +239,35 @@ func (c *Consumer) handle(ctx context.Context, msg amqp.Delivery) {
 		}
 		c.ws.Signal(stub)
 
-	case key == "opensuse.obs.project.update":
-		evt := &model.Event{
+	case key == "opensuse.obs.package.delete":
+		c.appendEvent(&model.Event{
 			ID:      "evt_" + ulid.Make().String(),
-			Type:    model.EventUpdated,
-			Scope:   inferScopeFromProject(m.Project),
-			Project: m.Project,
-			What:    fmt.Sprintf("project %s updated", m.Project),
-			Why:     m.Sender,
-			URL:     fmt.Sprintf("https://build.opensuse.org/project/show/%s", m.Project),
-			At:      time.Now().UTC(),
-		}
-		c.appendEvent(evt)
-
-	case key == "opensuse.obs.project.update_project_conf":
-		evt := &model.Event{
-			ID:      "evt_" + ulid.Make().String(),
-			Type:    model.EventUpdated,
-			Scope:   inferScopeFromProject(m.Project),
-			Project: m.Project,
-			What:    fmt.Sprintf("project %s configuration updated", m.Project),
-			Why:     m.Sender,
-			URL:     fmt.Sprintf("https://build.opensuse.org/project/show/%s", m.Project),
-			At:      time.Now().UTC(),
-		}
-		c.appendEvent(evt)
-
-	case key == "opensuse.obs.package.commit":
-		evt := &model.Event{
-			ID:      "evt_" + ulid.Make().String(),
-			Type:    model.EventUpdated,
+			Type:    model.EventDeleted,
 			Scope:   inferScopeFromProject(m.Project),
 			Project: m.Project,
 			Package: m.Package,
-			What:    fmt.Sprintf("%s committed (rev %s)", m.Package, m.Rev),
-			Why:     m.Comment,
+			What:    fmt.Sprintf("package %s deleted", m.Package),
+			Why:     m.Sender,
 			URL:     fmt.Sprintf("https://build.opensuse.org/package/show/%s/%s", m.Project, m.Package),
 			At:      time.Now().UTC(),
-		}
-		c.appendEvent(evt)
+		})
 
 	case isPackageBuildEvent(key):
-		scope := inferScopeFromProject(m.Project)
-
-		// build_unchanged: state is unknown — only append the event, skip upsert.
 		if key == "opensuse.obs.package.build_unchanged" {
-			evt := &model.Event{
-				ID:      "evt_" + ulid.Make().String(),
-				Type:    model.EventSucceeded,
-				Scope:   scope,
-				Project: m.Project,
-				Package: m.Package,
-				Repo:    m.Repo,
-				Arch:    m.Arch,
-				What:    fmt.Sprintf("%s build unchanged on %s/%s", m.Package, m.Repo, m.Arch),
-				Why:     m.Reason,
-				URL:     fmt.Sprintf("https://build.opensuse.org/package/show/%s/%s", m.Project, m.Package),
-				At:      time.Now().UTC(),
-			}
-			c.appendEvent(evt)
+			// No event — unchanged builds are noise; state tracking not needed.
 			return
 		}
-
+		scope := inferScopeFromProject(m.Project)
 		rollup := mqStateToRollup(key)
-		evtType := rollupToEventType(rollup)
-
-		// Read current package from store and merge the updated target into the
-		// full target list so we don't overwrite other (repo, arch) entries.
 		pkg := c.mergePackageTarget(m, scope, rollup)
-
 		if err := c.upsertPackage(pkg); err != nil {
 			slog.Error("mq: upsert package", "err", err)
 			return
 		}
-		evt := &model.Event{
-			ID:      "evt_" + ulid.Make().String(),
-			Type:    evtType,
-			Scope:   scope,
-			Project: m.Project,
-			Package: m.Package,
-			Repo:    m.Repo,
-			Arch:    m.Arch,
-			What:    fmt.Sprintf("%s %s on %s/%s", m.Package, string(rollup), m.Repo, m.Arch),
-			Why:     m.Reason,
-			URL:     fmt.Sprintf("https://build.opensuse.org/package/show/%s/%s", m.Project, m.Package),
-			At:      time.Now().UTC(),
-		}
-		c.appendEvent(evt)
 		if pkg.RollupState != model.RollupSucceeded {
 			c.ws.Signal(pkg)
 		}
+		// No appendEvent — build events are emitted by the worker diff (Task 3)
 	}
 }
 
@@ -471,17 +348,6 @@ func mqStateToRollup(key string) model.RollupState {
 		return model.RollupFailed
 	default:
 		return model.RollupSucceeded
-	}
-}
-
-func rollupToEventType(state model.RollupState) model.EventType {
-	switch state {
-	case model.RollupSucceeded:
-		return model.EventSucceeded
-	case model.RollupFailed:
-		return model.EventFailed
-	default:
-		return model.EventSucceeded
 	}
 }
 
