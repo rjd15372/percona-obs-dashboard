@@ -71,8 +71,9 @@ type Package struct {
 	OKTargets    int         `json:"ok_targets"`
 	TotalTargets int         `json:"total_targets"`
 	Trigger      *Trigger    `json:"trigger,omitempty"`
-	Targets      []Target    `json:"targets"`
-	UpdatedAt    time.Time   `json:"updated_at"`
+	Targets        []Target   `json:"targets"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	StateChangedAt *time.Time `json:"state_changed_at,omitempty"`
 }
 
 type EventType string

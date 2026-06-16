@@ -16,8 +16,9 @@ CREATE TABLE IF NOT EXISTS packages (
     trigger_what   TEXT,
     trigger_kind   TEXT,
     trigger_at     DATETIME,
-    targets_json   TEXT NOT NULL DEFAULT '[]',
-    updated_at     DATETIME NOT NULL,
+    targets_json    TEXT NOT NULL DEFAULT '[]',
+    updated_at      DATETIME NOT NULL,
+    state_changed_at DATETIME,
     PRIMARY KEY (project, name)
 );
 
@@ -51,5 +52,8 @@ func Open(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, err
 	}
+	// Additive migration: add state_changed_at to existing databases.
+	// Fails silently if the column already exists (fresh DBs have it from the schema above).
+	db.Exec(`ALTER TABLE packages ADD COLUMN state_changed_at DATETIME`)
 	return db, nil
 }

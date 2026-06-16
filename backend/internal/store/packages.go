@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"time"
 
 	"github.com/percona/obs-dashboard/internal/model"
 )
@@ -23,18 +24,24 @@ func UpsertPackageState(db *sql.DB, p *model.Package) error {
 	_, err = db.Exec(`
 		INSERT INTO packages
 			(project, name, scope, rollup_state, ok_targets, total_targets,
-			 trigger_what, trigger_kind, trigger_at, targets_json, updated_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?)
+			 trigger_what, trigger_kind, trigger_at, targets_json, updated_at,
+			 state_changed_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(project, name) DO UPDATE SET
 			scope=excluded.scope, rollup_state=excluded.rollup_state,
 			ok_targets=excluded.ok_targets, total_targets=excluded.total_targets,
 			trigger_what=excluded.trigger_what, trigger_kind=excluded.trigger_kind,
 			trigger_at=excluded.trigger_at, targets_json=excluded.targets_json,
-			updated_at=excluded.updated_at`,
+			updated_at=excluded.updated_at,
+			state_changed_at = CASE
+				WHEN excluded.rollup_state != rollup_state THEN excluded.state_changed_at
+				ELSE state_changed_at
+			END`,
 		p.Project, p.Name, string(p.Scope), string(p.RollupState),
 		p.OKTargets, p.TotalTargets,
 		trigWhat, trigKind, trigAt,
 		string(targetsJSON), p.UpdatedAt,
+		time.Now().UTC(),
 	)
 	return err
 }
@@ -56,7 +63,7 @@ func DeletePackage(db *sql.DB, project, name string) error {
 // scanPackages is a helper that extracts the scan loop pattern used by multiple query functions.
 // It expects rows to have been created with the standard package column order:
 // project, name, scope, rollup_state, ok_targets, total_targets,
-// trigger_what, trigger_kind, trigger_at, targets_json, updated_at
+// trigger_what, trigger_kind, trigger_at, targets_json, updated_at, state_changed_at
 func scanPackages(rows *sql.Rows) ([]*model.Package, error) {
 	pkgs := make([]*model.Package, 0)
 	for rows.Next() {
@@ -64,11 +71,13 @@ func scanPackages(rows *sql.Rows) ([]*model.Package, error) {
 		var trigWhat, trigKind sql.NullString
 		var trigAt sql.NullTime
 		var targetsJSON string
+		var stateChangedAt sql.NullTime
 		if err := rows.Scan(
 			&p.Project, &p.Name, &p.Scope, &p.RollupState,
 			&p.OKTargets, &p.TotalTargets,
 			&trigWhat, &trigKind, &trigAt,
 			&targetsJSON, &p.UpdatedAt,
+			&stateChangedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -78,6 +87,10 @@ func scanPackages(rows *sql.Rows) ([]*model.Package, error) {
 				Kind: trigKind.String,
 				At:   trigAt.Time,
 			}
+		}
+		if stateChangedAt.Valid {
+			t := stateChangedAt.Time
+			p.StateChangedAt = &t
 		}
 		if err := json.Unmarshal([]byte(targetsJSON), &p.Targets); err != nil {
 			return nil, err
@@ -91,7 +104,8 @@ func scanPackages(rows *sql.Rows) ([]*model.Package, error) {
 func QueryPackages(db *sql.DB, projectPrefix string) ([]*model.Package, error) {
 	rows, err := db.Query(`
 		SELECT project, name, scope, rollup_state, ok_targets, total_targets,
-		       trigger_what, trigger_kind, trigger_at, targets_json, updated_at
+		       trigger_what, trigger_kind, trigger_at, targets_json, updated_at,
+		       state_changed_at
 		FROM packages WHERE project LIKE ? ORDER BY project, name`,
 		projectPrefix+"%",
 	)
@@ -106,7 +120,8 @@ func QueryPackages(db *sql.DB, projectPrefix string) ([]*model.Package, error) {
 func GetActivePackages(db *sql.DB) ([]*model.Package, error) {
 	rows, err := db.Query(`
 		SELECT project, name, scope, rollup_state, ok_targets, total_targets,
-		       trigger_what, trigger_kind, trigger_at, targets_json, updated_at
+		       trigger_what, trigger_kind, trigger_at, targets_json, updated_at,
+		       state_changed_at
 		FROM packages WHERE rollup_state != 'succeeded' ORDER BY project, name`,
 	)
 	if err != nil {
@@ -122,7 +137,8 @@ func GetActivePackages(db *sql.DB) ([]*model.Package, error) {
 func GetFinishedPackagesByProject(db *sql.DB, project string) ([]*model.Package, error) {
 	rows, err := db.Query(`
 		SELECT project, name, scope, rollup_state, ok_targets, total_targets,
-		       trigger_what, trigger_kind, trigger_at, targets_json, updated_at
+		       trigger_what, trigger_kind, trigger_at, targets_json, updated_at,
+		       state_changed_at
 		FROM packages WHERE project = ? AND rollup_state = 'succeeded'`,
 		project,
 	)

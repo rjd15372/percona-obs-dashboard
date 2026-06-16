@@ -200,3 +200,50 @@ func TestGetFinishedPackagesByProject(t *testing.T) {
 		t.Errorf("want 0 packages for unknown project, got %d", len(got2))
 	}
 }
+
+func TestStateChangedAt(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	now := time.Now().UTC().Truncate(time.Second)
+	p := &model.Package{
+		Project: "isv:percona:ppg:17", Name: "pg_tde",
+		Scope: model.ScopeVersion, RollupState: model.RollupBuilding,
+		Targets: []model.Target{}, UpdatedAt: now,
+	}
+
+	// First insert: state_changed_at must be set.
+	if err := UpsertPackageState(db, p); err != nil {
+		t.Fatal(err)
+	}
+	pkgs, _ := QueryPackages(db, "isv:percona:ppg:17")
+	if pkgs[0].StateChangedAt == nil {
+		t.Fatal("state_changed_at should be set on first insert")
+	}
+	first := *pkgs[0].StateChangedAt
+
+	// Same-state upsert: state_changed_at must not change.
+	later := now.Add(5 * time.Minute)
+	p.UpdatedAt = later
+	if err := UpsertPackageState(db, p); err != nil {
+		t.Fatal(err)
+	}
+	pkgs, _ = QueryPackages(db, "isv:percona:ppg:17")
+	if !pkgs[0].StateChangedAt.Equal(first) {
+		t.Errorf("same-state upsert: state_changed_at changed from %v to %v", first, *pkgs[0].StateChangedAt)
+	}
+
+	// State-change upsert: state_changed_at must update.
+	p.RollupState = model.RollupSucceeded
+	p.UpdatedAt = later
+	if err := UpsertPackageState(db, p); err != nil {
+		t.Fatal(err)
+	}
+	pkgs, _ = QueryPackages(db, "isv:percona:ppg:17")
+	if pkgs[0].StateChangedAt == nil || pkgs[0].StateChangedAt.Equal(first) {
+		t.Errorf("state-change upsert: state_changed_at should have changed; got %v", pkgs[0].StateChangedAt)
+	}
+}
