@@ -146,6 +146,18 @@ const rollupColor = computed(() => STATE_COLOR[props.pkg.rollup_state] ?? 'var(-
 const rollupBg = computed(() => STATE_BG[props.pkg.rollup_state] ?? 'var(--blocked-tint)')
 const obsUrl = computed(() => `https://build.opensuse.org/package/show/${props.pkg.project}/${props.pkg.name}`)
 
+const IN_PROGRESS_STATES = new Set(['scheduled', 'building', 'finished'])
+
+const stateAge = computed((): string | null => {
+  if (!IN_PROGRESS_STATES.has(props.pkg.rollup_state)) return null
+  if (!props.pkg.state_changed_at) return null
+  const ms = Date.now() - new Date(props.pkg.state_changed_at).getTime()
+  const m = Math.floor(ms / 60000)
+  if (m < 1) return 'for <1m'
+  if (m < 60) return `for ${m}m`
+  return `for ${Math.floor(m / 60)}h ${m % 60}m`
+})
+
 function logUrl(repo: string, arch: string): string {
   return `https://build.opensuse.org/package/live_build_log/${props.pkg.project}/${props.pkg.name}/${repo}/${arch}`
 }
@@ -162,7 +174,7 @@ function logUrl(repo: string, arch: string): string {
     flexDirection: 'column',
     gap: '11px',
   }">
-    <!-- Row 1: state pill + name + OBS link -->
+    <!-- Row 1: state pill + name + duration + OBS link -->
     <div style="display: flex; align-items: center; gap: 9px;">
       <span :style="{
         fontSize: '10.5px', fontWeight: '700', textTransform: 'uppercase',
@@ -170,7 +182,8 @@ function logUrl(repo: string, arch: string): string {
         color: rollupColor, background: rollupBg,
       }">{{ STATE_LABEL[pkg.rollup_state] ?? pkg.rollup_state }}</span>
       <code style="font-family: var(--font-mono); font-size: 13.5px; font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ pkg.name }}</code>
-      <a :href="obsUrl" target="_blank" rel="noopener" style="margin-left: auto; font-size: 11.5px; font-weight: 700; color: var(--brand-purple); text-decoration: none; white-space: nowrap; flex-shrink: 0;">OBS ↗</a>
+      <span v-if="stateAge" style="margin-left: auto; font-size: 10.5px; color: var(--text-muted); font-family: var(--font-mono); white-space: nowrap; flex-shrink: 0;">{{ stateAge }}</span>
+      <a :href="obsUrl" target="_blank" rel="noopener" :style="{ marginLeft: stateAge ? '0' : 'auto', fontSize: '11.5px', fontWeight: '700', color: 'var(--brand-purple)', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: '0' }">OBS ↗</a>
     </div>
 
     <!-- Row 2: scope tag + project path -->

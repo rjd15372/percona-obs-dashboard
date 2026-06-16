@@ -34,6 +34,7 @@ export interface Package {
   trigger?: Trigger // optional
   targets: Target[]
   updated_at: string // ISO 8601
+  state_changed_at?: string // ISO 8601; absent when NULL
 }
 
 export interface PRGroup {
