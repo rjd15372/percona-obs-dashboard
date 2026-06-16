@@ -35,6 +35,7 @@ func UpsertPackageState(db *sql.DB, p *model.Package, now time.Time) error {
 			updated_at=excluded.updated_at,
 			state_changed_at = CASE
 				WHEN excluded.rollup_state != rollup_state THEN excluded.state_changed_at
+				WHEN state_changed_at IS NULL             THEN excluded.state_changed_at
 				ELSE state_changed_at
 			END`,
 		p.Project, p.Name, string(p.Scope), string(p.RollupState),
