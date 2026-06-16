@@ -1,0 +1,19 @@
+{
+  "planPath": "docs/superpowers/plans/2026-06-16-package-state-duration.md",
+  "tasks": [
+    {
+      "id": 76,
+      "subject": "Task 1: Backend — persist state_changed_at",
+      "status": "pending",
+      "description": "**Goal:** Add `state_changed_at` to the model, schema, and store so it is written on first insert and updated only when `rollup_state` changes.\n\n**Files:**\n- Modify: `backend/internal/model/types.go:66-76`\n- Modify: `backend/internal/store/db.go:8-55`\n- Modify: `backend/internal/store/packages.go:10-134`\n- Modify: `backend/internal/store/packages_test.go` (add test)\n\n**Acceptance Criteria:**\n- [ ] `model.Package` has `StateChangedAt *time.Time`\n- [ ] Fresh DB: `state_changed_at` set on first insert\n- [ ] Same-state upsert: `state_changed_at` unchanged\n- [ ] State-change upsert: `state_changed_at` updated\n- [ ] `go test ./internal/store/... -v` passes\n\n**Verify:** `cd backend && go test ./internal/store/... -v -run TestStateChangedAt` → PASS\n\n```json:metadata\n{\"files\": [\"backend/internal/model/types.go\", \"backend/internal/store/db.go\", \"backend/internal/store/packages.go\", \"backend/internal/store/packages_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/store/... -v -run TestStateChangedAt\", \"acceptanceCriteria\": [\"model.Package has StateChangedAt *time.Time field\", \"state_changed_at set on first insert\", \"same-state upsert leaves state_changed_at unchanged\", \"state-change upsert updates state_changed_at\", \"go test ./internal/store/... -v passes\"], \"modelTier\": \"standard\"}\n```"
+    },
+    {
+      "id": 77,
+      "subject": "Task 2: Frontend — display state duration in PackageCard",
+      "status": "pending",
+      "blockedBy": [76],
+      "description": "**Goal:** Show \"for 23m\" right-aligned in row 1 of the package card, only for `scheduled`, `building`, and `finishing` rollup states.\n\n**Files:**\n- Modify: `frontend/src/types/api.ts:27-37`\n- Modify: `frontend/src/components/PackageCard.vue`\n\n**Acceptance Criteria:**\n- [ ] `Package` interface has `state_changed_at?: string`\n- [ ] `stateAge` returns a formatted string for `scheduled`, `building`, `finished` when `state_changed_at` is present\n- [ ] `stateAge` returns `null` for all other states\n- [ ] Duration renders right-aligned in row 1, before the OBS link\n- [ ] `cd frontend && npx vue-tsc --noEmit` exits 0\n\n**Verify:** `cd frontend && npx vue-tsc --noEmit` → exits 0 with no output\n\n```json:metadata\n{\"files\": [\"frontend/src/types/api.ts\", \"frontend/src/components/PackageCard.vue\"], \"verifyCommand\": \"cd frontend && npx vue-tsc --noEmit\", \"acceptanceCriteria\": [\"Package interface has state_changed_at?: string\", \"stateAge computed returns string for scheduled/building/finished states only\", \"duration renders right-aligned in row 1 before OBS link\", \"vue-tsc --noEmit exits 0\"], \"modelTier\": \"mechanical\"}\n```"
+    }
+  ],
+  "lastUpdated": "2026-06-16T00:00:00Z"
+}
