@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import TimeWindowPicker from './TimeWindowPicker.vue'
 import EventRow from './EventRow.vue'
+import PackageEventGroup from './PackageEventGroup.vue'
 import type { Event, EventType } from '../types/api'
 
 const props = defineProps<{
@@ -134,6 +135,66 @@ const grouped = computed(() => {
   }
   return groups.filter(g => g.events.length > 0)
 })
+
+// ── Grouped mode ──────────────────────────────────────────────
+const groupedMode = ref(false)
+const expandedGroups = ref<Map<string, boolean>>(new Map())
+
+// Reset expand state when events array is replaced by a new fetch.
+// SSE mutations (unshift on the same array reference) do NOT trigger this.
+watch(() => props.events, (_new, old) => {
+  if (_new !== old) expandedGroups.value = new Map()
+}, { flush: 'sync' })
+
+function toggleGroup(key: string) {
+  const m = new Map(expandedGroups.value)
+  m.set(key, !m.get(key))
+  expandedGroups.value = m
+}
+
+interface PackageGroup {
+  key: string
+  project: string
+  pkg: string
+  scope: string
+  events: Event[]
+}
+
+const groupedEvents = computed<PackageGroup[]>(() => {
+  // Build a map of all events per project/package (unfiltered within the window)
+  const allMap = new Map<string, Event[]>()
+  for (const e of props.events) {
+    const key = `${e.project}/${e.package}`
+    if (!allMap.has(key)) allMap.set(key, [])
+    allMap.get(key)!.push(e)
+  }
+
+  // Determine which keys have at least one event passing active filters
+  const filteredKeys = new Set(filteredEvents.value.map(e => `${e.project}/${e.package}`))
+
+  const result: PackageGroup[] = []
+  for (const [key, evts] of allMap) {
+    if (!filteredKeys.has(key)) continue
+    const sorted = [...evts].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+    result.push({ key, project: sorted[0].project, pkg: sorted[0].package, scope: sorted[0].scope, events: sorted })
+  }
+
+  result.sort((a, b) => new Date(b.events[0].at).getTime() - new Date(a.events[0].at).getTime())
+  return result
+})
+
+const groupedAndBucketed = computed(() => {
+  const buckets: { bucket: Bucket; groups: PackageGroup[] }[] = [
+    { bucket: 'Today', groups: [] },
+    { bucket: 'Yesterday', groups: [] },
+    { bucket: 'Earlier', groups: [] },
+  ]
+  for (const g of groupedEvents.value) {
+    const b = getBucket(g.events[0].at)
+    buckets.find(b2 => b2.bucket === b)!.groups.push(g)
+  }
+  return buckets.filter(b => b.groups.length > 0)
+})
 </script>
 
 <template>
@@ -144,7 +205,8 @@ const grouped = computed(() => {
       <div style="display: flex; align-items: center; gap: 9px;">
         <h2 style="margin: 0; font-size: 15px; font-weight: 700; color: var(--text-primary);">Build events</h2>
         <span style="font-size: 11.5px; color: var(--text-muted); font-family: var(--font-mono);">
-          <template v-if="activeFilterCount > 0">{{ filteredEvents.length }} of {{ events.length }}</template>
+          <template v-if="groupedMode">{{ groupedEvents.length }} packages</template>
+          <template v-else-if="activeFilterCount > 0">{{ filteredEvents.length }} of {{ events.length }}</template>
           <template v-else>{{ events.length }}</template>
           in window
         </span>
@@ -176,6 +238,19 @@ const grouped = computed(() => {
             borderColor: (filterOpen || activeFilterCount > 0) ? 'var(--brand-purple)' : 'var(--border)',
           }"
         >Filter{{ activeFilterCount > 0 ? ` · ${activeFilterCount}` : '' }}</button>
+        <button
+          @click="groupedMode = !groupedMode"
+          :style="{
+            flexShrink: '0',
+            fontSize: '11.5px', fontWeight: '700', padding: '4px 11px',
+            borderRadius: '7px', border: '1px solid',
+            cursor: 'pointer', fontFamily: 'inherit',
+            display: 'inline-flex', alignItems: 'center', gap: '6px',
+            background: groupedMode ? 'var(--brand-purple-tint)' : 'var(--bg-card)',
+            color: groupedMode ? 'var(--brand-purple)' : 'var(--text-secondary)',
+            borderColor: groupedMode ? 'var(--brand-purple)' : 'var(--border)',
+          }"
+        >⊞ Group</button>
       </div>
       <!-- Collapsible filter panel -->
       <div
@@ -299,13 +374,35 @@ const grouped = computed(() => {
 
     <!-- Scrollable event list -->
     <div style="overflow-y: auto; padding: 6px 4px 10px;">
-      <div v-for="group in grouped" :key="group.bucket">
-        <div style="padding: 11px 14px 5px; font-size: 10.5px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em;">{{ group.bucket }}</div>
-        <EventRow v-for="event in group.events" :key="event.id" :event="event" />
-      </div>
-      <div v-if="grouped.length === 0" style="padding: 30px 16px; text-align: center; color: var(--text-muted); font-size: 13px;">
-        No events in this time window
-      </div>
+      <!-- Grouped mode -->
+      <template v-if="groupedMode">
+        <div v-for="bucket in groupedAndBucketed" :key="bucket.bucket">
+          <div style="padding: 11px 14px 5px; font-size: 10.5px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em;">{{ bucket.bucket }}</div>
+          <PackageEventGroup
+            v-for="group in bucket.groups"
+            :key="group.key"
+            :project="group.project"
+            :package="group.pkg"
+            :scope="group.scope"
+            :events="group.events"
+            :expanded="expandedGroups.get(group.key) ?? false"
+            @toggle="toggleGroup(group.key)"
+          />
+        </div>
+        <div v-if="groupedAndBucketed.length === 0" style="padding: 30px 16px; text-align: center; color: var(--text-muted); font-size: 13px;">
+          No events in this time window
+        </div>
+      </template>
+      <!-- Flat mode -->
+      <template v-else>
+        <div v-for="group in grouped" :key="group.bucket">
+          <div style="padding: 11px 14px 5px; font-size: 10.5px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em;">{{ group.bucket }}</div>
+          <EventRow v-for="event in group.events" :key="event.id" :event="event" />
+        </div>
+        <div v-if="grouped.length === 0" style="padding: 30px 16px; text-align: center; color: var(--text-muted); font-size: 13px;">
+          No events in this time window
+        </div>
+      </template>
     </div>
   </div>
 </template>
