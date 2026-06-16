@@ -107,7 +107,7 @@ const contexts = computed<Context[]>(() => {
 })
 
 const filteredPackages = computed(() => filterByScope(activeScopes.value))
-const filteredEvents = computed(() => filterEvents(activeScopes.value, version.value, prefixDepth.value))
+const filteredEvents = computed(() => filterEvents(activeScopes.value, version.value, prefixDepth.value, selectedContext.value.prefix))
 const updatedAt = ref<string | null>(null)
 
 async function refresh() {
