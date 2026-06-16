@@ -5,6 +5,7 @@ import type { Package, Target } from '../types/api'
 const props = defineProps<{ pkg: Package }>()
 
 const SKIP_STATES = new Set(['disabled', 'excluded', 'locked'])
+const IN_PROGRESS_STATES = new Set(['scheduled', 'building', 'finished'])
 
 const STATE_COLOR: Record<string, string> = {
   succeeded: 'var(--ok)',
@@ -146,12 +147,11 @@ const rollupColor = computed(() => STATE_COLOR[props.pkg.rollup_state] ?? 'var(-
 const rollupBg = computed(() => STATE_BG[props.pkg.rollup_state] ?? 'var(--blocked-tint)')
 const obsUrl = computed(() => `https://build.opensuse.org/package/show/${props.pkg.project}/${props.pkg.name}`)
 
-const IN_PROGRESS_STATES = new Set(['scheduled', 'building', 'finished'])
-
 const stateAge = computed((): string | null => {
   if (!IN_PROGRESS_STATES.has(props.pkg.rollup_state)) return null
   if (!props.pkg.state_changed_at) return null
   const ms = Date.now() - new Date(props.pkg.state_changed_at).getTime()
+  if (!Number.isFinite(ms) || ms < 0) return null
   const m = Math.floor(ms / 60000)
   if (m < 1) return 'for <1m'
   if (m < 60) return `for ${m}m`
