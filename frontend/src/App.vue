@@ -66,9 +66,9 @@ const { data: allPackages, rawData: rawPackages, availableVersions, refresh: ref
 const { data: events, refresh: refreshEvents, filterEvents } = useEvents(apiBase, version)
 const { data: prGroups, refresh: refreshPR } = usePRPackages()
 
-// Reset version to highest available when context changes, unless "All" is selected.
+// Initialize version to highest available on load; reset when it leaves the available set.
 watch(availableVersions, (vers) => {
-  if (vers.length > 0 && version.value !== '' && !vers.includes(version.value)) {
+  if (vers.length > 0 && !vers.includes(version.value)) {
     version.value = vers[0]
   }
 })
