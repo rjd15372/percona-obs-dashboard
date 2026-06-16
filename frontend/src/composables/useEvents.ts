@@ -19,7 +19,7 @@ export function useEvents(apiBase: MaybeRef<string>, version: MaybeRef<string>) 
       } else {
         qs = `?window=${opts.window ?? 1440}`
       }
-      const res = await fetch(`${base}/${v}/events${qs}`)
+      const res = await fetch(`${base}/${v || 'all'}/events${qs}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       data.value = await res.json()
     } catch (e) {
