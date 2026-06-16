@@ -34,7 +34,7 @@ func TestUpsertQueryPackage(t *testing.T) {
 		UpdatedAt: now,
 	}
 
-	if err := UpsertPackageState(db, p); err != nil {
+	if err := UpsertPackageState(db, p, p.UpdatedAt); err != nil {
 		t.Fatal(err)
 	}
 
@@ -73,10 +73,10 @@ func TestUpsertUpdatesExisting(t *testing.T) {
 		Scope: model.ScopeVersion, RollupState: model.RollupFailed,
 		Targets: []model.Target{}, UpdatedAt: now,
 	}
-	UpsertPackageState(db, p)
+	UpsertPackageState(db, p, p.UpdatedAt)
 
 	p.RollupState = model.RollupSucceeded
-	UpsertPackageState(db, p)
+	UpsertPackageState(db, p, p.UpdatedAt)
 
 	pkgs, _ := QueryPackages(db, "isv:percona")
 	if len(pkgs) != 1 {
@@ -103,7 +103,7 @@ func TestGetActivePackages(t *testing.T) {
 		Targets: []model.Target{{Repo: "repo", Arch: "x86_64", State: "succeeded"}},
 		UpdatedAt: now,
 	}
-	if err := UpsertPackageState(db, succeeded); err != nil {
+	if err := UpsertPackageState(db, succeeded, succeeded.UpdatedAt); err != nil {
 		t.Fatal(err)
 	}
 
@@ -114,7 +114,7 @@ func TestGetActivePackages(t *testing.T) {
 		Targets: []model.Target{{Repo: "repo", Arch: "x86_64", State: "failed"}},
 		UpdatedAt: now,
 	}
-	if err := UpsertPackageState(db, failing); err != nil {
+	if err := UpsertPackageState(db, failing, failing.UpdatedAt); err != nil {
 		t.Fatal(err)
 	}
 
@@ -165,7 +165,7 @@ func TestGetFinishedPackagesByProject(t *testing.T) {
 		UpdatedAt: now,
 	}
 	for _, pkg := range []*model.Package{pkgSucceeded1, pkgSucceeded2, pkgBuilding, pkgOtherProject} {
-		if err := UpsertPackageState(db, pkg); err != nil {
+		if err := UpsertPackageState(db, pkg, pkg.UpdatedAt); err != nil {
 			t.Fatalf("seed: %v", err)
 		}
 	}
@@ -208,42 +208,55 @@ func TestStateChangedAt(t *testing.T) {
 	}
 	defer db.Close()
 
-	now := time.Now().UTC().Truncate(time.Second)
+	t0 := time.Now().UTC().Truncate(time.Second)
+	t1 := t0.Add(5 * time.Minute)
+	t2 := t0.Add(10 * time.Minute)
+
 	p := &model.Package{
 		Project: "isv:percona:ppg:17", Name: "pg_tde",
 		Scope: model.ScopeVersion, RollupState: model.RollupBuilding,
-		Targets: []model.Target{}, UpdatedAt: now,
+		Targets: []model.Target{}, UpdatedAt: t0,
 	}
 
-	// First insert: state_changed_at must be set.
-	if err := UpsertPackageState(db, p); err != nil {
+	// First insert: state_changed_at must be set to t0.
+	if err := UpsertPackageState(db, p, t0); err != nil {
 		t.Fatal(err)
 	}
-	pkgs, _ := QueryPackages(db, "isv:percona:ppg:17")
+	pkgs, err := QueryPackages(db, "isv:percona:ppg:17")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if pkgs[0].StateChangedAt == nil {
 		t.Fatal("state_changed_at should be set on first insert")
 	}
-	first := *pkgs[0].StateChangedAt
+	if !pkgs[0].StateChangedAt.Equal(t0) {
+		t.Errorf("first insert: want state_changed_at=%v, got %v", t0, *pkgs[0].StateChangedAt)
+	}
 
 	// Same-state upsert: state_changed_at must not change.
-	later := now.Add(5 * time.Minute)
-	p.UpdatedAt = later
-	if err := UpsertPackageState(db, p); err != nil {
+	p.UpdatedAt = t1
+	if err := UpsertPackageState(db, p, t1); err != nil {
 		t.Fatal(err)
 	}
-	pkgs, _ = QueryPackages(db, "isv:percona:ppg:17")
-	if !pkgs[0].StateChangedAt.Equal(first) {
-		t.Errorf("same-state upsert: state_changed_at changed from %v to %v", first, *pkgs[0].StateChangedAt)
+	pkgs, err = QueryPackages(db, "isv:percona:ppg:17")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pkgs[0].StateChangedAt == nil || !pkgs[0].StateChangedAt.Equal(t0) {
+		t.Errorf("same-state upsert: want state_changed_at=%v, got %v", t0, pkgs[0].StateChangedAt)
 	}
 
-	// State-change upsert: state_changed_at must update.
+	// State-change upsert: state_changed_at must update to t2.
 	p.RollupState = model.RollupSucceeded
-	p.UpdatedAt = later
-	if err := UpsertPackageState(db, p); err != nil {
+	p.UpdatedAt = t2
+	if err := UpsertPackageState(db, p, t2); err != nil {
 		t.Fatal(err)
 	}
-	pkgs, _ = QueryPackages(db, "isv:percona:ppg:17")
-	if pkgs[0].StateChangedAt == nil || pkgs[0].StateChangedAt.Equal(first) {
-		t.Errorf("state-change upsert: state_changed_at should have changed; got %v", pkgs[0].StateChangedAt)
+	pkgs, err = QueryPackages(db, "isv:percona:ppg:17")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pkgs[0].StateChangedAt == nil || !pkgs[0].StateChangedAt.Equal(t2) {
+		t.Errorf("state-change upsert: want state_changed_at=%v, got %v", t2, pkgs[0].StateChangedAt)
 	}
 }

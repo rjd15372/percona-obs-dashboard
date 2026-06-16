@@ -9,7 +9,7 @@ import (
 )
 
 // UpsertPackageState inserts or replaces a package row.
-func UpsertPackageState(db *sql.DB, p *model.Package) error {
+func UpsertPackageState(db *sql.DB, p *model.Package, now time.Time) error {
 	targetsJSON, err := json.Marshal(p.Targets)
 	if err != nil {
 		return err
@@ -41,7 +41,7 @@ func UpsertPackageState(db *sql.DB, p *model.Package) error {
 		p.OKTargets, p.TotalTargets,
 		trigWhat, trigKind, trigAt,
 		string(targetsJSON), p.UpdatedAt,
-		time.Now().UTC(),
+		now,
 	)
 	return err
 }

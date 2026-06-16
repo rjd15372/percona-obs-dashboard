@@ -62,7 +62,7 @@ func (c *Consumer) appendEvent(evt *model.Event) {
 
 // upsertPackage writes pkg to the store and notifies SSE clients.
 func (c *Consumer) upsertPackage(pkg *model.Package) error {
-	if err := store.UpsertPackageState(c.db, pkg); err != nil {
+	if err := store.UpsertPackageState(c.db, pkg, time.Now().UTC()); err != nil {
 		return err
 	}
 	c.hub.Notify(hubpkg.PackageUpdate(pkg))

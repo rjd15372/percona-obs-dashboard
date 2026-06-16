@@ -80,7 +80,7 @@ func (p *Pool) ProcessOnce(ctx context.Context, pkg *model.Package) {
 		}
 	}
 
-	if err := store.UpsertPackageState(p.db, pkg); err != nil {
+	if err := store.UpsertPackageState(p.db, pkg, time.Now().UTC()); err != nil {
 		slog.Error("worker: upsert package state", "pkg", pkg.Project+"/"+pkg.Name, "err", err)
 	}
 	p.hub.Notify(hubpkg.PackageUpdate(pkg))

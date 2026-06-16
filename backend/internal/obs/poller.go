@@ -101,7 +101,7 @@ func (p *Poller) tick(ctx context.Context) {
 			rollupChanged := prev == nil || prev.RollupState != pkg.RollupState
 			scopeChanged := prev != nil && prev.Scope != pkg.Scope
 			if rollupChanged || targetsChanged(prev, pkg) || scopeChanged {
-				if err := store.UpsertPackageState(p.db, pkg); err != nil {
+				if err := store.UpsertPackageState(p.db, pkg, time.Now().UTC()); err != nil {
 					slog.Error("poller: upsert package", "pkg", pkgName, "err", err)
 					continue
 				}

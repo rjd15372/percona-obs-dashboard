@@ -260,7 +260,7 @@ func TestProcessOnceEmitsBuildStarted(t *testing.T) {
 		Targets:   []model.Target{{Repo: "Ubuntu_24.04", Arch: "x86_64", State: "building"}},
 		UpdatedAt: time.Now().UTC(),
 	}
-	if err := store.UpsertPackageState(db, pkg); err != nil {
+	if err := store.UpsertPackageState(db, pkg, pkg.UpdatedAt); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -300,7 +300,7 @@ func TestProcessOnceEmitsFailedStates(t *testing.T) {
 				Targets:   []model.Target{{Repo: "Ubuntu_24.04", Arch: "x86_64", State: "building"}},
 				UpdatedAt: time.Now().UTC(),
 			}
-			if err := store.UpsertPackageState(db, pkg); err != nil {
+			if err := store.UpsertPackageState(db, pkg, pkg.UpdatedAt); err != nil {
 				t.Fatalf("seed: %v", err)
 			}
 
@@ -335,7 +335,7 @@ func TestProcessOnceNoEventForBlocked(t *testing.T) {
 		Targets:   []model.Target{{Repo: "Ubuntu_24.04", Arch: "x86_64", State: "building"}},
 		UpdatedAt: time.Now().UTC(),
 	}
-	if err := store.UpsertPackageState(db, pkg); err != nil {
+	if err := store.UpsertPackageState(db, pkg, pkg.UpdatedAt); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
@@ -362,7 +362,7 @@ func TestProcessOnceEmitsPublished(t *testing.T) {
 		Targets:   []model.Target{{Repo: "Ubuntu_24.04", Arch: "x86_64", State: "succeeded", Published: false}},
 		UpdatedAt: time.Now().UTC(),
 	}
-	if err := store.UpsertPackageState(db, pkg); err != nil {
+	if err := store.UpsertPackageState(db, pkg, pkg.UpdatedAt); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 
