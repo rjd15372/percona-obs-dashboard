@@ -97,13 +97,16 @@ func TestPoolRemovesSucceededPackageFromWorkingSet(t *testing.T) {
 	p := worker.NewPool(1, []worker.Task{succeedingTask{}}, nil, db, h, ws)
 	p.Start(ctx)
 
+	// Target is already succeeded and published so that allTargetsPublished
+	// returns true for the right reason (not vacuously because no succeeded
+	// target exists).
 	pkg := &model.Package{
 		Project: "isv:percona", Name: "pkg-a", Scope: model.ScopeCommon,
-		RollupState: model.RollupFailed, OKTargets: 0, TotalTargets: 1,
-		Targets:   []model.Target{{Repo: "repo", Arch: "x86_64", State: "failed"}},
+		RollupState: model.RollupFailed, OKTargets: 1, TotalTargets: 1,
+		Targets:   []model.Target{{Repo: "repo", Arch: "x86_64", State: "succeeded", Published: true}},
 		UpdatedAt: time.Now().UTC(),
 	}
-	ws.Signal(pkg) // trigger worker — worker runs succeedingTask, then calls ws.Remove
+	ws.Signal(pkg) // trigger worker — succeedingTask sets RollupSucceeded, then ws.Remove fires
 
 	time.Sleep(200 * time.Millisecond) // wait for worker to finish
 
@@ -118,6 +121,46 @@ func TestPoolRemovesSucceededPackageFromWorkingSet(t *testing.T) {
 		// correct — package was removed, so Add dispatched again
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("package was not removed from working set after success")
+	}
+}
+
+// TestPoolDoesNotRemoveWhenUnpublished verifies that the working-set removal
+// gate requires allTargetsPublished: if any succeeded target is not yet
+// published the package must stay in the working set.
+func TestPoolDoesNotRemoveWhenUnpublished(t *testing.T) {
+	db := openDB(t)
+	h := hubpkg.New()
+	ws := workingset.New(10)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	p := worker.NewPool(1, []worker.Task{succeedingTask{}}, nil, db, h, ws)
+	p.Start(ctx)
+
+	// Target is succeeded but NOT yet published — allTargetsPublished must
+	// return false so the removal is blocked.
+	pkg := &model.Package{
+		Project: "isv:percona", Name: "pkg-b", Scope: model.ScopeCommon,
+		RollupState: model.RollupFailed, OKTargets: 1, TotalTargets: 1,
+		Targets:   []model.Target{{Repo: "repo", Arch: "x86_64", State: "succeeded", Published: false}},
+		UpdatedAt: time.Now().UTC(),
+	}
+	ws.Signal(pkg) // succeedingTask sets RollupSucceeded, but target unpublished → no removal
+
+	time.Sleep(200 * time.Millisecond) // wait for worker to finish
+
+	cancel()
+	time.Sleep(10 * time.Millisecond)
+
+	// Package must still be in the working set (not removed). ws.Add should
+	// NOT dispatch it again because it is already present.
+	ws.Add(pkg)
+	select {
+	case <-ws.Dispatch():
+		t.Fatal("package was unexpectedly removed from working set despite unpublished target")
+	case <-time.After(100 * time.Millisecond):
+		// correct — package is still in the working set
 	}
 }
 

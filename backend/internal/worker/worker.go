@@ -60,9 +60,16 @@ func (p *Pool) run(ctx context.Context) {
 // working set once all succeeded targets are published.
 // Exported for testing.
 func (p *Pool) ProcessOnce(ctx context.Context, pkg *model.Package) {
-	// Snapshot target state before task chain.
+	// Snapshot target state before task chain. BuildReasonPackages is a slice
+	// field — deep copy to avoid aliasing if a task appends in-place.
 	oldTargets := make([]model.Target, len(pkg.Targets))
-	copy(oldTargets, pkg.Targets)
+	for i, t := range pkg.Targets {
+		c := t
+		if len(t.BuildReasonPackages) > 0 {
+			c.BuildReasonPackages = append([]string(nil), t.BuildReasonPackages...)
+		}
+		oldTargets[i] = c
+	}
 
 	for _, t := range p.tasks {
 		if err := t.Run(ctx, p.client, pkg); err != nil {
