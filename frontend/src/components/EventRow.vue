@@ -78,10 +78,10 @@ function timeStr(iso: string): string {
         v-if="showReason"
         style="font-size:11px;color:var(--text-secondary);background:var(--bg-muted,var(--blocked-tint));border:1px solid var(--border);border-radius:5px;padding:3px 7px;font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
       >{{ props.event.why }}</span>
+      <code v-if="props.event.repo" style="font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--text-secondary);">{{ props.event.repo }}/{{ props.event.arch }}</code>
       <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 2px;">
         <span :style="`font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 6px; border-radius: 5px; ${SCOPE_STYLE[props.event.scope] ?? 'background: var(--blocked-tint); color: var(--blocked);'}`">{{ SCOPE_LABEL[props.event.scope] ?? props.event.scope }}</span>
         <code style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);">{{ props.event.project }}</code>
-        <code v-if="props.event.repo" style="font-family: var(--font-mono); font-size: 10px; color: var(--text-muted);">{{ props.event.repo }}/{{ props.event.arch }}</code>
       </div>
     </div>
   </a>
