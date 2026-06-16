@@ -72,7 +72,7 @@ function timeStr(iso: string): string {
     <div style="display: flex; flex-direction: column; gap: 3px; min-width: 0; padding-bottom: 6px;">
       <div style="display: flex; align-items: center; gap: 8px;">
         <span style="font-size: 12.5px; font-weight: 700; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ props.event.what }}</span>
-        <span style="margin-left: auto; font-size: 10.5px; color: var(--text-muted); font-family: var(--font-mono); white-space: nowrap; flex-shrink: 0;">{{ timeStr(props.event.at) }}</span>
+        <span :title="props.event.at" style="margin-left: auto; font-size: 10.5px; color: var(--text-muted); font-family: var(--font-mono); white-space: nowrap; flex-shrink: 0;">{{ timeStr(props.event.at) }}</span>
       </div>
       <span
         v-if="showReason"
