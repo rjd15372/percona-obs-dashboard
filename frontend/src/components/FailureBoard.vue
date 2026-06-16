@@ -15,7 +15,7 @@ const attentionCount = computed(() => failingPackages.value.length)
   <div style="display: flex; flex-direction: column; gap: 14px; min-width: 0;">
     <!-- Section header -->
     <div style="display: flex; align-items: center; gap: 10px;">
-      <h2 style="margin: 0; font-size: 15px; font-weight: 700; color: var(--text-primary);">Needs attention</h2>
+      <h2 style="margin: 0; font-size: 15px; font-weight: 700; color: var(--text-primary);">Active packages</h2>
       <span style="font-size: 12.5px; color: var(--text-muted);">{{ attentionCount }} package{{ attentionCount !== 1 ? 's' : '' }} · sorted by severity</span>
     </div>
 
