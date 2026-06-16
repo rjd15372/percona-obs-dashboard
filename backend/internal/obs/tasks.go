@@ -36,6 +36,38 @@ func (t BuildStateTask) Run(ctx context.Context, client *Client, pkg *model.Pack
 	return nil
 }
 
+// PublishStateTask sets Target.Published = true for succeeded targets whose
+// repo state is "published" according to the OBS _result?view=status endpoint.
+type PublishStateTask struct{}
+
+func (t PublishStateTask) Run(ctx context.Context, client *Client, pkg *model.Package) error {
+	needsCheck := false
+	for _, target := range pkg.Targets {
+		if target.State == "succeeded" && !target.Published {
+			needsCheck = true
+			break
+		}
+	}
+	if !needsCheck {
+		return nil
+	}
+
+	states, err := client.RepoPublishStates(ctx, pkg.Project, pkg.Name)
+	if err != nil {
+		slog.Warn("obs: repo publish states", "pkg", pkg.Name, "err", err)
+		return nil
+	}
+
+	for i, target := range pkg.Targets {
+		if target.State == "succeeded" && !target.Published {
+			if states[target.Repo+"/"+target.Arch] == "published" {
+				pkg.Targets[i].Published = true
+			}
+		}
+	}
+	return nil
+}
+
 // BlockedReasonTask populates BlockedBy on blocked targets.
 type BlockedReasonTask struct{}
 

@@ -55,6 +55,7 @@ func run() error {
 
 	tasks := []worker.Task{
 		obs.BuildStateTask{},
+		obs.PublishStateTask{},
 		obs.BlockedReasonTask{},
 		obs.BuildReasonTask{},
 	}

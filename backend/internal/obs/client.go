@@ -298,6 +298,29 @@ func (c *Client) PackageBuildResults(ctx context.Context, project, pkg string) (
 	return out, nil
 }
 
+// RepoPublishStates returns a map of "repo/arch" → publish state by reading
+// the r.State attribute from the OBS _result?package=…&view=status XML.
+func (c *Client) RepoPublishStates(ctx context.Context, project, pkg string) (map[string]string, error) {
+	path := fmt.Sprintf("/build/%s/_result?package=%s&view=status",
+		url.PathEscape(project), url.QueryEscape(pkg))
+	resp, err := c.get(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var rl resultList
+	if err := xml.NewDecoder(resp.Body).Decode(&rl); err != nil {
+		return nil, fmt.Errorf("parse /build/%s/_result: %w", project, err)
+	}
+
+	states := make(map[string]string, len(rl.Results))
+	for _, r := range rl.Results {
+		states[r.Repository+"/"+r.Arch] = r.State
+	}
+	return states, nil
+}
+
 // PackageBuildReason fetches the build reason for a specific package target.
 func (c *Client) PackageBuildReason(ctx context.Context, project, repo, arch, pkg string) (BuildReasonResult, error) {
 	path := fmt.Sprintf("/build/%s/%s/%s/%s/_reason",

@@ -75,6 +75,46 @@ func TestBlockedReasonTask(t *testing.T) {
 	}
 }
 
+func TestPublishStateTask(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<resultlist>
+          <result repository="Ubuntu_24.04" arch="x86_64" state="published">
+            <status package="mypkg" code="succeeded"/>
+          </result>
+          <result repository="Ubuntu_24.04" arch="aarch64" state="building">
+            <status package="mypkg" code="succeeded"/>
+          </result>
+        </resultlist>`)
+	}))
+	defer ts.Close()
+
+	c := obs.NewClient(ts.URL, "u", "p")
+	pkg := &model.Package{
+		Project: "isv:percona",
+		Name:    "mypkg",
+		Scope:   model.ScopeCommon,
+		Targets: []model.Target{
+			{Repo: "Ubuntu_24.04", Arch: "x86_64", State: "succeeded"},  // repo published → Published=true
+			{Repo: "Ubuntu_24.04", Arch: "aarch64", State: "succeeded"}, // repo building → Published=false
+			{Repo: "RockyLinux_9", Arch: "x86_64", State: "building"},   // not succeeded → skip
+		},
+	}
+
+	task := obs.PublishStateTask{}
+	if err := task.Run(context.Background(), c, pkg); err != nil {
+		t.Fatal(err)
+	}
+	if !pkg.Targets[0].Published {
+		t.Error("expected Ubuntu_24.04/x86_64 to be Published=true (repo state=published, target succeeded)")
+	}
+	if pkg.Targets[1].Published {
+		t.Error("expected Ubuntu_24.04/aarch64 to be Published=false (repo state=building)")
+	}
+	if pkg.Targets[2].Published {
+		t.Error("expected RockyLinux_9/x86_64 to be Published=false (target not succeeded)")
+	}
+}
+
 func TestBuildReasonTask(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `<reason>

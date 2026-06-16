@@ -206,3 +206,34 @@ func TestPackageBuildReasonNonMeta(t *testing.T) {
 		t.Errorf("expected no packages for non-meta reason, got %v", res.Packages)
 	}
 }
+
+func TestRepoPublishStates(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("package") != "mypkg" || r.URL.Query().Get("view") != "status" {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/xml")
+		w.Write([]byte(`<resultlist>
+			<result repository="Ubuntu_24.04" arch="x86_64" state="published">
+				<status package="mypkg" code="succeeded"/>
+			</result>
+			<result repository="Ubuntu_24.04" arch="aarch64" state="building">
+				<status package="mypkg" code="building"/>
+			</result>
+		</resultlist>`))
+	}))
+	defer ts.Close()
+
+	c := NewClient(ts.URL, "u", "p")
+	states, err := c.RepoPublishStates(context.Background(), "isv:percona", "mypkg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if states["Ubuntu_24.04/x86_64"] != "published" {
+		t.Errorf("expected published for Ubuntu_24.04/x86_64, got %q", states["Ubuntu_24.04/x86_64"])
+	}
+	if states["Ubuntu_24.04/aarch64"] != "building" {
+		t.Errorf("expected building for Ubuntu_24.04/aarch64, got %q", states["Ubuntu_24.04/aarch64"])
+	}
+}
