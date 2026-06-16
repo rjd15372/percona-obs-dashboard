@@ -28,7 +28,7 @@ const TYPE_META: Record<string, { glyph: string; color: string; bg: string; labe
   succeeded:      { glyph: '✓', color: 'var(--ok)',            bg: 'var(--ok-tint)',           label: 'succeeded' },
   failed:         { glyph: '✗', color: 'var(--fail)',          bg: 'var(--fail-tint)',         label: 'failed' },
   broken:         { glyph: '✗', color: 'var(--blocked)',       bg: 'var(--blocked-tint)',      label: 'broken' },
-  unresolvable:   { glyph: '⚠', color: 'var(--brand-purple)', bg: 'var(--brand-purple-tint)', label: 'unresolvable' },
+  unresolvable:   { glyph: '⚠', color: 'var(--blocked)',       bg: 'var(--blocked-tint)',      label: 'unresolvable' },
   blocked:        { glyph: '⊘', color: 'var(--blocked)',       bg: 'var(--blocked-tint)',      label: 'blocked' },
   published:      { glyph: '↑', color: 'var(--brand-purple)', bg: 'var(--brand-purple-tint)', label: 'published' },
   created:        { glyph: '+', color: 'var(--ok)',            bg: 'var(--ok-tint)',           label: 'created' },
@@ -112,7 +112,11 @@ const grouped = computed(() => {
       <!-- Title row -->
       <div style="display: flex; align-items: center; gap: 9px;">
         <h2 style="margin: 0; font-size: 15px; font-weight: 700; color: var(--text-primary);">Build events</h2>
-        <span style="font-size: 11.5px; color: var(--text-muted); font-family: var(--font-mono);">{{ filteredEvents.length }} in window</span>
+        <span style="font-size: 11.5px; color: var(--text-muted); font-family: var(--font-mono);">
+          <template v-if="activeFilterCount > 0">{{ filteredEvents.length }} of {{ events.length }}</template>
+          <template v-else>{{ events.length }}</template>
+          in window
+        </span>
         <span style="margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted);">
           <span style="width: 6px; height: 6px; border-radius: 99px; background: var(--ok);"></span>live
         </span>
