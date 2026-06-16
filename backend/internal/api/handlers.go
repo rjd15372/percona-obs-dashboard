@@ -30,12 +30,20 @@ func packagesHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		common, err := store.QueryPackages(db, "isv:common")
+		// isv:percona:common:* subprojects are product-agnostic shared dependencies.
+		perconaCommon, err := store.QueryPackages(db, "isv:percona:common")
 		if err != nil {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
-		pkgs = append(pkgs, common...)
+		pkgs = append(pkgs, perconaCommon...)
+
+		isvCommon, err := store.QueryPackages(db, "isv:common")
+		if err != nil {
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+		pkgs = append(pkgs, isvCommon...)
 
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(pkgs); err != nil {

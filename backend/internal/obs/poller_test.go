@@ -19,7 +19,11 @@ func TestInferScope(t *testing.T) {
 		{"isv:percona:ppgcommon", model.ScopePPGCommon},
 		{"isv:percona:ppg:17:containers:ubi9", model.ScopeContainer},
 		{"isv:percona:ppg:17", model.ScopeVersion},
+		// isv:percona:common:* subprojects are all ScopeCommon, even container ones
 		{"isv:percona:common:deps:build", model.ScopeCommon},
+		{"isv:percona:common:deps:runtime", model.ScopeCommon},
+		{"isv:percona:common:containers:ubi8", model.ScopeCommon},
+		{"isv:percona:common:containers:ubi9", model.ScopeCommon},
 		{"isv:common:pg:deps", model.ScopeCommon},
 	}
 	for _, c := range cases {

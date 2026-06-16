@@ -181,6 +181,10 @@ func InferScope(project string) model.Scope {
 		return model.ScopePPGCommon
 	case strings.Contains(lower, "ppgcommon"):
 		return model.ScopePPGCommon
+	// isv:percona:common:* subprojects (e.g. :deps:build, :containers:ubi9) are
+	// all common regardless of further path segments like "container".
+	case strings.HasPrefix(lower, "isv:percona:common:"):
+		return model.ScopeCommon
 	case strings.Contains(lower, "container"):
 		return model.ScopeContainer
 	case strings.Contains(lower, "common"):
