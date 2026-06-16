@@ -116,6 +116,15 @@ Every row shows in the tags section:
 
 Reason line (build_started and failed): rendered as a monospace pill below the title row, truncated with ellipsis.
 
+### Event filtering (`useEvents.ts`)
+
+Events are filtered client-side to match the current context bar state, in the same way packages are filtered in `usePackages.ts`. The `useEvents` composable exposes a `filterEvents(scopes, version, prefixDepth)` function that applies:
+
+1. **Version filter** — when a specific version is selected (non-empty string), only show events whose `project` has the version segment at `prefixDepth`. Events whose project has no version segment at that depth (common/ppgcommon scope) pass through unconditionally, matching the same "always show common" rule used for packages.
+2. **Scope filter** — when one or more scopes are active, only show events whose `event.scope` is in the active set. An empty active-scopes list shows all scopes (same as the "All" button behaviour for packages).
+
+`App.vue` passes `activeScopes`, `version`, and `prefixDepth` through to the event log and calls `filterEvents` in the same `filteredPackages`-style computed.
+
 ### api.ts
 
 `EventType` union retains all existing values for backwards compatibility with events already in the DB. The unused legacy types (`version_change`, `updated`, `triggered`, `started`, `build_finished`) are kept in the type but receive neutral styling in `EventRow`.
