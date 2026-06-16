@@ -1,0 +1,12 @@
+{
+  "planPath": "docs/superpowers/plans/2026-06-16-event-log-filter.md",
+  "tasks": [
+    {
+      "id": 78,
+      "subject": "Task 1: Event log filter panel",
+      "status": "pending",
+      "description": "**Goal:** Add a collapsible filter panel to `EventLog.vue` with multi-select type pills, repo/arch dropdowns, and a package name text filter.\n\n**Files:**\n- Modify: `frontend/src/components/EventLog.vue`\n\n**Acceptance Criteria:**\n- [ ] Filter toggle button appears right-aligned on the time window row; shows \"Filter · N\" with purple tint when N > 0\n- [ ] Clicking the toggle expands/collapses the filter panel\n- [ ] Type pills show only types present in the current events prop; clicking toggles a type in/out of the active set; active pills are coloured, inactive are muted\n- [ ] Repo dropdown lists unique repos from the events prop (sorted); \"All repos\" when empty\n- [ ] Arch dropdown lists unique arches from the events prop (sorted); \"All arches\" when empty\n- [ ] Package input filters events by case-insensitive substring on `event.what`\n- [ ] \"✕ clear\" button resets all filters; only shown when activeFilterCount > 0\n- [ ] \"N in window\" count reflects filtered count, not raw prop count\n- [ ] `cd frontend && npx vue-tsc --noEmit` exits 0\n\n**Verify:** `cd frontend && npx vue-tsc --noEmit` → exits 0 with no output\n\n```json:metadata\n{\"files\": [\"frontend/src/components/EventLog.vue\"], \"verifyCommand\": \"cd frontend && npx vue-tsc --noEmit\", \"acceptanceCriteria\": [\"Filter toggle button appears right-aligned, shows count badge when active\", \"Type pills show only present types, active pills coloured\", \"Repo and arch dropdowns populated from events prop\", \"Package input filters by case-insensitive substring on event.what\", \"Clear button resets all filters\", \"Event count reflects filtered count\", \"vue-tsc --noEmit exits 0\"], \"modelTier\": \"standard\"}\n```"
+    }
+  ],
+  "lastUpdated": "2026-06-16T00:00:00Z"
+}
