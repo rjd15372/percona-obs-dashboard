@@ -32,6 +32,7 @@ const SCOPE_STYLE: Record<string, string> = {
   release: `background: var(--ok-tint); color: var(--ok);`,
   common: `background: var(--blocked-tint); color: var(--blocked);`,
   ppgcommon: `background: var(--blocked-tint); color: var(--blocked);`,
+  pr: `background: var(--warn-tint); color: var(--warn);`,
 }
 
 const SCOPE_LABEL: Record<string, string> = {
