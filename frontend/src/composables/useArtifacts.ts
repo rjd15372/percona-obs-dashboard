@@ -100,7 +100,7 @@ export function useArtifacts(
         const registryPath = pkg.project.split(':').join('/')
         const registry = `registry.opensuse.org/${registryPath}/images/${pkg.name}`
 
-        const pullTag = tags.find(t => !t.includes('-') && t !== 'latest') ?? tags[0] ?? ''
+        const pullTag = tags[tags.length - 1] ?? ''
         const pullCmd = pullTag
           ? `docker pull ${registry}:${pullTag}`
           : `docker pull ${registry}`
