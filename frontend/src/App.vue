@@ -4,6 +4,7 @@ import AppHeader from './components/AppHeader.vue'
 import ContextBar from './components/ContextBar.vue'
 import HealthHeader from './components/HealthHeader.vue'
 import MainGrid from './components/MainGrid.vue'
+import ArtifactsPanel from './components/ArtifactsPanel.vue'
 import type { Context } from './types/api'
 import { usePackages } from './composables/usePackages'
 import { useEvents } from './composables/useEvents'
@@ -146,27 +147,34 @@ watch([windowMin, customFrom, customTo], () => refresh())
   <div class="min-h-screen bg-bg-app" style="padding: 24px 28px 60px;">
     <div style="max-width: 1360px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px;">
       <AppHeader :theme="theme" :main-tab="mainTab" @toggle-theme="toggleTheme" @update:main-tab="mainTab = $event" />
-      <ContextBar
-        :version="version"
-        :updated-at="updatedAt"
-        :active-scopes="activeScopes"
-        :contexts="contexts"
-        :selected-context="selectedContext"
-        :available-versions="availableVersions"
-        @update:version="version = $event"
-        @toggle-scope="toggleScope"
-        @update:context="selectContext"
-      />
-      <HealthHeader :packages="allPackages" />
-      <MainGrid
-        :packages="filteredPackages"
-        :events="filteredEvents"
-        :window-min="windowMin"
-        :custom-from="customFrom"
-        :custom-to="customTo"
-        @update:window-min="windowMin = $event"
-        @update:custom-from="customFrom = $event"
-        @update:custom-to="customTo = $event"
+      <template v-if="mainTab === 'board'">
+        <ContextBar
+          :version="version"
+          :updated-at="updatedAt"
+          :active-scopes="activeScopes"
+          :contexts="contexts"
+          :selected-context="selectedContext"
+          :available-versions="availableVersions"
+          @update:version="version = $event"
+          @toggle-scope="toggleScope"
+          @update:context="selectContext"
+        />
+        <HealthHeader :packages="allPackages" />
+        <MainGrid
+          :packages="filteredPackages"
+          :events="filteredEvents"
+          :window-min="windowMin"
+          :custom-from="customFrom"
+          :custom-to="customTo"
+          @update:window-min="windowMin = $event"
+          @update:custom-from="customFrom = $event"
+          @update:custom-to="customTo = $event"
+        />
+      </template>
+      <ArtifactsPanel
+        v-else
+        :packages="rawPackages"
+        :initial-version="version || '17'"
       />
     </div>
   </div>
