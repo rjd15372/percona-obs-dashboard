@@ -64,16 +64,18 @@ type Trigger struct {
 }
 
 type Package struct {
-	Project      string      `json:"project"`
-	Name         string      `json:"name"`
-	Scope        Scope       `json:"scope"`
-	RollupState  RollupState `json:"rollup_state"`
-	OKTargets    int         `json:"ok_targets"`
-	TotalTargets int         `json:"total_targets"`
-	Trigger      *Trigger    `json:"trigger,omitempty"`
-	Targets        []Target   `json:"targets"`
-	UpdatedAt      time.Time  `json:"updated_at"`
-	StateChangedAt *time.Time `json:"state_changed_at,omitempty"`
+	Project        string      `json:"project"`
+	Name           string      `json:"name"`
+	Scope          Scope       `json:"scope"`
+	RollupState    RollupState `json:"rollup_state"`
+	OKTargets      int         `json:"ok_targets"`
+	TotalTargets   int         `json:"total_targets"`
+	IsContainer    bool        `json:"is_container"`
+	Version        string      `json:"version,omitempty"`
+	Trigger        *Trigger    `json:"trigger,omitempty"`
+	Targets        []Target    `json:"targets"`
+	UpdatedAt      time.Time   `json:"updated_at"`
+	StateChangedAt *time.Time  `json:"state_changed_at,omitempty"`
 }
 
 type EventType string
@@ -105,6 +107,7 @@ type Event struct {
 	Arch    string    `json:"arch,omitempty"`
 	What    string    `json:"what"`
 	Why     string    `json:"why"`
+	Version string    `json:"version,omitempty"`
 	URL     string    `json:"url"`
 	At      time.Time `json:"at"`
 }

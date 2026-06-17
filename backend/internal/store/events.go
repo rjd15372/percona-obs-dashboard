@@ -10,11 +10,11 @@ import (
 // AppendEvent inserts a new event row.
 func AppendEvent(db *sql.DB, e *model.Event) error {
 	_, err := db.Exec(`
-		INSERT INTO events (id, type, scope, project, package, repo, arch, what, why, url, at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+		INSERT INTO events (id, type, scope, project, package, repo, arch, what, why, url, at, version)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
 		e.ID, string(e.Type), string(e.Scope),
 		e.Project, e.Package, nullStr(e.Repo), nullStr(e.Arch),
-		e.What, e.Why, e.URL, e.At,
+		e.What, e.Why, e.URL, e.At, e.Version,
 	)
 	return err
 }
@@ -24,7 +24,7 @@ func QueryEvents(db *sql.DB, projectPrefix string, from, to time.Time) ([]*model
 	rows, err := db.Query(`
 		SELECT id, type, scope, project, package,
 		       COALESCE(repo,''), COALESCE(arch,''),
-		       what, why, url, at
+		       what, why, url, at, COALESCE(version,'')
 		FROM events
 		WHERE project LIKE ? AND at >= ? AND at <= ?
 		ORDER BY at DESC`,
@@ -40,7 +40,7 @@ func QueryEvents(db *sql.DB, projectPrefix string, from, to time.Time) ([]*model
 		e := &model.Event{}
 		if err := rows.Scan(
 			&e.ID, &e.Type, &e.Scope, &e.Project, &e.Package,
-			&e.Repo, &e.Arch, &e.What, &e.Why, &e.URL, &e.At,
+			&e.Repo, &e.Arch, &e.What, &e.Why, &e.URL, &e.At, &e.Version,
 		); err != nil {
 			return nil, err
 		}

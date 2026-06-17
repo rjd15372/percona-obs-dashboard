@@ -54,3 +54,74 @@ func TestAppendQueryPruneEvents(t *testing.T) {
 		t.Errorf("expected 0 after prune, got %d", len(events))
 	}
 }
+
+func TestEventVersionRoundtrip(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	now := time.Now().UTC().Truncate(time.Second)
+	evt := &model.Event{
+		ID:      "evt_01JTEST",
+		Type:    model.EventSucceeded,
+		Scope:   model.ScopeVersion,
+		Project: "isv:percona:ppg:17",
+		Package: "percona-pg_tde",
+		Repo:    "UBI_9",
+		Arch:    "x86_64",
+		What:    "percona-pg_tde succeeded",
+		Why:     "",
+		Version: "17.5-1",
+		URL:     "https://build.opensuse.org/package/show/isv:percona:ppg:17/percona-pg_tde",
+		At:      now,
+	}
+	if err := AppendEvent(db, evt); err != nil {
+		t.Fatal(err)
+	}
+	evts, err := QueryEvents(db, "isv:percona", now.Add(-time.Second), now.Add(time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(evts) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(evts))
+	}
+	if evts[0].Version != "17.5-1" {
+		t.Errorf("Version: got %q, want %q", evts[0].Version, "17.5-1")
+	}
+
+	// Event without version
+	evt2 := &model.Event{
+		ID:      "evt_02JTEST",
+		Type:    model.EventBuildStarted,
+		Scope:   model.ScopeVersion,
+		Project: "isv:percona:ppg:17",
+		Package: "percona-pg_tde",
+		Repo:    "UBI_9",
+		Arch:    "x86_64",
+		What:    "percona-pg_tde build started",
+		Why:     "source change",
+		URL:     "https://build.opensuse.org/package/live_build_log/isv:percona:ppg:17/percona-pg_tde/UBI_9/x86_64",
+		At:      now.Add(-time.Minute),
+	}
+	if err := AppendEvent(db, evt2); err != nil {
+		t.Fatal(err)
+	}
+	evts2, err := QueryEvents(db, "isv:percona", now.Add(-2*time.Minute), now.Add(time.Second))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var foundBuildStarted bool
+	for _, e := range evts2 {
+		if e.Type == model.EventBuildStarted && e.Version != "" {
+			t.Errorf("build_started event should have empty version, got %q", e.Version)
+		}
+		if e.Type == model.EventBuildStarted {
+			foundBuildStarted = true
+		}
+	}
+	if !foundBuildStarted {
+		t.Error("build_started event not found")
+	}
+}

@@ -201,6 +201,76 @@ func TestGetFinishedPackagesByProject(t *testing.T) {
 	}
 }
 
+func TestVersionRoundtrip(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	now := time.Now().UTC().Truncate(time.Second)
+	p := &model.Package{
+		Project:     "isv:percona:ppg:17",
+		Name:        "percona-pg_tde",
+		Scope:       model.ScopeVersion,
+		RollupState: model.RollupSucceeded,
+		IsContainer: false,
+		Version:     "17.5-1",
+		Targets:     []model.Target{{Repo: "UBI_9", Arch: "x86_64", State: "succeeded"}},
+		UpdatedAt:   now,
+	}
+	if err := UpsertPackageState(db, p, now); err != nil {
+		t.Fatal(err)
+	}
+	pkgs, err := QueryPackages(db, "isv:percona")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pkgs) != 1 {
+		t.Fatalf("expected 1 package, got %d", len(pkgs))
+	}
+	if pkgs[0].Version != "17.5-1" {
+		t.Errorf("Version: got %q, want %q", pkgs[0].Version, "17.5-1")
+	}
+	if pkgs[0].IsContainer {
+		t.Error("IsContainer: expected false")
+	}
+
+	// Container package
+	c := &model.Package{
+		Project:     "isv:percona:ppg:17:containers",
+		Name:        "percona-distribution-postgresql",
+		Scope:       model.ScopeContainer,
+		RollupState: model.RollupSucceeded,
+		IsContainer: true,
+		Version:     "18.4-1-1.7",
+		Targets:     []model.Target{{Repo: "images", Arch: "x86_64", State: "succeeded"}},
+		UpdatedAt:   now,
+	}
+	if err := UpsertPackageState(db, c, now); err != nil {
+		t.Fatal(err)
+	}
+	pkgs2, err := QueryPackages(db, "isv:percona")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found *model.Package
+	for _, p := range pkgs2 {
+		if p.Name == "percona-distribution-postgresql" {
+			found = p
+		}
+	}
+	if found == nil {
+		t.Fatal("container package not found")
+	}
+	if found.Version != "18.4-1-1.7" {
+		t.Errorf("Version: got %q, want %q", found.Version, "18.4-1-1.7")
+	}
+	if !found.IsContainer {
+		t.Error("IsContainer: expected true")
+	}
+}
+
 func TestStateChangedAt(t *testing.T) {
 	db, err := Open(":memory:")
 	if err != nil {

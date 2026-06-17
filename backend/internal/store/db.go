@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS packages (
     targets_json    TEXT NOT NULL DEFAULT '[]',
     updated_at      DATETIME NOT NULL,
     state_changed_at DATETIME,
+    is_container   INTEGER NOT NULL DEFAULT 0,
+    version        TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (project, name)
 );
 
@@ -33,7 +35,8 @@ CREATE TABLE IF NOT EXISTS events (
     what     TEXT NOT NULL,
     why      TEXT NOT NULL,
     url      TEXT NOT NULL,
-    at       DATETIME NOT NULL
+    at       DATETIME NOT NULL,
+    version  TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS events_at ON events(at);
@@ -52,8 +55,11 @@ func Open(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, err
 	}
-	// Additive migration: add state_changed_at to existing databases.
+	// Additive migrations: add columns to existing databases.
 	// Fails silently if the column already exists (fresh DBs have it from the schema above).
 	db.Exec(`ALTER TABLE packages ADD COLUMN state_changed_at DATETIME`)
+	db.Exec(`ALTER TABLE packages ADD COLUMN is_container INTEGER NOT NULL DEFAULT 0`)
+	db.Exec(`ALTER TABLE packages ADD COLUMN version TEXT NOT NULL DEFAULT ''`)
+	db.Exec(`ALTER TABLE events ADD COLUMN version TEXT NOT NULL DEFAULT ''`)
 	return db, nil
 }

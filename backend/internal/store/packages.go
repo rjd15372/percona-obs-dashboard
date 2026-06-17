@@ -21,18 +21,24 @@ func UpsertPackageState(db *sql.DB, p *model.Package, now time.Time) error {
 		trigKind = sql.NullString{String: p.Trigger.Kind, Valid: true}
 		trigAt = sql.NullTime{Time: p.Trigger.At, Valid: true}
 	}
+	isContainerInt := 0
+	if p.IsContainer {
+		isContainerInt = 1
+	}
 	_, err = db.Exec(`
 		INSERT INTO packages
 			(project, name, scope, rollup_state, ok_targets, total_targets,
 			 trigger_what, trigger_kind, trigger_at, targets_json, updated_at,
-			 state_changed_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+			 state_changed_at, is_container, version)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(project, name) DO UPDATE SET
 			scope=excluded.scope, rollup_state=excluded.rollup_state,
 			ok_targets=excluded.ok_targets, total_targets=excluded.total_targets,
 			trigger_what=excluded.trigger_what, trigger_kind=excluded.trigger_kind,
 			trigger_at=excluded.trigger_at, targets_json=excluded.targets_json,
 			updated_at=excluded.updated_at,
+			is_container=excluded.is_container,
+			version=excluded.version,
 			state_changed_at = CASE
 				WHEN excluded.rollup_state != rollup_state THEN excluded.state_changed_at
 				WHEN state_changed_at IS NULL             THEN excluded.state_changed_at
@@ -43,6 +49,7 @@ func UpsertPackageState(db *sql.DB, p *model.Package, now time.Time) error {
 		trigWhat, trigKind, trigAt,
 		string(targetsJSON), p.UpdatedAt,
 		now,
+		isContainerInt, p.Version,
 	)
 	return err
 }
@@ -61,10 +68,15 @@ func DeletePackage(db *sql.DB, project, name string) error {
 	return err
 }
 
+const packageSelectCols = ` project, name, scope, rollup_state, ok_targets, total_targets,
+	trigger_what, trigger_kind, trigger_at, targets_json, updated_at,
+	state_changed_at, is_container, version`
+
 // scanPackages is a helper that extracts the scan loop pattern used by multiple query functions.
 // It expects rows to have been created with the standard package column order:
 // project, name, scope, rollup_state, ok_targets, total_targets,
-// trigger_what, trigger_kind, trigger_at, targets_json, updated_at, state_changed_at
+// trigger_what, trigger_kind, trigger_at, targets_json, updated_at, state_changed_at,
+// is_container, version
 func scanPackages(rows *sql.Rows) ([]*model.Package, error) {
 	pkgs := make([]*model.Package, 0)
 	for rows.Next() {
@@ -73,15 +85,17 @@ func scanPackages(rows *sql.Rows) ([]*model.Package, error) {
 		var trigAt sql.NullTime
 		var targetsJSON string
 		var stateChangedAt sql.NullTime
+		var isContainerInt int
 		if err := rows.Scan(
 			&p.Project, &p.Name, &p.Scope, &p.RollupState,
 			&p.OKTargets, &p.TotalTargets,
 			&trigWhat, &trigKind, &trigAt,
 			&targetsJSON, &p.UpdatedAt,
-			&stateChangedAt,
+			&stateChangedAt, &isContainerInt, &p.Version,
 		); err != nil {
 			return nil, err
 		}
+		p.IsContainer = isContainerInt != 0
 		if trigWhat.Valid {
 			p.Trigger = &model.Trigger{
 				What: trigWhat.String,
@@ -103,10 +117,7 @@ func scanPackages(rows *sql.Rows) ([]*model.Package, error) {
 
 // QueryPackages returns all packages for a given OBS project prefix.
 func QueryPackages(db *sql.DB, projectPrefix string) ([]*model.Package, error) {
-	rows, err := db.Query(`
-		SELECT project, name, scope, rollup_state, ok_targets, total_targets,
-		       trigger_what, trigger_kind, trigger_at, targets_json, updated_at,
-		       state_changed_at
+	rows, err := db.Query(`SELECT`+packageSelectCols+`
 		FROM packages WHERE project LIKE ? ORDER BY project, name`,
 		projectPrefix+"%",
 	)
@@ -119,10 +130,7 @@ func QueryPackages(db *sql.DB, projectPrefix string) ([]*model.Package, error) {
 
 // GetActivePackages returns all packages where rollup_state is not 'succeeded'.
 func GetActivePackages(db *sql.DB) ([]*model.Package, error) {
-	rows, err := db.Query(`
-		SELECT project, name, scope, rollup_state, ok_targets, total_targets,
-		       trigger_what, trigger_kind, trigger_at, targets_json, updated_at,
-		       state_changed_at
+	rows, err := db.Query(`SELECT`+packageSelectCols+`
 		FROM packages WHERE rollup_state != 'succeeded' ORDER BY project, name`,
 	)
 	if err != nil {
@@ -136,10 +144,7 @@ func GetActivePackages(db *sql.DB) ([]*model.Package, error) {
 // Used by the MQ consumer on repo.published to signal packages for a publish
 // state re-check via the worker pool.
 func GetFinishedPackagesByProject(db *sql.DB, project string) ([]*model.Package, error) {
-	rows, err := db.Query(`
-		SELECT project, name, scope, rollup_state, ok_targets, total_targets,
-		       trigger_what, trigger_kind, trigger_at, targets_json, updated_at,
-		       state_changed_at
+	rows, err := db.Query(`SELECT`+packageSelectCols+`
 		FROM packages WHERE project = ? AND rollup_state = 'succeeded'`,
 		project,
 	)
