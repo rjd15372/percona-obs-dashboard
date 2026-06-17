@@ -1,70 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { Event, EventType } from '../types/api'
+import type { Event } from '../types/api'
+import { GLYPH, GLYPH_COLOR, GLYPH_BG, SCOPE_STYLE, SCOPE_LABEL, eventTitle, timeStr, showReason as _showReason } from '../composables/useEventDisplay'
 
 const props = defineProps<{ event: Event }>()
 
-const GLYPH: Record<EventType, string> = {
-  succeeded: '✓', failed: '✗', broken: '✗', unresolvable: '⚠',
-  blocked: '⊘', published: '↑', triggered: '↻', started: '▶',
-  created: '+', deleted: '−', build_started: '▶', build_finished: '■', version_change: '↕', updated: '◉',
-}
-
-const GLYPH_COLOR: Record<EventType, string> = {
-  succeeded: 'var(--ok)', failed: 'var(--fail)', broken: 'var(--blocked)',
-  unresolvable: 'var(--blocked)', blocked: 'var(--blocked)',
-  published: 'var(--brand-purple)', triggered: 'var(--blocked)', started: 'var(--blocked)',
-  created: 'var(--ok)', deleted: 'var(--fail)', build_started: 'var(--info)',
-  build_finished: 'var(--blocked)', version_change: 'var(--blocked)', updated: 'var(--blocked)',
-}
-
-const GLYPH_BG: Record<EventType, string> = {
-  succeeded: 'var(--ok-tint)', failed: 'var(--fail-tint)', broken: 'var(--blocked-tint)',
-  unresolvable: 'var(--blocked-tint)', blocked: 'var(--blocked-tint)',
-  published: 'var(--brand-purple-tint)', triggered: 'var(--blocked-tint)', started: 'var(--blocked-tint)',
-  created: 'var(--ok-tint)', deleted: 'var(--fail-tint)', build_started: 'var(--info-tint)',
-  build_finished: 'var(--blocked-tint)', version_change: 'var(--blocked-tint)', updated: 'var(--blocked-tint)',
-}
-
-const SCOPE_STYLE: Record<string, string> = {
-  version: `background: var(--brand-purple-tint); color: var(--brand-purple);`,
-  container: `background: var(--info-tint); color: var(--info);`,
-  release: `background: var(--ok-tint); color: var(--ok);`,
-  common: `background: var(--blocked-tint); color: var(--blocked);`,
-  ppgcommon: `background: var(--blocked-tint); color: var(--blocked);`,
-  pr: `background: var(--warn-tint); color: var(--warn);`,
-}
-
-const SCOPE_LABEL: Record<string, string> = {
-  version: 'PPG',
-  ppgcommon: 'PPG Common',
-  common: 'Common',
-  container: 'Container',
-  release: 'Release',
-  pr: 'PR',
-}
-
-const showReason = computed(() =>
-  (props.event.type === 'build_started' || props.event.type === 'failed') && !!props.event.why
-)
-
-function eventTitle(event: Event): string {
-  if (event.repo && event.arch) {
-    return event.what.replace(` on ${event.repo}/${event.arch}`, '')
-  }
-  return event.what
-}
-
-function timeStr(iso: string): string {
-  const d = new Date(iso)
-  const diff = Date.now() - d.getTime()
-  const minutes = Math.floor(diff / 60000)
-  if (minutes < 1) return 'just now'
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  return d.toLocaleDateString()
-}
+const showReason = computed(() => _showReason(props.event))
 </script>
 
 <template>
