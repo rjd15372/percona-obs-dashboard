@@ -181,6 +181,7 @@ func (p *Pool) emitBuildEvents(pkg *model.Package, oldTargets []model.Target) {
 				Arch:    t.Arch,
 				What:    fmt.Sprintf("%s succeeded", pkg.Name),
 				Why:     "",
+				Version: pkg.Version,
 				URL:     fmt.Sprintf("%s/package/show/%s/%s", obsBase, pkg.Project, pkg.Name),
 				At:      now,
 			})
@@ -198,6 +199,7 @@ func (p *Pool) emitBuildEvents(pkg *model.Package, oldTargets []model.Target) {
 				Arch:    t.Arch,
 				What:    fmt.Sprintf("%s published", pkg.Name),
 				Why:     "",
+				Version: pkg.Version,
 				URL:     fmt.Sprintf("%s/package/show/%s/%s", obsBase, pkg.Project, pkg.Name),
 				At:      now,
 			})

@@ -54,8 +54,11 @@ func run() error {
 	ws.Seed(activePkgs)
 
 	tasks := []worker.Task{
+		obs.PackageTypeTask{},
 		obs.BuildStateTask{},
 		obs.PublishStateTask{},
+		obs.VersionTask{},
+		obs.ContainerTagsTask{},
 		obs.BlockedReasonTask{},
 		obs.BuildReasonTask{},
 	}
