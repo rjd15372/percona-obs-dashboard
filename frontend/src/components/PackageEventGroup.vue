@@ -107,7 +107,6 @@ const head = computed(() => props.events[0])
               v-if="showReason(event)"
               style="font-size:11px;color:var(--text-secondary);background:var(--bg-muted,var(--blocked-tint));border:1px solid var(--border);border-radius:5px;padding:3px 7px;font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
             >{{ event.why }}</span>
-            <code v-if="event.repo" style="font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--text-secondary);">{{ event.repo }}/{{ event.arch }}</code>
             <span
               v-if="displayVersion(event.version, scope === 'container')"
               :style="{
@@ -123,6 +122,7 @@ const head = computed(() => props.events[0])
                 alignSelf: 'flex-start',
               }"
             >{{ displayVersion(event.version, scope === 'container') }}</span>
+            <code v-if="event.repo" style="font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--text-secondary);">{{ event.repo }}/{{ event.arch }}</code>
           </div>
         </a>
       </div>
