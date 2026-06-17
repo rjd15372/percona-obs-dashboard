@@ -88,7 +88,7 @@ export function useArtifacts(
     const pkgs = toValue(packages)
 
     return pkgs
-      .filter(pkg => pkg.is_container === true)
+      .filter(pkg => pkg.scope === 'container' && pkg.is_container !== false)
       .map(pkg => {
         const tags = pkg.container_tags ?? []
         const baseOs = deriveBaseOs(pkg.project)

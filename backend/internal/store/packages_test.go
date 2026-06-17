@@ -97,23 +97,49 @@ func TestGetActivePackages(t *testing.T) {
 	defer db.Close()
 
 	now := time.Now().UTC().Truncate(time.Second)
+	trueVal := true
+	falseVal := false
 
-	// Insert a succeeded package
-	succeeded := &model.Package{
-		Project: "isv:percona", Name: "pkg-ok", Scope: model.ScopeCommon,
+	// Succeeded + is_container already detected: excluded (nothing left to do).
+	detectedContainer := &model.Package{
+		Project: "isv:percona", Name: "pkg-container-done", Scope: model.ScopeContainer,
 		RollupState: model.RollupSucceeded, OKTargets: 1, TotalTargets: 1,
-		Targets: []model.Target{{Repo: "repo", Arch: "x86_64", State: "succeeded"}},
-		UpdatedAt: now,
+		IsContainer: &trueVal,
+		Targets:     []model.Target{{Repo: "repo", Arch: "x86_64", State: "succeeded"}},
+		UpdatedAt:   now,
 	}
-	if err := UpsertPackageState(db, succeeded, succeeded.UpdatedAt); err != nil {
+	if err := UpsertPackageState(db, detectedContainer, detectedContainer.UpdatedAt); err != nil {
 		t.Fatal(err)
 	}
 
-	// Insert a failing package
+	// Succeeded + is_container=false (dependency in container project): also excluded.
+	detectedNonContainer := &model.Package{
+		Project: "isv:percona", Name: "pkg-dep-done", Scope: model.ScopeContainer,
+		RollupState: model.RollupSucceeded, OKTargets: 1, TotalTargets: 1,
+		IsContainer: &falseVal,
+		Targets:     []model.Target{{Repo: "repo", Arch: "x86_64", State: "succeeded"}},
+		UpdatedAt:   now,
+	}
+	if err := UpsertPackageState(db, detectedNonContainer, detectedNonContainer.UpdatedAt); err != nil {
+		t.Fatal(err)
+	}
+
+	// Succeeded + is_container IS NULL: included so PackageTypeTask can detect it.
+	succeededUndetected := &model.Package{
+		Project: "isv:percona", Name: "pkg-ok", Scope: model.ScopeCommon,
+		RollupState: model.RollupSucceeded, OKTargets: 1, TotalTargets: 1,
+		Targets:   []model.Target{{Repo: "repo", Arch: "x86_64", State: "succeeded"}},
+		UpdatedAt: now,
+	}
+	if err := UpsertPackageState(db, succeededUndetected, succeededUndetected.UpdatedAt); err != nil {
+		t.Fatal(err)
+	}
+
+	// Failing package: always included.
 	failing := &model.Package{
 		Project: "isv:percona", Name: "pkg-fail", Scope: model.ScopeCommon,
 		RollupState: model.RollupFailed, OKTargets: 0, TotalTargets: 1,
-		Targets: []model.Target{{Repo: "repo", Arch: "x86_64", State: "failed"}},
+		Targets:   []model.Target{{Repo: "repo", Arch: "x86_64", State: "failed"}},
 		UpdatedAt: now,
 	}
 	if err := UpsertPackageState(db, failing, failing.UpdatedAt); err != nil {
@@ -124,11 +150,25 @@ func TestGetActivePackages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(pkgs) != 1 {
-		t.Fatalf("expected 1 active package, got %d", len(pkgs))
+
+	names := make(map[string]bool, len(pkgs))
+	for _, p := range pkgs {
+		names[p.Name] = true
 	}
-	if pkgs[0].Name != "pkg-fail" {
-		t.Errorf("expected pkg-fail, got %s", pkgs[0].Name)
+	if len(pkgs) != 2 {
+		t.Fatalf("expected 2 active packages (pkg-ok, pkg-fail), got %d: %v", len(pkgs), names)
+	}
+	if !names["pkg-ok"] {
+		t.Error("expected pkg-ok (succeeded but undetected) to be included")
+	}
+	if !names["pkg-fail"] {
+		t.Error("expected pkg-fail (failing) to be included")
+	}
+	if names["pkg-container-done"] {
+		t.Error("expected pkg-container-done (succeeded + detected) to be excluded")
+	}
+	if names["pkg-dep-done"] {
+		t.Error("expected pkg-dep-done (succeeded + detected non-container) to be excluded")
 	}
 }
 

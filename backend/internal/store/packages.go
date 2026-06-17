@@ -196,10 +196,15 @@ func QueryPackages(db *sql.DB, projectPrefix string) ([]*model.Package, error) {
 	return scanPackages(rows)
 }
 
-// GetActivePackages returns all packages where rollup_state is not 'succeeded'.
+// GetActivePackages returns packages that need worker attention:
+// - packages not yet in a final succeeded state, plus
+// - packages whose is_container type has not yet been detected (is_container IS NULL),
+//   so PackageTypeTask can run for them even if they already succeeded.
 func GetActivePackages(db *sql.DB) ([]*model.Package, error) {
 	rows, err := db.Query(`SELECT`+packageSelectCols+`
-		FROM packages WHERE rollup_state != 'succeeded' ORDER BY project, name`,
+		FROM packages
+		WHERE rollup_state != 'succeeded' OR is_container IS NULL
+		ORDER BY project, name`,
 	)
 	if err != nil {
 		return nil, err
