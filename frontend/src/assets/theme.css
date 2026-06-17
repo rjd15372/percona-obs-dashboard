@@ -8,8 +8,8 @@
   --bg-card: #FFFFFF;
   --bg-card-2: #FBFAF7;
   --bg-muted: #ECE8DF;
-  --brand-purple: #6E3FF3;
-  --brand-purple-tint: #EDE8FD;
+  --brand-purple: #005ED6;
+  --brand-purple-tint: rgba(0, 94, 214, 0.10);
   --ok: #1F9D55;
   --ok-tint: #DCFCE7;
   --fail: #E5484D;
@@ -38,8 +38,8 @@
   --bg-card: #181426;
   --bg-card-2: #13101F;
   --bg-muted: #1A1626;
-  --brand-purple: #8B65F5;
-  --brand-purple-tint: #2A1F4A;
+  --brand-purple: #4A9EFF;
+  --brand-purple-tint: rgba(74, 158, 255, 0.15);
   --ok: #42C97E;
   --ok-tint: #0D3320;
   --fail: #FF6166;
