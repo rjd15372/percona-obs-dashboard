@@ -375,14 +375,28 @@ func (c *Client) PackageBuildReason(ctx context.Context, project, repo, arch, pk
 
 // PackageIsContainer returns true if the package's source contains a Dockerfile
 // or a .kiwi file, indicating it produces a container image.
+// A 404 response means the package has no images repository and is not a container.
 func (c *Client) PackageIsContainer(ctx context.Context, project, pkg string) (bool, error) {
 	path := fmt.Sprintf("/source/%s/%s?view=info&repository=images",
 		url.PathEscape(project), url.PathEscape(pkg))
-	resp, err := c.get(ctx, path)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil)
+	if err != nil {
+		return false, err
+	}
+	req.SetBasicAuth(c.username, c.password)
+	req.Header.Set("Accept", "application/xml")
+	resp, err := c.http.Do(req)
 	if err != nil {
 		return false, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		return false, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return false, fmt.Errorf("OBS %s: %s — %s", path, resp.Status, strings.TrimSpace(string(body)))
+	}
 
 	var info struct {
 		Filenames []string `xml:"filename"`

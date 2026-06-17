@@ -279,6 +279,21 @@ func TestPackageIsContainer(t *testing.T) {
 	}
 }
 
+func TestPackageIsContainerNotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL, "u", "p")
+	got, err := c.PackageIsContainer(context.Background(), "isv:percona:ppg:17", "percona-patroni")
+	if err != nil {
+		t.Fatalf("expected nil error for 404, got: %v", err)
+	}
+	if got {
+		t.Error("expected false for package with no images repository")
+	}
+}
+
 func TestPackageVersionResult(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("view") != "versrel" {
