@@ -392,13 +392,16 @@ func TestPackageContainerTags(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(srv.URL, "u", "p")
-	tag, err := c.PackageContainerTags(context.Background(),
+	tags, err := c.PackageContainerTags(context.Background(),
 		"proj", "images", "x86_64", "pkg", "pkg.containerinfo")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tag != "18.4-1-1.7" {
-		t.Errorf("expected %q, got %q", "18.4-1-1.7", tag)
+	if len(tags) != 4 {
+		t.Fatalf("expected 4 tags, got %d: %v", len(tags), tags)
+	}
+	if tags[0] != "18.4-1-1.7" {
+		t.Errorf("expected tags[0] %q, got %q", "18.4-1-1.7", tags[0])
 	}
 }
 
@@ -409,11 +412,11 @@ func TestPackageContainerTagsEmpty(t *testing.T) {
 	defer srv.Close()
 
 	c := NewClient(srv.URL, "u", "p")
-	tag, err := c.PackageContainerTags(context.Background(), "proj", "repo", "arch", "pkg", "file.containerinfo")
+	tags, err := c.PackageContainerTags(context.Background(), "proj", "repo", "arch", "pkg", "file.containerinfo")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tag != "" {
-		t.Errorf("expected empty, got %q", tag)
+	if len(tags) != 0 {
+		t.Errorf("expected empty, got %v", tags)
 	}
 }

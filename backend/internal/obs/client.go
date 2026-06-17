@@ -465,17 +465,17 @@ func (c *Client) PackageContainerInfoFilename(ctx context.Context, project, repo
 	return "", nil
 }
 
-// PackageContainerTags fetches a .containerinfo JSON file and returns the tag
-// portion of tags[0] (everything after the last ":"), e.g. "18.4-1-1.7".
-// Returns "" if tags is empty.
-func (c *Client) PackageContainerTags(ctx context.Context, project, repo, arch, pkg, filename string) (string, error) {
+// PackageContainerTags fetches a .containerinfo JSON file and returns all tags
+// with the "imagename:" prefix stripped (everything up to and including the last
+// ":"), e.g. ["18.4-1-1.7", "18.4-1"]. Returns nil if tags is empty.
+func (c *Client) PackageContainerTags(ctx context.Context, project, repo, arch, pkg, filename string) ([]string, error) {
 	path := fmt.Sprintf("/build/%s/%s/%s/%s/%s",
 		url.PathEscape(project), url.PathEscape(repo),
 		url.PathEscape(arch), url.PathEscape(pkg),
 		url.PathEscape(filename))
 	resp, err := c.getFile(ctx, path)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
@@ -484,17 +484,21 @@ func (c *Client) PackageContainerTags(ctx context.Context, project, repo, arch, 
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if err := json.Unmarshal(body, &info); err != nil {
-		return "", fmt.Errorf("parse containerinfo: %w", err)
+		return nil, fmt.Errorf("parse containerinfo: %w", err)
 	}
 	if len(info.Tags) == 0 {
-		return "", nil
+		return nil, nil
 	}
-	tag := info.Tags[0]
-	if idx := strings.LastIndex(tag, ":"); idx >= 0 {
-		tag = tag[idx+1:]
+	tags := make([]string, 0, len(info.Tags))
+	for _, raw := range info.Tags {
+		tag := raw
+		if idx := strings.LastIndex(raw, ":"); idx >= 0 {
+			tag = raw[idx+1:]
+		}
+		tags = append(tags, tag)
 	}
-	return tag, nil
+	return tags, nil
 }

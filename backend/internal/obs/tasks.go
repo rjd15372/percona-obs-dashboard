@@ -150,9 +150,10 @@ func (t VersionTask) Run(ctx context.Context, client *Client, pkg *model.Package
 	return nil
 }
 
-// ContainerTagsTask fetches the most specific image tag (e.g. "18.4-1-1.7")
+// ContainerTagsTask fetches all image tags (e.g. ["18.4-1-1.7", "18.4-1"])
 // from the .containerinfo binary artifact. Skipped for non-container packages
-// and packages with no targets.
+// and packages with no targets. Sets pkg.Version to the first tag and
+// pkg.ContainerTags to the full list.
 type ContainerTagsTask struct{}
 
 func (t ContainerTagsTask) Run(ctx context.Context, client *Client, pkg *model.Package) error {
@@ -168,15 +169,18 @@ func (t ContainerTagsTask) Run(ctx context.Context, client *Client, pkg *model.P
 	if filename == "" {
 		return nil
 	}
-	tag, err := client.PackageContainerTags(ctx, pkg.Project, target.Repo, target.Arch, pkg.Name, filename)
+	tags, err := client.PackageContainerTags(ctx, pkg.Project, target.Repo, target.Arch, pkg.Name, filename)
 	if err != nil {
 		slog.Warn("obs: container tags", "pkg", pkg.Name, "err", err)
 		return nil
 	}
-	if tag == "" || tag == pkg.Version {
+	if len(tags) == 0 {
 		return nil
 	}
-	pkg.Version = tag
+	if tags[0] != pkg.Version {
+		pkg.Version = tags[0]
+	}
+	pkg.ContainerTags = tags
 	return nil
 }
 

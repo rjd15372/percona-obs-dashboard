@@ -313,7 +313,13 @@ func TestContainerTagsTask(t *testing.T) {
 		t.Fatal(err)
 	}
 	if pkg.Version != "18.4-1-1.7" {
-		t.Errorf("expected %q, got %q", "18.4-1-1.7", pkg.Version)
+		t.Errorf("expected Version %q, got %q", "18.4-1-1.7", pkg.Version)
+	}
+	if len(pkg.ContainerTags) != 2 {
+		t.Fatalf("expected 2 ContainerTags, got %d: %v", len(pkg.ContainerTags), pkg.ContainerTags)
+	}
+	if pkg.ContainerTags[1] != "18.4-1" {
+		t.Errorf("expected ContainerTags[1] %q, got %q", "18.4-1", pkg.ContainerTags[1])
 	}
 }
 
