@@ -70,7 +70,7 @@ type Package struct {
 	RollupState    RollupState `json:"rollup_state"`
 	OKTargets      int         `json:"ok_targets"`
 	TotalTargets   int         `json:"total_targets"`
-	IsContainer    bool        `json:"is_container"`
+	IsContainer    *bool       `json:"is_container,omitempty"`
 	Version        string      `json:"version,omitempty"`
 	Trigger        *Trigger    `json:"trigger,omitempty"`
 	Targets        []Target    `json:"targets"`

@@ -118,12 +118,15 @@ func (t BuildReasonTask) Run(ctx context.Context, client *Client, pkg *model.Pac
 type PackageTypeTask struct{}
 
 func (t PackageTypeTask) Run(ctx context.Context, client *Client, pkg *model.Package) error {
+	if pkg.IsContainer != nil {
+		return nil
+	}
 	isContainer, err := client.PackageIsContainer(ctx, pkg.Project, pkg.Name)
 	if err != nil {
 		slog.Warn("obs: package type detection", "pkg", pkg.Name, "err", err)
 		return nil
 	}
-	pkg.IsContainer = isContainer
+	pkg.IsContainer = &isContainer
 	return nil
 }
 
@@ -132,7 +135,7 @@ func (t PackageTypeTask) Run(ctx context.Context, client *Client, pkg *model.Pac
 type VersionTask struct{}
 
 func (t VersionTask) Run(ctx context.Context, client *Client, pkg *model.Package) error {
-	if pkg.IsContainer {
+	if pkg.IsContainer == nil || *pkg.IsContainer {
 		return nil
 	}
 	versrel, err := client.PackageVersionResult(ctx, pkg.Project, pkg.Name)
@@ -153,7 +156,7 @@ func (t VersionTask) Run(ctx context.Context, client *Client, pkg *model.Package
 type ContainerTagsTask struct{}
 
 func (t ContainerTagsTask) Run(ctx context.Context, client *Client, pkg *model.Package) error {
-	if !pkg.IsContainer || len(pkg.Targets) == 0 {
+	if pkg.IsContainer == nil || !*pkg.IsContainer || len(pkg.Targets) == 0 {
 		return nil
 	}
 	target := firstSucceededTarget(pkg.Targets)

@@ -153,6 +153,8 @@ func TestBuildReasonTask(t *testing.T) {
 	}
 }
 
+func boolPtr(b bool) *bool { return &b }
+
 func TestPackageTypeTask(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `<sourceinfo><filename>Dockerfile</filename></sourceinfo>`)
@@ -172,7 +174,7 @@ func TestPackageTypeTask(t *testing.T) {
 	if err := task.Run(context.Background(), c, pkg); err != nil {
 		t.Fatal(err)
 	}
-	if !pkg.IsContainer {
+	if pkg.IsContainer == nil || !*pkg.IsContainer {
 		t.Error("expected IsContainer=true for Dockerfile package")
 	}
 }
@@ -189,7 +191,6 @@ func TestPackageTypeTaskRPM(t *testing.T) {
 		Name:        "percona-pg_tde",
 		Scope:       model.ScopeVersion,
 		RollupState: model.RollupSucceeded,
-		IsContainer: true, // should be reset to false
 		UpdatedAt:   time.Now().UTC(),
 	}
 
@@ -197,8 +198,36 @@ func TestPackageTypeTaskRPM(t *testing.T) {
 	if err := task.Run(context.Background(), c, pkg); err != nil {
 		t.Fatal(err)
 	}
-	if pkg.IsContainer {
+	if pkg.IsContainer != nil && *pkg.IsContainer {
 		t.Error("expected IsContainer=false for spec-only package")
+	}
+}
+
+func TestPackageTypeTaskSkipsWhenAlreadySet(t *testing.T) {
+	called := false
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		fmt.Fprint(w, `<sourceinfo><filename>Dockerfile</filename></sourceinfo>`)
+	}))
+	defer ts.Close()
+
+	c := obs.NewClient(ts.URL, "u", "p")
+	pkg := &model.Package{
+		Project:     "isv:percona:ppg:17",
+		Name:        "percona-pg_tde",
+		IsContainer: boolPtr(false),
+		UpdatedAt:   time.Now().UTC(),
+	}
+
+	task := obs.PackageTypeTask{}
+	if err := task.Run(context.Background(), c, pkg); err != nil {
+		t.Fatal(err)
+	}
+	if called {
+		t.Error("PackageTypeTask should not call OBS when IsContainer is already set")
+	}
+	if pkg.IsContainer == nil || *pkg.IsContainer {
+		t.Error("IsContainer should remain false when task is skipped")
 	}
 }
 
@@ -218,7 +247,7 @@ func TestVersionTask(t *testing.T) {
 		Name:        "percona-pg_tde",
 		Scope:       model.ScopeVersion,
 		RollupState: model.RollupSucceeded,
-		IsContainer: false,
+		IsContainer: boolPtr(false),
 		UpdatedAt:   time.Now().UTC(),
 	}
 
@@ -243,7 +272,7 @@ func TestVersionTaskSkipsContainers(t *testing.T) {
 	pkg := &model.Package{
 		Project:     "isv:percona",
 		Name:        "mycontainer",
-		IsContainer: true,
+		IsContainer: boolPtr(true),
 		UpdatedAt:   time.Now().UTC(),
 	}
 
@@ -274,7 +303,7 @@ func TestContainerTagsTask(t *testing.T) {
 		Name:        "percona-distribution-postgresql",
 		Scope:       model.ScopeContainer,
 		RollupState: model.RollupSucceeded,
-		IsContainer: true,
+		IsContainer: boolPtr(true),
 		Targets:     []model.Target{{Repo: "images", Arch: "x86_64", State: "succeeded"}},
 		UpdatedAt:   time.Now().UTC(),
 	}
@@ -299,7 +328,7 @@ func TestContainerTagsTaskSkipsNonContainers(t *testing.T) {
 	pkg := &model.Package{
 		Project:     "isv:percona",
 		Name:        "mypkg",
-		IsContainer: false,
+		IsContainer: boolPtr(false),
 		Targets:     []model.Target{{Repo: "UBI_9", Arch: "x86_64", State: "succeeded"}},
 		UpdatedAt:   time.Now().UTC(),
 	}

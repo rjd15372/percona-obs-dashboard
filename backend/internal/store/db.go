@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS packages (
     targets_json    TEXT NOT NULL DEFAULT '[]',
     updated_at      DATETIME NOT NULL,
     state_changed_at DATETIME,
-    is_container   INTEGER NOT NULL DEFAULT 0,
+    is_container   INTEGER,
     version        TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (project, name)
 );
@@ -58,7 +58,7 @@ func Open(path string) (*sql.DB, error) {
 	// Additive migrations: add columns to existing databases.
 	// Fails silently if the column already exists (fresh DBs have it from the schema above).
 	db.Exec(`ALTER TABLE packages ADD COLUMN state_changed_at DATETIME`)
-	db.Exec(`ALTER TABLE packages ADD COLUMN is_container INTEGER NOT NULL DEFAULT 0`)
+	db.Exec(`ALTER TABLE packages ADD COLUMN is_container INTEGER`)
 	db.Exec(`ALTER TABLE packages ADD COLUMN version TEXT NOT NULL DEFAULT ''`)
 	db.Exec(`ALTER TABLE events ADD COLUMN version TEXT NOT NULL DEFAULT ''`)
 	return db, nil

@@ -21,9 +21,13 @@ func UpsertPackageState(db *sql.DB, p *model.Package, now time.Time) error {
 		trigKind = sql.NullString{String: p.Trigger.Kind, Valid: true}
 		trigAt = sql.NullTime{Time: p.Trigger.At, Valid: true}
 	}
-	isContainerInt := 0
-	if p.IsContainer {
-		isContainerInt = 1
+	var isContainerVal interface{}
+	if p.IsContainer != nil {
+		if *p.IsContainer {
+			isContainerVal = 1
+		} else {
+			isContainerVal = 0
+		}
 	}
 	_, err = db.Exec(`
 		INSERT INTO packages
@@ -49,7 +53,7 @@ func UpsertPackageState(db *sql.DB, p *model.Package, now time.Time) error {
 		trigWhat, trigKind, trigAt,
 		string(targetsJSON), p.UpdatedAt,
 		now,
-		isContainerInt, p.Version,
+		isContainerVal, p.Version,
 	)
 	return err
 }
@@ -85,17 +89,20 @@ func scanPackages(rows *sql.Rows) ([]*model.Package, error) {
 		var trigAt sql.NullTime
 		var targetsJSON string
 		var stateChangedAt sql.NullTime
-		var isContainerInt int
+		var isContainerNull sql.NullInt64
 		if err := rows.Scan(
 			&p.Project, &p.Name, &p.Scope, &p.RollupState,
 			&p.OKTargets, &p.TotalTargets,
 			&trigWhat, &trigKind, &trigAt,
 			&targetsJSON, &p.UpdatedAt,
-			&stateChangedAt, &isContainerInt, &p.Version,
+			&stateChangedAt, &isContainerNull, &p.Version,
 		); err != nil {
 			return nil, err
 		}
-		p.IsContainer = isContainerInt != 0
+		if isContainerNull.Valid {
+			v := isContainerNull.Int64 != 0
+			p.IsContainer = &v
+		}
 		if trigWhat.Valid {
 			p.Trigger = &model.Trigger{
 				What: trigWhat.String,

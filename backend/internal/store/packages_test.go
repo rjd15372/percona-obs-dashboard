@@ -201,6 +201,8 @@ func TestGetFinishedPackagesByProject(t *testing.T) {
 	}
 }
 
+func boolPtr(b bool) *bool { return &b }
+
 func TestVersionRoundtrip(t *testing.T) {
 	db, err := Open(":memory:")
 	if err != nil {
@@ -214,7 +216,7 @@ func TestVersionRoundtrip(t *testing.T) {
 		Name:        "percona-pg_tde",
 		Scope:       model.ScopeVersion,
 		RollupState: model.RollupSucceeded,
-		IsContainer: false,
+		IsContainer: boolPtr(false),
 		Version:     "17.5-1",
 		Targets:     []model.Target{{Repo: "UBI_9", Arch: "x86_64", State: "succeeded"}},
 		UpdatedAt:   now,
@@ -232,7 +234,7 @@ func TestVersionRoundtrip(t *testing.T) {
 	if pkgs[0].Version != "17.5-1" {
 		t.Errorf("Version: got %q, want %q", pkgs[0].Version, "17.5-1")
 	}
-	if pkgs[0].IsContainer {
+	if pkgs[0].IsContainer != nil && *pkgs[0].IsContainer {
 		t.Error("IsContainer: expected false")
 	}
 
@@ -242,7 +244,7 @@ func TestVersionRoundtrip(t *testing.T) {
 		Name:        "percona-distribution-postgresql",
 		Scope:       model.ScopeContainer,
 		RollupState: model.RollupSucceeded,
-		IsContainer: true,
+		IsContainer: boolPtr(true),
 		Version:     "18.4-1-1.7",
 		Targets:     []model.Target{{Repo: "images", Arch: "x86_64", State: "succeeded"}},
 		UpdatedAt:   now,
@@ -266,7 +268,7 @@ func TestVersionRoundtrip(t *testing.T) {
 	if found.Version != "18.4-1-1.7" {
 		t.Errorf("Version: got %q, want %q", found.Version, "18.4-1-1.7")
 	}
-	if !found.IsContainer {
+	if found.IsContainer == nil || !*found.IsContainer {
 		t.Error("IsContainer: expected true")
 	}
 }
