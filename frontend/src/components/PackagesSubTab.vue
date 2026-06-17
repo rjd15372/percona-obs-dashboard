@@ -102,6 +102,29 @@ function scopeLabel(scope: string, version: string): string {
   return scope
 }
 
+const STATE_LABELS: Record<string, string> = {
+  succeeded: 'Built',
+  building:  'Building',
+  scheduled: 'Scheduled',
+  blocked:   'Blocked',
+  failed:    'Failed',
+  disabled:  'Disabled',
+  excluded:  'Excluded',
+  broken:    'Broken',
+  unresolvable: 'Unresolvable',
+}
+
+function stateLabel(state: string): string {
+  return STATE_LABELS[state] ?? state
+}
+
+function stateClass(state: string): string {
+  if (state === 'succeeded') return 'status-built'
+  if (state === 'building' || state === 'scheduled') return 'status-building'
+  if (state === 'failed' || state === 'broken' || state === 'unresolvable') return 'status-failed'
+  return 'status-other'
+}
+
 function installCmd(name: string, repo: RepoInfo): string {
   if (repo.obs.startsWith('openSUSE')) return `zypper install ${name}`
   return repo.type === 'rpm' ? `dnf install ${name}` : `apt-get install ${name}`
@@ -198,8 +221,8 @@ function installCmd(name: string, repo: RepoInfo): string {
               <code class="pkg-name">{{ row.name }}</code>
               <span v-if="row.scope !== 'version'" class="scope-badge" :class="'scope-' + row.scope">{{ scopeLabel(row.scope, version) }}</span>
               <code class="install-cmd">{{ installCmd(row.name, row.repo) }}</code>
-              <span class="status-badge" :class="row.state === 'succeeded' ? 'status-built' : 'status-other'">
-                {{ row.state === 'succeeded' ? 'Built' : row.state }}
+              <span class="status-badge" :class="stateClass(row.state)">
+                {{ stateLabel(row.state) }}
               </span>
             </button>
 
@@ -529,6 +552,16 @@ function installCmd(name: string, repo: RepoInfo): string {
 .status-built {
   background: var(--success-tint, #d1fae5);
   color: var(--success, #16a34a);
+}
+
+.status-building {
+  background: #fef9c3;
+  color: #a16207;
+}
+
+.status-failed {
+  background: #fee2e2;
+  color: var(--danger, #dc2626);
 }
 
 .status-other {
