@@ -196,7 +196,7 @@ function installCmd(name: string, repo: RepoInfo): string {
             >
               <span class="expand-glyph">{{ expanded[rowKey(row)] ? '▼' : '▶' }}</span>
               <code class="pkg-name">{{ row.name }}</code>
-              <span class="scope-badge" :class="'scope-' + row.scope">{{ scopeLabel(row.scope, version) }}</span>
+              <span v-if="row.scope !== 'version'" class="scope-badge" :class="'scope-' + row.scope">{{ scopeLabel(row.scope, version) }}</span>
               <code class="install-cmd">{{ installCmd(row.name, row.repo) }}</code>
               <span class="status-badge" :class="row.state === 'succeeded' ? 'status-built' : 'status-other'">
                 {{ row.state === 'succeeded' ? 'Built' : row.state }}
