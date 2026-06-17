@@ -42,11 +42,11 @@ import ContainersSubTab from './ContainersSubTab.vue'
 
 const props = defineProps<{
   packages: Package[]
+  availableVersions: string[]
   initialVersion?: string
 }>()
 
-const availableVersions = ['17', '18', '16']
-const localVersion = ref(props.initialVersion ?? '17')
+const localVersion = ref(props.initialVersion ?? props.availableVersions[0] ?? '17')
 const artifactsTab = ref<'packages' | 'containers'>('packages')
 const artRepoObs = ref<string>('')
 const artArch = ref<'x86_64' | 'aarch64'>('x86_64')

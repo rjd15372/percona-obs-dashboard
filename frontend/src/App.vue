@@ -174,7 +174,8 @@ watch([windowMin, customFrom, customTo], () => refresh())
       <ArtifactsPanel
         v-else
         :packages="rawPackages"
-        :initial-version="version || '17'"
+        :available-versions="availableVersions"
+        :initial-version="version || availableVersions[0] || '17'"
       />
     </div>
   </div>
