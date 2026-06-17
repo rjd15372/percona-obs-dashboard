@@ -4,23 +4,10 @@
       :version="localVersion"
       :available-versions="availableVersions"
       :obs-root="obsRoot"
+      :active-tab="artifactsTab"
       @update:version="onVersionChange"
+      @update:tab="artifactsTab = $event"
     />
-
-    <div class="subtab-switcher">
-      <div class="subtab-pills">
-        <button
-          class="subtab-pill"
-          :class="{ active: artifactsTab === 'packages' }"
-          @click="artifactsTab = 'packages'"
-        >Packages</button>
-        <button
-          class="subtab-pill"
-          :class="{ active: artifactsTab === 'containers' }"
-          @click="artifactsTab = 'containers'"
-        >Container Images</button>
-      </div>
-    </div>
 
     <PackagesSubTab
       v-if="artifactsTab === 'packages'"
@@ -81,7 +68,6 @@ async function fetchRepos(version: string) {
       ...data.deb.map(r => ({ ...r, type: 'deb' as const })),
     ]
     repos.value = next
-    // Set default to first RPM repo if current selection is no longer valid
     if (next.length > 0 && !next.find(r => r.obs === artRepoObs.value)) {
       artRepoObs.value = next.find(r => r.type === 'rpm')?.obs ?? next[0].obs
     }
@@ -95,7 +81,6 @@ function onVersionChange(v: string) {
   fetchRepos(v)
 }
 
-// Fetch repos on mount
 fetchRepos(localVersion.value)
 
 const packagesRef = computed(() => props.packages)
@@ -125,38 +110,5 @@ function onCopy(key: string, text: string) {
   flex-direction: column;
   height: 100%;
   min-height: 0;
-}
-
-.subtab-switcher {
-  display: flex;
-  align-items: center;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.subtab-pills {
-  display: flex;
-  gap: 2px;
-  background: var(--bg-muted);
-  padding: 3px;
-  border-radius: 11px;
-}
-
-.subtab-pill {
-  padding: 5px 16px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
-}
-
-.subtab-pill.active {
-  background: var(--bg-card);
-  color: var(--brand-purple);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 </style>
