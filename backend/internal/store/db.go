@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS packages (
     state_changed_at DATETIME,
     is_container   INTEGER,
     version        TEXT NOT NULL DEFAULT '',
+    container_tags TEXT NOT NULL DEFAULT '[]',
     PRIMARY KEY (project, name)
 );
 
@@ -63,6 +64,7 @@ func Open(path string) (*sql.DB, error) {
 	db.Exec(`ALTER TABLE packages ADD COLUMN is_container INTEGER`)
 	db.Exec(`ALTER TABLE packages ADD COLUMN version TEXT NOT NULL DEFAULT ''`)
 	db.Exec(`ALTER TABLE events ADD COLUMN version TEXT NOT NULL DEFAULT ''`)
+	db.Exec(`ALTER TABLE packages ADD COLUMN container_tags TEXT NOT NULL DEFAULT '[]'`)
 
 	// Structural migration: make is_container nullable.
 	// SQLite does not support ALTER COLUMN, so we recreate the table when the
@@ -108,6 +110,7 @@ func migrateIsContainerNullable(db *sql.DB) error {
 			state_changed_at DATETIME,
 			is_container     INTEGER,
 			version          TEXT NOT NULL DEFAULT '',
+			container_tags   TEXT NOT NULL DEFAULT '[]',
 			PRIMARY KEY (project, name)
 		)`,
 		`INSERT INTO packages_new
@@ -115,7 +118,8 @@ func migrateIsContainerNullable(db *sql.DB) error {
 			       trigger_what, trigger_kind, trigger_at, targets_json, updated_at,
 			       state_changed_at,
 			       CASE WHEN is_container = 1 THEN 1 ELSE NULL END,
-			       version
+			       version,
+			       container_tags
 			FROM packages`,
 		`DROP TABLE packages`,
 		`ALTER TABLE packages_new RENAME TO packages`,

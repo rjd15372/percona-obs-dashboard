@@ -72,6 +72,7 @@ type Package struct {
 	TotalTargets   int         `json:"total_targets"`
 	IsContainer    *bool       `json:"is_container,omitempty"`
 	Version        string      `json:"version,omitempty"`
+	ContainerTags  []string    `json:"container_tags,omitempty"`
 	Trigger        *Trigger    `json:"trigger,omitempty"`
 	Targets        []Target    `json:"targets"`
 	UpdatedAt      time.Time   `json:"updated_at"`

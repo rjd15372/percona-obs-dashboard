@@ -29,12 +29,19 @@ func UpsertPackageState(db *sql.DB, p *model.Package, now time.Time) error {
 			isContainerVal = 0
 		}
 	}
+	containerTagsJSON, err := json.Marshal(p.ContainerTags)
+	if err != nil {
+		return err
+	}
+	if containerTagsJSON == nil {
+		containerTagsJSON = []byte("[]")
+	}
 	_, err = db.Exec(`
 		INSERT INTO packages
 			(project, name, scope, rollup_state, ok_targets, total_targets,
 			 trigger_what, trigger_kind, trigger_at, targets_json, updated_at,
-			 state_changed_at, is_container, version)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+			 state_changed_at, is_container, version, container_tags)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(project, name) DO UPDATE SET
 			scope=excluded.scope, rollup_state=excluded.rollup_state,
 			ok_targets=excluded.ok_targets, total_targets=excluded.total_targets,
@@ -43,6 +50,7 @@ func UpsertPackageState(db *sql.DB, p *model.Package, now time.Time) error {
 			updated_at=excluded.updated_at,
 			is_container=excluded.is_container,
 			version=excluded.version,
+			container_tags=excluded.container_tags,
 			state_changed_at = CASE
 				WHEN excluded.rollup_state != rollup_state THEN excluded.state_changed_at
 				WHEN state_changed_at IS NULL             THEN excluded.state_changed_at
@@ -54,6 +62,7 @@ func UpsertPackageState(db *sql.DB, p *model.Package, now time.Time) error {
 		string(targetsJSON), p.UpdatedAt,
 		now,
 		isContainerVal, p.Version,
+		string(containerTagsJSON),
 	)
 	return err
 }
@@ -74,7 +83,7 @@ func DeletePackage(db *sql.DB, project, name string) error {
 
 const packageSelectCols = ` project, name, scope, rollup_state, ok_targets, total_targets,
 	trigger_what, trigger_kind, trigger_at, targets_json, updated_at,
-	state_changed_at, is_container, version`
+	state_changed_at, is_container, version, container_tags`
 
 // scanPackages is a helper that extracts the scan loop pattern used by multiple query functions.
 // It expects rows to have been created with the standard package column order:
@@ -90,12 +99,14 @@ func scanPackages(rows *sql.Rows) ([]*model.Package, error) {
 		var targetsJSON string
 		var stateChangedAt sql.NullTime
 		var isContainerNull sql.NullInt64
+		var containerTagsJSON string
 		if err := rows.Scan(
 			&p.Project, &p.Name, &p.Scope, &p.RollupState,
 			&p.OKTargets, &p.TotalTargets,
 			&trigWhat, &trigKind, &trigAt,
 			&targetsJSON, &p.UpdatedAt,
 			&stateChangedAt, &isContainerNull, &p.Version,
+			&containerTagsJSON,
 		); err != nil {
 			return nil, err
 		}
@@ -116,6 +127,11 @@ func scanPackages(rows *sql.Rows) ([]*model.Package, error) {
 		}
 		if err := json.Unmarshal([]byte(targetsJSON), &p.Targets); err != nil {
 			return nil, err
+		}
+		if containerTagsJSON != "" && containerTagsJSON != "[]" {
+			if err := json.Unmarshal([]byte(containerTagsJSON), &p.ContainerTags); err != nil {
+				return nil, err
+			}
 		}
 		pkgs = append(pkgs, p)
 	}

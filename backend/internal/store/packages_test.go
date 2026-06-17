@@ -205,6 +205,64 @@ func TestGetFinishedPackagesByProject(t *testing.T) {
 
 func boolPtr(b bool) *bool { return &b }
 
+func TestContainerTagsRoundtrip(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	now := time.Now().UTC().Truncate(time.Second)
+	p := &model.Package{
+		Project:       "isv:percona:ppg:17:containers:ubi9",
+		Name:          "percona-distribution-postgresql",
+		Scope:         model.ScopeContainer,
+		RollupState:   model.RollupSucceeded,
+		IsContainer:   boolPtr(true),
+		Version:       "17.4-1-1.7",
+		ContainerTags: []string{"17.4-1-1.7", "17.4-1", "17"},
+		Targets:       []model.Target{{Repo: "images", Arch: "x86_64", State: "succeeded"}},
+		UpdatedAt:     now,
+	}
+	if err := UpsertPackageState(db, p, now); err != nil {
+		t.Fatal(err)
+	}
+
+	pkgs, err := QueryPackages(db, "isv:percona")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pkgs) != 1 {
+		t.Fatalf("expected 1 package, got %d", len(pkgs))
+	}
+	got := pkgs[0]
+	if len(got.ContainerTags) != 3 {
+		t.Fatalf("ContainerTags: want 3, got %d: %v", len(got.ContainerTags), got.ContainerTags)
+	}
+	if got.ContainerTags[0] != "17.4-1-1.7" {
+		t.Errorf("ContainerTags[0]: want %q, got %q", "17.4-1-1.7", got.ContainerTags[0])
+	}
+	if got.ContainerTags[2] != "17" {
+		t.Errorf("ContainerTags[2]: want %q, got %q", "17", got.ContainerTags[2])
+	}
+
+	// Nil ContainerTags must round-trip as nil (not empty slice)
+	p2 := &model.Package{
+		Project: "isv:percona:ppg:17", Name: "pg_tde",
+		Scope: model.ScopeVersion, RollupState: model.RollupSucceeded,
+		Targets: []model.Target{}, UpdatedAt: now,
+	}
+	if err := UpsertPackageState(db, p2, now); err != nil {
+		t.Errorf("upsert nil ContainerTags: %v", err)
+	}
+	pkgs2, _ := QueryPackages(db, "isv:percona:ppg:17")
+	for _, pkg := range pkgs2 {
+		if pkg.Name == "pg_tde" && pkg.ContainerTags != nil {
+			t.Errorf("pg_tde: ContainerTags should be nil, got %v", pkg.ContainerTags)
+		}
+	}
+}
+
 func TestVersionRoundtrip(t *testing.T) {
 	db, err := Open(":memory:")
 	if err != nil {
