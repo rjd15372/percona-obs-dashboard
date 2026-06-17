@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"sort"
 	"time"
 
 	"github.com/percona/obs-dashboard/internal/model"
@@ -136,6 +137,50 @@ func scanPackages(rows *sql.Rows) ([]*model.Package, error) {
 		pkgs = append(pkgs, p)
 	}
 	return pkgs, rows.Err()
+}
+
+// QueryDistinctRepos returns the sorted list of distinct OBS repository names
+// (the "repo" field from targets_json) for non-container packages matching the
+// given project prefix.
+func QueryDistinctRepos(db *sql.DB, projectPrefix string) ([]string, error) {
+	rows, err := db.Query(
+		`SELECT targets_json FROM packages
+		 WHERE project LIKE ? AND project NOT LIKE '%:containers:%'`,
+		projectPrefix+"%",
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	seen := map[string]struct{}{}
+	for rows.Next() {
+		var targetsJSON string
+		if err := rows.Scan(&targetsJSON); err != nil {
+			return nil, err
+		}
+		var targets []struct {
+			Repo string `json:"repo"`
+		}
+		if err := json.Unmarshal([]byte(targetsJSON), &targets); err != nil {
+			continue
+		}
+		for _, t := range targets {
+			if t.Repo != "" {
+				seen[t.Repo] = struct{}{}
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	repos := make([]string, 0, len(seen))
+	for r := range seen {
+		repos = append(repos, r)
+	}
+	sort.Strings(repos)
+	return repos, nil
 }
 
 // QueryPackages returns all packages for a given OBS project prefix.

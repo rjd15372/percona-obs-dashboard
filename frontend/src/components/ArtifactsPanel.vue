@@ -4,7 +4,7 @@
       :version="localVersion"
       :available-versions="availableVersions"
       :obs-root="obsRoot"
-      @update:version="localVersion = $event"
+      @update:version="onVersionChange"
     />
 
     <div class="subtab-switcher">
@@ -25,11 +25,12 @@
     <PackagesSubTab
       v-if="artifactsTab === 'packages'"
       :package-rows="packageRows"
+      :repos="repos"
       :selected-repo="selectedRepo"
       :version="localVersion"
       :art-arch="artArch"
       :copied-key="copiedKey"
-      @update:art-repo="artRepo = $event"
+      @update:art-repo="artRepoObs = $event"
       @update:art-arch="artArch = $event as 'x86_64' | 'aarch64'"
       @copy="onCopy"
     />
@@ -46,7 +47,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import type { Package } from '../types/api'
-import { useArtifacts, REPOS } from '../composables/useArtifacts'
+import type { RepoInfo } from '../composables/useArtifacts'
+import { useArtifacts } from '../composables/useArtifacts'
 import ArtifactsVersionBar from './ArtifactsVersionBar.vue'
 import PackagesSubTab from './PackagesSubTab.vue'
 import ContainersSubTab from './ContainersSubTab.vue'
@@ -59,20 +61,49 @@ const props = defineProps<{
 const availableVersions = ['17', '18', '16']
 const localVersion = ref(props.initialVersion ?? '17')
 const artifactsTab = ref<'packages' | 'containers'>('packages')
-const artRepo = ref('el9')
+const artRepoObs = ref<string>('')
 const artArch = ref<'x86_64' | 'aarch64'>('x86_64')
 const copiedKey = ref<string | null>(null)
+const repos = ref<RepoInfo[]>([])
 
 const obsRoot = computed(() => `isv:percona:ppg:${localVersion.value}`)
 
-const selectedRepo = computed(() => REPOS.find(r => r.short === artRepo.value))
+const selectedRepo = computed<RepoInfo | null>(
+  () => repos.value.find(r => r.obs === artRepoObs.value) ?? null,
+)
+
+async function fetchRepos(version: string) {
+  try {
+    const res = await fetch(`/api/products/ppg/${version}/repos`)
+    const data = await res.json() as { rpm: { obs: string; name: string }[]; deb: { obs: string; name: string }[] }
+    const next: RepoInfo[] = [
+      ...data.rpm.map(r => ({ ...r, type: 'rpm' as const })),
+      ...data.deb.map(r => ({ ...r, type: 'deb' as const })),
+    ]
+    repos.value = next
+    // Set default to first RPM repo if current selection is no longer valid
+    if (next.length > 0 && !next.find(r => r.obs === artRepoObs.value)) {
+      artRepoObs.value = next.find(r => r.type === 'rpm')?.obs ?? next[0].obs
+    }
+  } catch {
+    repos.value = []
+  }
+}
+
+function onVersionChange(v: string) {
+  localVersion.value = v
+  fetchRepos(v)
+}
+
+// Fetch repos on mount
+fetchRepos(localVersion.value)
 
 const packagesRef = computed(() => props.packages)
 
 const { packageRows, containerImages } = useArtifacts(
   packagesRef,
   localVersion,
-  artRepo,
+  selectedRepo,
   artArch,
 )
 

@@ -2,28 +2,18 @@ import { computed, toValue } from 'vue'
 import type { MaybeRef } from 'vue'
 import type { Package, Target } from '../types/api'
 
-export interface Repo {
-  short: string
-  name: string
+export interface RepoInfo {
   obs: string
+  name: string
   type: 'rpm' | 'deb'
 }
-
-export const REPOS: Repo[] = [
-  { short: 'el9',    name: 'RHEL 9',       obs: 'RHEL_9',        type: 'rpm' },
-  { short: 'el8',    name: 'RHEL 8',       obs: 'RHEL_8',        type: 'rpm' },
-  { short: 'deb12',  name: 'Debian 12',    obs: 'Debian_12',     type: 'deb' },
-  { short: 'deb11',  name: 'Debian 11',    obs: 'Debian_11',     type: 'deb' },
-  { short: 'ub2404', name: 'Ubuntu 24.04', obs: 'xUbuntu_24.04', type: 'deb' },
-  { short: 'ub2204', name: 'Ubuntu 22.04', obs: 'xUbuntu_22.04', type: 'deb' },
-]
 
 export interface PackageRow {
   project: string
   name: string
   scope: 'common' | 'ppgcommon' | 'version'
   state: string
-  repo: Repo
+  repo: RepoInfo
   arch: string
 }
 
@@ -38,14 +28,13 @@ export interface ContainerImage {
 }
 
 export function deriveBaseOs(project: string): string {
-  // project ends with :containers:<suffix>
-  // e.g. "isv:percona:ppg:17:containers:ubi9" -> "ubi9"
   const parts = project.split(':')
   const containerIdx = parts.lastIndexOf('containers')
   if (containerIdx >= 0 && containerIdx < parts.length - 1) {
     const suffix = parts[containerIdx + 1]
     const osMap: Record<string, string> = {
-      'ubi9': 'Oracle Linux 9',
+      'ubi8': 'UBI 8',
+      'ubi9': 'UBI 9',
       'noble': 'Ubuntu 24.04 Noble',
       'bookworm': 'Debian 12 Bookworm',
     }
@@ -57,16 +46,15 @@ export function deriveBaseOs(project: string): string {
 export function useArtifacts(
   packages: MaybeRef<Package[]>,
   version: MaybeRef<string>,
-  artRepo: MaybeRef<string>,
+  selectedRepo: MaybeRef<RepoInfo | null>,
   artArch: MaybeRef<string>,
 ) {
   const packageRows = computed<PackageRow[]>(() => {
     const pkgs = toValue(packages)
     const ver = toValue(version)
-    const repoShort = toValue(artRepo)
+    const repo = toValue(selectedRepo)
     const arch = toValue(artArch)
 
-    const repo = REPOS.find(r => r.short === repoShort)
     if (!repo) return []
 
     const rows: PackageRow[] = []
@@ -77,7 +65,7 @@ export function useArtifacts(
       // version-scoped packages must belong to the selected version's project
       if (scope === 'version' && !pkg.project.includes(':ppg:' + ver)) continue
 
-      // find a matching target for the selected repo x arch
+      // find a matching target for the selected repo × arch
       const target = pkg.targets?.find(
         (t: Target) => t.repo === repo.obs && t.arch === arch,
       )
@@ -97,7 +85,6 @@ export function useArtifacts(
 
   const containerImages = computed<ContainerImage[]>(() => {
     const pkgs = toValue(packages)
-    const ver = toValue(version)
 
     return pkgs
       .filter(pkg => pkg.scope === 'container')
@@ -106,15 +93,21 @@ export function useArtifacts(
         const baseOs = deriveBaseOs(pkg.project)
         const published = pkg.targets?.some((t: Target) => t.published === true) ?? false
 
-        // pull command uses first tag
-        const pullTag = tags[0] ?? ver
-        const pullCmd = `docker pull percona/${pkg.name}:${pullTag}`
+        // project "isv:percona:ppg:17:containers:ubi8"
+        // → registry path "isv/percona/ppg/17/containers/ubi8"
+        const registryPath = pkg.project.split(':').join('/')
+        const registry = `registry.opensuse.org/${registryPath}/images/${pkg.name}`
+
+        const pullTag = tags[0] ?? ''
+        const pullCmd = pullTag
+          ? `docker pull ${registry}:${pullTag}`
+          : `docker pull ${registry}`
 
         return {
           id: pkg.project + '/' + pkg.name,
           imageName: pkg.name,
           baseOs,
-          registry: `docker.io/percona/${pkg.name}`,
+          registry,
           tags,
           pullCmd,
           published,

@@ -1,32 +1,61 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { REPOS } from '../composables/useArtifacts'
-import type { PackageRow, Repo } from '../composables/useArtifacts'
+import type { PackageRow, RepoInfo } from '../composables/useArtifacts'
 
 const props = defineProps<{
   packageRows: PackageRow[]
-  selectedRepo: Repo | undefined
+  repos: RepoInfo[]
+  selectedRepo: RepoInfo | null
   version: string
   artArch: string
   copiedKey: string | null
 }>()
 
 const emit = defineEmits<{
-  'update:art-repo': [short: string]
+  'update:art-repo': [obs: string]
   'update:art-arch': [arch: string]
   'copy': [key: string, text: string]
 }>()
+
+const rpmRepos = computed(() => props.repos.filter(r => r.type === 'rpm'))
+const debRepos = computed(() => props.repos.filter(r => r.type === 'deb'))
 
 const snippet = computed(() => {
   const repo = props.selectedRepo
   if (!repo) return ''
   const ver = props.version
-  const obsRepo = repo.obs
-  if (repo.type === 'rpm') {
-    return `[percona-ppg${ver}]\nname=Percona PPG ${ver} — ${repo.name}\nbaseurl=https://download.opensuse.org/repositories/isv:percona:ppg:${ver}/${obsRepo}/\nenabled=1\ngpgcheck=0\n\n# Save to /etc/yum.repos.d/percona-ppg${ver}.repo, then:\ndnf makecache\ndnf install percona-postgresql${ver}-server`
-  } else {
-    return `# 1. Add repository\necho "deb https://download.opensuse.org/repositories/isv:percona:ppg:${ver}/${obsRepo}/ ./" \\\n  | sudo tee /etc/apt/sources.list.d/percona-ppg${ver}.list\n\n# 2. Import GPG key\nwget -qO- https://download.opensuse.org/repositories/isv:percona:ppg:${ver}/${obsRepo}/Release.key \\\n  | sudo apt-key add -\n\n# 3. Update and install\nsudo apt-get update\nsudo apt-get install percona-postgresql-${ver}`
+  // OBS project: "isv:percona:ppg:17"
+  const obsProject = `isv:percona:ppg:${ver}`
+  // URL form: each ":" → ":/" → "isv:/percona:/ppg:/17"
+  const obsProjectUrl = obsProject.split(':').join(':/')
+  const baseUrl = `https://download.opensuse.org/repositories/${obsProjectUrl}/${repo.obs}/`
+  // File-safe project ID: colons → underscores
+  const projectId = obsProject.split(':').join('_')
+
+  if (repo.obs.startsWith('openSUSE')) {
+    return `zypper addrepo \\
+  ${baseUrl} \\
+  ${obsProject}
+zypper --gpg-auto-import-keys refresh`
   }
+
+  if (repo.type === 'rpm') {
+    return `rpm --import ${baseUrl}repodata/repomd.xml.key
+tee /etc/yum.repos.d/${projectId}.repo << 'EOF'
+[${obsProject}]
+name=${obsProject} - ${repo.obs}
+baseurl=${baseUrl}
+enabled=1
+gpgcheck=0
+EOF`
+  }
+
+  // DEB
+  return `echo 'deb ${baseUrl} /' \\
+  | tee /etc/apt/sources.list.d/${obsProject}.list
+curl -fsSL ${baseUrl}Release.key \\
+  | gpg --dearmor | tee /etc/apt/trusted.gpg.d/${projectId}.gpg > /dev/null
+apt update`
 })
 
 function scopeLabel(scope: string, version: string): string {
@@ -36,8 +65,9 @@ function scopeLabel(scope: string, version: string): string {
   return scope
 }
 
-function installCmd(name: string, repoType: 'rpm' | 'deb'): string {
-  return repoType === 'rpm' ? `dnf install ${name}` : `apt-get install ${name}`
+function installCmd(name: string, repo: RepoInfo): string {
+  if (repo.obs.startsWith('openSUSE')) return `zypper install ${name}`
+  return repo.type === 'rpm' ? `dnf install ${name}` : `apt-get install ${name}`
 }
 
 function downloadUrl(row: PackageRow): string {
@@ -49,23 +79,29 @@ function downloadUrl(row: PackageRow): string {
   <div class="packages-subtab">
     <!-- Sidebar -->
     <div class="sidebar">
-      <div class="group-label rpm-label">RPM</div>
-      <button
-        v-for="repo in REPOS.filter(r => r.type === 'rpm')"
-        :key="repo.short"
-        class="sidebar-row"
-        :class="{ active: selectedRepo?.short === repo.short }"
-        @click="emit('update:art-repo', repo.short)"
-      >{{ repo.name }}</button>
+      <template v-if="rpmRepos.length > 0">
+        <div class="group-label rpm-label">RPM</div>
+        <button
+          v-for="repo in rpmRepos"
+          :key="repo.obs"
+          class="sidebar-row"
+          :class="{ active: selectedRepo?.obs === repo.obs }"
+          @click="emit('update:art-repo', repo.obs)"
+        >{{ repo.name }}</button>
+      </template>
 
-      <div class="group-label deb-label">DEB</div>
-      <button
-        v-for="repo in REPOS.filter(r => r.type === 'deb')"
-        :key="repo.short"
-        class="sidebar-row"
-        :class="{ active: selectedRepo?.short === repo.short }"
-        @click="emit('update:art-repo', repo.short)"
-      >{{ repo.name }}</button>
+      <template v-if="debRepos.length > 0">
+        <div class="group-label deb-label">DEB</div>
+        <button
+          v-for="repo in debRepos"
+          :key="repo.obs"
+          class="sidebar-row"
+          :class="{ active: selectedRepo?.obs === repo.obs }"
+          @click="emit('update:art-repo', repo.obs)"
+        >{{ repo.name }}</button>
+      </template>
+
+      <div v-if="repos.length === 0" class="sidebar-empty">Loading…</div>
     </div>
 
     <!-- Main content -->
@@ -119,7 +155,7 @@ function downloadUrl(row: PackageRow): string {
           >
             <code class="pkg-name">{{ row.name }}</code>
             <span class="scope-badge" :class="'scope-' + row.scope">{{ scopeLabel(row.scope, version) }}</span>
-            <code class="install-cmd">{{ installCmd(row.name, row.repo.type) }}</code>
+            <code class="install-cmd">{{ installCmd(row.name, row.repo) }}</code>
             <span class="status-badge" :class="row.state === 'succeeded' ? 'status-built' : 'status-other'">
               {{ row.state === 'succeeded' ? 'Built' : row.state }}
             </span>
@@ -154,6 +190,12 @@ function downloadUrl(row: PackageRow): string {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.sidebar-empty {
+  padding: 12px 16px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .group-label {
