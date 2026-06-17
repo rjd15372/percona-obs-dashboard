@@ -1,0 +1,31 @@
+{
+  "planPath": "docs/superpowers/plans/2026-06-17-artifacts-context-selector.md",
+  "tasks": [
+    {
+      "id": 119,
+      "subject": "Task 1: Backend — releases and PR repos routes",
+      "status": "pending",
+      "description": "**Goal:** Add `GET /api/releases/ppg/{version}/packages`, `GET /api/releases/ppg/{version}/repos`, and `GET /api/pr/{pr}/{subproject}/{version}/repos` routes with passing tests.\n\n**Files:**\n- Modify: `backend/internal/api/handlers.go`\n- Modify: `backend/internal/api/server.go`\n- Modify: `backend/internal/api/handlers_test.go`\n\n**Acceptance Criteria:**\n- [ ] `GET /api/releases/ppg/17/packages` returns HTTP 200 with a JSON array (empty on fresh DB)\n- [ ] `GET /api/releases/ppg/17/repos` returns HTTP 200 with `{\"rpm\":[],\"deb\":[]}` shape on fresh DB\n- [ ] `GET /api/pr/pr-92/ppg/17/repos` returns HTTP 200 with `{\"rpm\":[],\"deb\":[]}` shape on fresh DB\n- [ ] `go test ./backend/internal/api/...` passes\n\n**Verify:** `cd backend && go test ./internal/api/... -v -run 'TestReleases|TestPRRepos'` → all PASS\n\n```json:metadata\n{\"files\":[\"backend/internal/api/handlers.go\",\"backend/internal/api/server.go\",\"backend/internal/api/handlers_test.go\"],\"verifyCommand\":\"cd backend && go test ./internal/api/... -v -run 'TestReleases|TestPRRepos'\",\"acceptanceCriteria\":[\"GET /api/releases/ppg/17/packages returns HTTP 200 JSON array\",\"GET /api/releases/ppg/17/repos returns HTTP 200 with rpm/deb shape\",\"GET /api/pr/pr-92/ppg/17/repos returns HTTP 200 with rpm/deb shape\",\"go test ./backend/internal/api/... passes\"],\"modelTier\":\"mechanical\"}\n```"
+    },
+    {
+      "id": 120,
+      "subject": "Task 2: useArtifacts — add contextPrefix parameter",
+      "status": "pending",
+      "description": "**Goal:** `useArtifacts` accepts a `contextPrefix: MaybeRef<string>` 5th parameter so `packageRows` and `containerImages` filter against any OBS project prefix.\n\n**Files:**\n- Modify: `frontend/src/composables/useArtifacts.ts`\n\n**Acceptance Criteria:**\n- [ ] `useArtifacts` signature includes `contextPrefix: MaybeRef<string>` as 5th parameter\n- [ ] `packageRows` uses `exactProject = toValue(contextPrefix) + ':' + ver`\n- [ ] `containerImages` uses `pkg.project.startsWith(toValue(contextPrefix) + ':' + ver + ':')`\n- [ ] `npx vue-tsc --noEmit` passes\n\n**Verify:** `cd frontend && npx vue-tsc --noEmit` → exits 0\n\n```json:metadata\n{\"files\":[\"frontend/src/composables/useArtifacts.ts\"],\"verifyCommand\":\"cd frontend && npx vue-tsc --noEmit\",\"acceptanceCriteria\":[\"useArtifacts accepts contextPrefix as 5th MaybeRef<string> parameter\",\"packageRows uses exactProject = prefix + ':' + ver\",\"containerImages uses startsWith(prefix + ':' + ver + ':')\",\"vue-tsc passes\"],\"modelTier\":\"mechanical\"}\n```"
+    },
+    {
+      "id": 121,
+      "subject": "Task 3: ArtifactsVersionBar — context selector UI",
+      "status": "pending",
+      "description": "**Goal:** `ArtifactsVersionBar` replaces the static OBS badge with a context-aware `<select>` dropdown (multiple contexts) or plain badge (single context).\n\n**Files:**\n- Modify: `frontend/src/components/ArtifactsVersionBar.vue`\n\n**Acceptance Criteria:**\n- [ ] `obsRoot` prop removed; `contexts: Context[]` and `selectedContext: Context` added\n- [ ] `update:context` emit declared with payload type `Context`\n- [ ] When `contexts.length <= 1` renders `<code class=\"obs-badge\">`\n- [ ] When `contexts.length > 1` renders `<select class=\"context-select\">`\n- [ ] `.context-select` CSS uses font-mono, bg-muted, no border\n\n**Verify:** `cd frontend && npx vue-tsc --noEmit` → exits 0 (after Task 4)\n\n```json:metadata\n{\"files\":[\"frontend/src/components/ArtifactsVersionBar.vue\"],\"verifyCommand\":\"cd frontend && npx vue-tsc --noEmit\",\"acceptanceCriteria\":[\"obsRoot prop removed, contexts and selectedContext added\",\"update:context emit declared\",\"conditional badge vs select rendering\",\"context-select CSS styled with font-mono and bg-muted\"],\"modelTier\":\"mechanical\"}\n```"
+    },
+    {
+      "id": 122,
+      "subject": "Task 4: ArtifactsPanel self-fetch + App.vue wiring",
+      "status": "pending",
+      "blockedBy": [120, 121],
+      "description": "**Goal:** `ArtifactsPanel` manages its own context state and fetches packages independently. `App.vue` passes only `prGroups`.\n\n**Files:**\n- Modify: `frontend/src/components/ArtifactsPanel.vue`\n- Modify: `frontend/src/App.vue`\n\n**Acceptance Criteria:**\n- [ ] `ArtifactsPanel` props are `{ prGroups: PRGroup[] }` only\n- [ ] `artifactsContexts` returns `[PPG_CONTEXT, RELEASES_CONTEXT, ...prContexts]`\n- [ ] `availableVersions` derived from packages using prefix depth\n- [ ] `fetchPackages(ctx)` called on mount and context change\n- [ ] `fetchRepos(version)` URL selected by `selectedContext.apiBase` prefix\n- [ ] `watch(localVersion)` re-fetches repos on version change\n- [ ] `App.vue` passes `:pr-groups` and removes old props\n- [ ] `npx vue-tsc --noEmit` passes\n\n**Verify:** `cd frontend && npx vue-tsc --noEmit` → exits 0\n\n```json:metadata\n{\"files\":[\"frontend/src/components/ArtifactsPanel.vue\",\"frontend/src/App.vue\"],\"verifyCommand\":\"cd frontend && npx vue-tsc --noEmit\",\"acceptanceCriteria\":[\"ArtifactsPanel props are prGroups only\",\"artifactsContexts includes PPG Releases PR contexts\",\"availableVersions derived from packages by prefix depth\",\"fetchPackages called on mount and context change\",\"fetchRepos URL selected by context apiBase\",\"App.vue passes pr-groups removes old props\",\"vue-tsc passes\"],\"modelTier\":\"standard\"}\n```"
+    }
+  ],
+  "lastUpdated": "2026-06-17T00:00:00Z"
+}
