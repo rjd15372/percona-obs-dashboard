@@ -237,3 +237,168 @@ func TestRepoPublishStates(t *testing.T) {
 		t.Errorf("expected building for Ubuntu_24.04/aarch64, got %q", states["Ubuntu_24.04/aarch64"])
 	}
 }
+
+func TestPackageIsContainer(t *testing.T) {
+	tests := []struct {
+		name     string
+		xml      string
+		expected bool
+	}{
+		{
+			name:     "dockerfile",
+			xml:      `<sourceinfo><filename>Dockerfile</filename><filename>config.sh</filename></sourceinfo>`,
+			expected: true,
+		},
+		{
+			name:     "kiwi",
+			xml:      `<sourceinfo><filename>percona-distribution-postgresql.kiwi</filename></sourceinfo>`,
+			expected: true,
+		},
+		{
+			name:     "rpm spec",
+			xml:      `<sourceinfo><filename>percona-pg_tde.spec</filename></sourceinfo>`,
+			expected: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Write([]byte(tc.xml))
+			}))
+			defer srv.Close()
+			c := NewClient(srv.URL, "u", "p")
+			got, err := c.PackageIsContainer(context.Background(), "isv:percona:ppg:17", "mypkg")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tc.expected {
+				t.Errorf("expected %v, got %v", tc.expected, got)
+			}
+		})
+	}
+}
+
+func TestPackageVersionResult(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("view") != "versrel" {
+			http.Error(w, "bad view", http.StatusBadRequest)
+			return
+		}
+		w.Write([]byte(`<resultlist>
+			<result repository="UBI_9" arch="x86_64" state="published">
+				<status package="percona-pg_tde" code="succeeded" versrel="17.5-1"/>
+			</result>
+			<result repository="UBI_9" arch="aarch64" state="published">
+				<status package="percona-pg_tde" code="succeeded" versrel="17.5-1"/>
+			</result>
+		</resultlist>`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "u", "p")
+	versrel, err := c.PackageVersionResult(context.Background(), "isv:percona:ppg:17", "percona-pg_tde")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if versrel != "17.5-1" {
+		t.Errorf("expected %q, got %q", "17.5-1", versrel)
+	}
+}
+
+func TestPackageVersionResultEmpty(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<resultlist>
+			<result repository="UBI_9" arch="x86_64" state="building">
+				<status package="mypkg" code="building"/>
+			</result>
+		</resultlist>`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "u", "p")
+	versrel, err := c.PackageVersionResult(context.Background(), "isv:percona:ppg:17", "mypkg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if versrel != "" {
+		t.Errorf("expected empty string for unbuilt package, got %q", versrel)
+	}
+}
+
+func TestPackageContainerInfoFilename(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<binarylist>
+			<binary filename="percona-distribution-postgresql-18.4-1.x86_64-1.7.tar" size="305101312" mtime="1781559533"/>
+			<binary filename="percona-distribution-postgresql.x86_64-1.7.containerinfo" size="1234" mtime="1781559533"/>
+		</binarylist>`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "u", "p")
+	filename, err := c.PackageContainerInfoFilename(context.Background(),
+		"isv:percona:ppg:17:containers:ubi8", "images", "x86_64", "percona-distribution-postgresql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filename != "percona-distribution-postgresql.x86_64-1.7.containerinfo" {
+		t.Errorf("unexpected filename: %q", filename)
+	}
+}
+
+func TestPackageContainerInfoFilenameAbsent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<binarylist></binarylist>`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "u", "p")
+	filename, err := c.PackageContainerInfoFilename(context.Background(), "proj", "repo", "arch", "pkg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filename != "" {
+		t.Errorf("expected empty, got %q", filename)
+	}
+}
+
+func TestPackageContainerTags(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{
+			"version": "18.4-1",
+			"tags": [
+				"percona-distribution-postgresql:18.4-1-1.7",
+				"percona-distribution-postgresql:18.4-1",
+				"percona-distribution-postgresql:18.4",
+				"percona-distribution-postgresql:18"
+			]
+		}`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "u", "p")
+	tag, err := c.PackageContainerTags(context.Background(),
+		"proj", "images", "x86_64", "pkg", "pkg.containerinfo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tag != "18.4-1-1.7" {
+		t.Errorf("expected %q, got %q", "18.4-1-1.7", tag)
+	}
+}
+
+func TestPackageContainerTagsEmpty(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"tags": []}`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "u", "p")
+	tag, err := c.PackageContainerTags(context.Background(), "proj", "repo", "arch", "pkg", "file.containerinfo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tag != "" {
+		t.Errorf("expected empty, got %q", tag)
+	}
+}
