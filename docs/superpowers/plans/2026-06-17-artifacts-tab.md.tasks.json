@@ -1,0 +1,68 @@
+{
+  "planPath": "docs/superpowers/plans/2026-06-17-artifacts-tab.md",
+  "tasks": [
+    {
+      "id": 110,
+      "subject": "Task 1: Backend — ContainerTags in model, DB schema, and store",
+      "status": "pending",
+      "description": "**Goal:** Add `ContainerTags []string` to the `Package` model, persist it as JSON in SQLite, and verify it round-trips correctly.\n\n**Files:**\n- Modify: `backend/internal/model/types.go`\n- Modify: `backend/internal/store/db.go`\n- Modify: `backend/internal/store/packages.go`\n- Test: `backend/internal/store/packages_test.go`\n\n**Acceptance Criteria:**\n- [ ] `model.Package` has `ContainerTags []string` with JSON tag `container_tags,omitempty`\n- [ ] `db.go` schema includes `container_tags TEXT NOT NULL DEFAULT '[]'`\n- [ ] Additive migration `ALTER TABLE packages ADD COLUMN container_tags TEXT NOT NULL DEFAULT '[]'` is present\n- [ ] `migrateIsContainerNullable` includes `container_tags` in both the `packages_new` CREATE TABLE and the INSERT … SELECT\n- [ ] `UpsertPackageState` marshals `p.ContainerTags` to JSON; `scanPackages` unmarshals it back\n- [ ] `TestContainerTagsRoundtrip` passes\n\n**Verify:** `cd /home/rdias/Work/percona-obs-dashboard/backend && go test ./internal/store/... -v`\n\n```json:metadata\n{\"files\": [\"backend/internal/model/types.go\", \"backend/internal/store/db.go\", \"backend/internal/store/packages.go\", \"backend/internal/store/packages_test.go\"], \"verifyCommand\": \"cd /home/rdias/Work/percona-obs-dashboard/backend && go test ./internal/store/... -v\", \"acceptanceCriteria\": [\"model.Package has ContainerTags []string\", \"db.go schema includes container_tags column\", \"Additive migration present\", \"migrateIsContainerNullable includes container_tags\", \"UpsertPackageState marshals ContainerTags\", \"TestContainerTagsRoundtrip passes\"], \"modelTier\": \"standard\"}\n```"
+    },
+    {
+      "id": 111,
+      "subject": "Task 2: Backend — ContainerTagsTask stores all tags",
+      "status": "pending",
+      "blockedBy": [110],
+      "description": "**Goal:** Change `client.PackageContainerTags` to return `[]string` and update `ContainerTagsTask` to assign the full list to `pkg.ContainerTags`.\n\n**Files:**\n- Modify: `backend/internal/obs/client.go`\n- Modify: `backend/internal/obs/tasks.go`\n- Test: `backend/internal/obs/tasks_test.go`\n\n**Acceptance Criteria:**\n- [ ] `client.PackageContainerTags` signature is `(...) ([]string, error)`\n- [ ] Strips image-name prefix from every tag\n- [ ] `ContainerTagsTask.Run` assigns `pkg.ContainerTags = tags`\n- [ ] `TestContainerTagsTask` asserts `len(pkg.ContainerTags) == 2`\n\n**Verify:** `cd /home/rdias/Work/percona-obs-dashboard/backend && go test ./internal/obs/... -v`\n\n```json:metadata\n{\"files\": [\"backend/internal/obs/client.go\", \"backend/internal/obs/tasks.go\", \"backend/internal/obs/tasks_test.go\"], \"verifyCommand\": \"cd /home/rdias/Work/percona-obs-dashboard/backend && go test ./internal/obs/... -v\", \"acceptanceCriteria\": [\"PackageContainerTags returns []string\", \"ContainerTagsTask sets pkg.ContainerTags\", \"TestContainerTagsTask passes\"], \"modelTier\": \"standard\"}\n```"
+    },
+    {
+      "id": 112,
+      "subject": "Task 3: Frontend — api.ts type updates",
+      "status": "pending",
+      "blockedBy": [110],
+      "description": "**Goal:** Add `container_tags?: string[]` to `Package` and `published?: boolean` to `Target`.\n\n**Files:**\n- Modify: `frontend/src/types/api.ts`\n\n**Acceptance Criteria:**\n- [ ] `Package` has `container_tags?: string[]`\n- [ ] `Target` has `published?: boolean`\n- [ ] `vue-tsc --noEmit` exits 0\n\n**Verify:** `cd /home/rdias/Work/percona-obs-dashboard/frontend && npx vue-tsc --noEmit`\n\n```json:metadata\n{\"files\": [\"frontend/src/types/api.ts\"], \"verifyCommand\": \"cd /home/rdias/Work/percona-obs-dashboard/frontend && npx vue-tsc --noEmit\", \"acceptanceCriteria\": [\"Package has container_tags\", \"Target has published\", \"vue-tsc exits 0\"], \"modelTier\": \"mechanical\"}\n```"
+    },
+    {
+      "id": 113,
+      "subject": "Task 4: Frontend — useArtifacts composable",
+      "status": "pending",
+      "blockedBy": [112],
+      "description": "**Goal:** Create `useArtifacts.ts` with REPOS, packageRows, containerImages, deriveBaseOs.\n\n**Files:**\n- Create: `frontend/src/composables/useArtifacts.ts`\n\n**Acceptance Criteria:**\n- [ ] Exports REPOS with 6 entries: el9, el8, deb12, deb11, ub2404, ub2204\n- [ ] packageRows filters by scope and repo+arch\n- [ ] containerImages maps container packages\n- [ ] Uses MaybeRef for arguments\n- [ ] vue-tsc exits 0\n\n**Verify:** `cd /home/rdias/Work/percona-obs-dashboard/frontend && npx vue-tsc --noEmit`\n\n```json:metadata\n{\"files\": [\"frontend/src/composables/useArtifacts.ts\"], \"verifyCommand\": \"cd /home/rdias/Work/percona-obs-dashboard/frontend && npx vue-tsc --noEmit\", \"acceptanceCriteria\": [\"REPOS has 6 entries\", \"packageRows filters correctly\", \"containerImages maps correctly\", \"vue-tsc exits 0\"], \"modelTier\": \"standard\"}\n```"
+    },
+    {
+      "id": 114,
+      "subject": "Task 5: Frontend — AppHeader tab switcher",
+      "status": "pending",
+      "blockedBy": [112],
+      "description": "**Goal:** Add mainTab prop and borderless pill-group switcher to AppHeader.\n\n**Files:**\n- Modify: `frontend/src/components/AppHeader.vue`\n\n**Acceptance Criteria:**\n- [ ] Accepts mainTab prop\n- [ ] Emits update:main-tab\n- [ ] Active pill: bg-card + brand-purple + box-shadow, no border\n- [ ] Inactive pill: transparent + text-muted, no border\n- [ ] Wrapper: bg-muted, padding 3px, border-radius 11px\n- [ ] vue-tsc exits 0\n\n**Verify:** `cd /home/rdias/Work/percona-obs-dashboard/frontend && npx vue-tsc --noEmit`\n\n```json:metadata\n{\"files\": [\"frontend/src/components/AppHeader.vue\"], \"verifyCommand\": \"cd /home/rdias/Work/percona-obs-dashboard/frontend && npx vue-tsc --noEmit\", \"acceptanceCriteria\": [\"mainTab prop accepted\", \"update:main-tab emitted\", \"Pill styles correct\", \"vue-tsc exits 0\"], \"modelTier\": \"mechanical\"}\n```"
+    },
+    {
+      "id": 115,
+      "subject": "Task 6: Frontend — ArtifactsVersionBar component",
+      "status": "pending",
+      "blockedBy": [112],
+      "description": "**Goal:** Create ArtifactsVersionBar.vue with PG badge, version pills (both bordered), OBS chip.\n\n**Files:**\n- Create: `frontend/src/components/ArtifactsVersionBar.vue`\n\n**Acceptance Criteria:**\n- [ ] Props: version, availableVersions, obsRoot\n- [ ] Emits update:version\n- [ ] Active pill: brand-purple bg + border\n- [ ] Inactive pill: bg-card bg + border:var(--border)\n- [ ] OBS chip: bg-muted + font-mono\n- [ ] vue-tsc exits 0\n\n**Verify:** `cd /home/rdias/Work/percona-obs-dashboard/frontend && npx vue-tsc --noEmit`\n\n```json:metadata\n{\"files\": [\"frontend/src/components/ArtifactsVersionBar.vue\"], \"verifyCommand\": \"cd /home/rdias/Work/percona-obs-dashboard/frontend && npx vue-tsc --noEmit\", \"acceptanceCriteria\": [\"Props and emit correct\", \"Both pill states have borders\", \"OBS chip correct\", \"vue-tsc exits 0\"], \"modelTier\": \"mechanical\"}\n```"
+    },
+    {
+      "id": 116,
+      "subject": "Task 7: Frontend — PackagesSubTab component",
+      "status": "pending",
+      "blockedBy": [113],
+      "description": "**Goal:** Create PackagesSubTab.vue with distro sidebar, combined header+snippet card, and package list card.\n\n**Files:**\n- Create: `frontend/src/components/PackagesSubTab.vue`\n\n**Acceptance Criteria:**\n- [ ] Distro sidebar with RPM/DEB groups and correct label borders\n- [ ] Active row: brand-purple-tint bg\n- [ ] Arch selector: borderless pill style (bg-muted wrapper, bg-card active + box-shadow)\n- [ ] Repo+snippet ONE card (border-radius 14px)\n- [ ] pre block: bg-card-2\n- [ ] Copy shows checkmark when copiedKey matches\n- [ ] Download link disabled when not succeeded\n- [ ] vue-tsc exits 0\n\n**Verify:** `cd /home/rdias/Work/percona-obs-dashboard/frontend && npx vue-tsc --noEmit`\n\n```json:metadata\n{\"files\": [\"frontend/src/components/PackagesSubTab.vue\"], \"verifyCommand\": \"cd /home/rdias/Work/percona-obs-dashboard/frontend && npx vue-tsc --noEmit\", \"acceptanceCriteria\": [\"Sidebar RPM/DEB groups\", \"Active row brand-purple-tint\", \"Arch selector borderless\", \"One combined card for header+snippet\", \"pre uses bg-card-2\", \"vue-tsc exits 0\"], \"modelTier\": \"standard\"}\n```"
+    },
+    {
+      "id": 117,
+      "subject": "Task 8: Frontend — ContainersSubTab component",
+      "status": "pending",
+      "blockedBy": [113],
+      "description": "**Goal:** Create ContainersSubTab.vue with container image card grid.\n\n**Files:**\n- Create: `frontend/src/components/ContainersSubTab.vue`\n\n**Acceptance Criteria:**\n- [ ] Grid: repeat(auto-fill, minmax(340px, 1fr))\n- [ ] Section 2 Registry: bg-card-2, padding 10px 18px\n- [ ] Section 3 tags[0]: brand-purple-tint, bold\n- [ ] Section 4 Docker pull code: bg-card-2\n- [ ] Container icon: box/shelf SVG\n- [ ] Copy shows checkmark when copiedKey === image.id\n- [ ] vue-tsc exits 0\n\n**Verify:** `cd /home/rdias/Work/percona-obs-dashboard/frontend && npx vue-tsc --noEmit`\n\n```json:metadata\n{\"files\": [\"frontend/src/components/ContainersSubTab.vue\"], \"verifyCommand\": \"cd /home/rdias/Work/percona-obs-dashboard/frontend && npx vue-tsc --noEmit\", \"acceptanceCriteria\": [\"Grid layout correct\", \"Registry bg-card-2\", \"tags[0] brand-purple-tint\", \"Docker pull bg-card-2\", \"Box/shelf SVG icon\", \"vue-tsc exits 0\"], \"modelTier\": \"mechanical\"}\n```"
+    },
+    {
+      "id": 118,
+      "subject": "Task 9: Frontend — ArtifactsPanel + App.vue wiring",
+      "status": "pending",
+      "blockedBy": [113, 114, 115, 116, 117],
+      "description": "**Goal:** Create ArtifactsPanel.vue and wire everything in App.vue.\n\n**Files:**\n- Create: `frontend/src/components/ArtifactsPanel.vue`\n- Modify: `frontend/src/App.vue`\n\n**Acceptance Criteria:**\n- [ ] ArtifactsPanel manages artifactsTab, artRepo (el9), artArch (x86_64), copiedKey\n- [ ] copy() reverts after 2s\n- [ ] obsRoot computed: isv:percona:ppg:{version}\n- [ ] Sub-tab switcher uses borderless pill style\n- [ ] App.vue mainTab defaults to 'board'\n- [ ] AppHeader wired with mainTab prop and emit\n- [ ] Board shown when mainTab=board; ArtifactsPanel when mainTab=artifacts\n- [ ] ArtifactsPanel receives rawPackages\n- [ ] vue-tsc exits 0; tab switching works in browser\n\n**Verify:** `cd /home/rdias/Work/percona-obs-dashboard/frontend && npx vue-tsc --noEmit`\n\n```json:metadata\n{\"files\": [\"frontend/src/components/ArtifactsPanel.vue\", \"frontend/src/App.vue\"], \"verifyCommand\": \"cd /home/rdias/Work/percona-obs-dashboard/frontend && npx vue-tsc --noEmit\", \"acceptanceCriteria\": [\"ArtifactsPanel local state correct\", \"copy() reverts after 2s\", \"App.vue mainTab wiring correct\", \"rawPackages passed to ArtifactsPanel\", \"vue-tsc exits 0\"], \"modelTier\": \"standard\"}\n```"
+    }
+  ],
+  "lastUpdated": "2026-06-17T13:50:48Z"
+}
