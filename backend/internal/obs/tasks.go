@@ -111,3 +111,68 @@ func (t BuildReasonTask) Run(ctx context.Context, client *Client, pkg *model.Pac
 	}
 	return nil
 }
+
+// PackageTypeTask detects whether a package produces a container image by
+// inspecting its source files. Sets pkg.IsContainer accordingly.
+// Errors are logged and treated as non-fatal to preserve the existing value.
+type PackageTypeTask struct{}
+
+func (t PackageTypeTask) Run(ctx context.Context, client *Client, pkg *model.Package) error {
+	isContainer, err := client.PackageIsContainer(ctx, pkg.Project, pkg.Name)
+	if err != nil {
+		slog.Warn("obs: package type detection", "pkg", pkg.Name, "err", err)
+		return nil
+	}
+	pkg.IsContainer = isContainer
+	return nil
+}
+
+// VersionTask fetches the latest versrel (e.g. "17.5-1") for RPM/DEB packages
+// from the OBS _result?view=versrel endpoint. Skipped for container packages.
+type VersionTask struct{}
+
+func (t VersionTask) Run(ctx context.Context, client *Client, pkg *model.Package) error {
+	if pkg.IsContainer {
+		return nil
+	}
+	versrel, err := client.PackageVersionResult(ctx, pkg.Project, pkg.Name)
+	if err != nil {
+		slog.Warn("obs: version result", "pkg", pkg.Name, "err", err)
+		return nil
+	}
+	if versrel == "" || versrel == pkg.Version {
+		return nil
+	}
+	pkg.Version = versrel
+	return nil
+}
+
+// ContainerTagsTask fetches the most specific image tag (e.g. "18.4-1-1.7")
+// from the .containerinfo binary artifact. Skipped for non-container packages
+// and packages with no targets.
+type ContainerTagsTask struct{}
+
+func (t ContainerTagsTask) Run(ctx context.Context, client *Client, pkg *model.Package) error {
+	if !pkg.IsContainer || len(pkg.Targets) == 0 {
+		return nil
+	}
+	target := pkg.Targets[0]
+	filename, err := client.PackageContainerInfoFilename(ctx, pkg.Project, target.Repo, target.Arch, pkg.Name)
+	if err != nil {
+		slog.Warn("obs: container info filename", "pkg", pkg.Name, "err", err)
+		return nil
+	}
+	if filename == "" {
+		return nil
+	}
+	tag, err := client.PackageContainerTags(ctx, pkg.Project, target.Repo, target.Arch, pkg.Name, filename)
+	if err != nil {
+		slog.Warn("obs: container tags", "pkg", pkg.Name, "err", err)
+		return nil
+	}
+	if tag == "" || tag == pkg.Version {
+		return nil
+	}
+	pkg.Version = tag
+	return nil
+}

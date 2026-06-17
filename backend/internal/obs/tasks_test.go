@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -149,5 +150,165 @@ func TestBuildReasonTask(t *testing.T) {
 	}
 	if pkg.Targets[1].BuildReason != "" {
 		t.Error("succeeded target should have no BuildReason")
+	}
+}
+
+func TestPackageTypeTask(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<sourceinfo><filename>Dockerfile</filename></sourceinfo>`)
+	}))
+	defer ts.Close()
+
+	c := obs.NewClient(ts.URL, "u", "p")
+	pkg := &model.Package{
+		Project:     "isv:percona:ppg:17:containers",
+		Name:        "percona-distribution-postgresql",
+		Scope:       model.ScopeContainer,
+		RollupState: model.RollupSucceeded,
+		UpdatedAt:   time.Now().UTC(),
+	}
+
+	task := obs.PackageTypeTask{}
+	if err := task.Run(context.Background(), c, pkg); err != nil {
+		t.Fatal(err)
+	}
+	if !pkg.IsContainer {
+		t.Error("expected IsContainer=true for Dockerfile package")
+	}
+}
+
+func TestPackageTypeTaskRPM(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<sourceinfo><filename>percona-pg_tde.spec</filename></sourceinfo>`)
+	}))
+	defer ts.Close()
+
+	c := obs.NewClient(ts.URL, "u", "p")
+	pkg := &model.Package{
+		Project:     "isv:percona:ppg:17",
+		Name:        "percona-pg_tde",
+		Scope:       model.ScopeVersion,
+		RollupState: model.RollupSucceeded,
+		IsContainer: true, // should be reset to false
+		UpdatedAt:   time.Now().UTC(),
+	}
+
+	task := obs.PackageTypeTask{}
+	if err := task.Run(context.Background(), c, pkg); err != nil {
+		t.Fatal(err)
+	}
+	if pkg.IsContainer {
+		t.Error("expected IsContainer=false for spec-only package")
+	}
+}
+
+func TestVersionTask(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<resultlist>
+			<result repository="UBI_9" arch="x86_64" state="published">
+				<status package="percona-pg_tde" code="succeeded" versrel="17.5-1"/>
+			</result>
+		</resultlist>`)
+	}))
+	defer ts.Close()
+
+	c := obs.NewClient(ts.URL, "u", "p")
+	pkg := &model.Package{
+		Project:     "isv:percona:ppg:17",
+		Name:        "percona-pg_tde",
+		Scope:       model.ScopeVersion,
+		RollupState: model.RollupSucceeded,
+		IsContainer: false,
+		UpdatedAt:   time.Now().UTC(),
+	}
+
+	task := obs.VersionTask{}
+	if err := task.Run(context.Background(), c, pkg); err != nil {
+		t.Fatal(err)
+	}
+	if pkg.Version != "17.5-1" {
+		t.Errorf("expected %q, got %q", "17.5-1", pkg.Version)
+	}
+}
+
+func TestVersionTaskSkipsContainers(t *testing.T) {
+	called := false
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		fmt.Fprint(w, `<resultlist></resultlist>`)
+	}))
+	defer ts.Close()
+
+	c := obs.NewClient(ts.URL, "u", "p")
+	pkg := &model.Package{
+		Project:     "isv:percona",
+		Name:        "mycontainer",
+		IsContainer: true,
+		UpdatedAt:   time.Now().UTC(),
+	}
+
+	task := obs.VersionTask{}
+	if err := task.Run(context.Background(), c, pkg); err != nil {
+		t.Fatal(err)
+	}
+	if called {
+		t.Error("VersionTask should not call OBS for container packages")
+	}
+}
+
+func TestContainerTagsTask(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ".containerinfo") {
+			fmt.Fprint(w, `{"tags":["percona-distribution-postgresql:18.4-1-1.7","percona-distribution-postgresql:18.4-1"]}`)
+		} else {
+			fmt.Fprint(w, `<binarylist>
+				<binary filename="percona-distribution-postgresql.x86_64-1.7.containerinfo" size="1" mtime="1"/>
+			</binarylist>`)
+		}
+	}))
+	defer ts.Close()
+
+	c := obs.NewClient(ts.URL, "u", "p")
+	pkg := &model.Package{
+		Project:     "isv:percona:ppg:17:containers",
+		Name:        "percona-distribution-postgresql",
+		Scope:       model.ScopeContainer,
+		RollupState: model.RollupSucceeded,
+		IsContainer: true,
+		Targets:     []model.Target{{Repo: "images", Arch: "x86_64", State: "succeeded"}},
+		UpdatedAt:   time.Now().UTC(),
+	}
+
+	task := obs.ContainerTagsTask{}
+	if err := task.Run(context.Background(), c, pkg); err != nil {
+		t.Fatal(err)
+	}
+	if pkg.Version != "18.4-1-1.7" {
+		t.Errorf("expected %q, got %q", "18.4-1-1.7", pkg.Version)
+	}
+}
+
+func TestContainerTagsTaskSkipsNonContainers(t *testing.T) {
+	called := false
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	}))
+	defer ts.Close()
+
+	c := obs.NewClient(ts.URL, "u", "p")
+	pkg := &model.Package{
+		Project:     "isv:percona",
+		Name:        "mypkg",
+		IsContainer: false,
+		Targets:     []model.Target{{Repo: "UBI_9", Arch: "x86_64", State: "succeeded"}},
+		UpdatedAt:   time.Now().UTC(),
+	}
+
+	task := obs.ContainerTagsTask{}
+	if err := task.Run(context.Background(), c, pkg); err != nil {
+		t.Fatal(err)
+	}
+	if called {
+		t.Error("ContainerTagsTask should not call OBS for non-container packages")
 	}
 }
