@@ -22,6 +22,7 @@ export interface Target {
   blocked_by?: string
   build_reason?: string
   build_reason_packages?: string[]
+  published?: boolean
 }
 
 export interface Package {
@@ -37,6 +38,7 @@ export interface Package {
   targets: Target[]
   updated_at: string // ISO 8601
   state_changed_at?: string // ISO 8601; absent when NULL
+  container_tags?: string[]
 }
 
 export interface PRGroup {
