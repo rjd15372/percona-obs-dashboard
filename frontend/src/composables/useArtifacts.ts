@@ -51,22 +51,22 @@ export function useArtifacts(
   version: MaybeRef<string>,
   selectedRepo: MaybeRef<RepoInfo | null>,
   artArch: MaybeRef<string>,
+  contextPrefix: MaybeRef<string>,
 ) {
   const packageRows = computed<PackageRow[]>(() => {
     const pkgs = toValue(packages)
     const ver = toValue(version)
     const repo = toValue(selectedRepo)
     const arch = toValue(artArch)
+    const prefix = toValue(contextPrefix)
 
     if (!repo) return []
 
-    const exactProject = `isv:percona:ppg:${ver}`
+    const exactProject = `${prefix}:${ver}`
     const rows: PackageRow[] = []
     for (const pkg of pkgs) {
-      // Only packages from the exact selected project — no subprojects, no common
       if (pkg.project !== exactProject) continue
 
-      // find a matching target for the selected repo × arch
       const target = pkg.targets?.find(
         (t: Target) => t.repo === repo.obs && t.arch === arch,
       )
@@ -89,16 +89,19 @@ export function useArtifacts(
   const containerImages = computed<ContainerImage[]>(() => {
     const pkgs = toValue(packages)
     const ver = toValue(version)
+    const prefix = toValue(contextPrefix)
 
     return pkgs
-      .filter(pkg => pkg.scope === 'container' && pkg.is_container !== false && pkg.project.includes(':ppg:' + ver + ':'))
+      .filter(pkg =>
+        pkg.scope === 'container' &&
+        pkg.is_container !== false &&
+        pkg.project.startsWith(`${prefix}:${ver}:`)
+      )
       .map(pkg => {
         const tags = pkg.container_tags ?? []
         const baseOs = deriveBaseOs(pkg.project)
         const published = pkg.targets?.some((t: Target) => t.published === true) ?? false
 
-        // project "isv:percona:ppg:17:containers:ubi8"
-        // → registry path "isv/percona/ppg/17/containers/ubi8"
         const registryPath = pkg.project.split(':').join('/')
         const registry = `registry.opensuse.org/${registryPath}/images/${pkg.name}`
 
