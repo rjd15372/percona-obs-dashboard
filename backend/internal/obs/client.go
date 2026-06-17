@@ -375,9 +375,10 @@ func (c *Client) PackageBuildReason(ctx context.Context, project, repo, arch, pk
 
 // PackageIsContainer returns true if the package's source contains a Dockerfile
 // or a .kiwi file, indicating it produces a container image.
-// A 404 response means the package has no images repository and is not a container.
+// Uses /source/{project}/{package}?view=info which returns a <sourceinfo>
+// element listing all source filenames.
 func (c *Client) PackageIsContainer(ctx context.Context, project, pkg string) (bool, error) {
-	path := fmt.Sprintf("/source/%s/%s?view=info&repository=images",
+	path := fmt.Sprintf("/source/%s/%s?view=info",
 		url.PathEscape(project), url.PathEscape(pkg))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil)
 	if err != nil {
@@ -435,6 +436,52 @@ func (c *Client) PackageVersionResult(ctx context.Context, project, pkg string) 
 		}
 	}
 	return "", nil
+}
+
+// isDistributableBinary returns true for binary files that users can install:
+// .rpm (excluding .src.rpm and debuginfo/debugsource) and .deb (excluding dbgsym/dbg).
+func isDistributableBinary(filename string) bool {
+	lower := strings.ToLower(filename)
+	switch {
+	case strings.HasSuffix(lower, ".src.rpm"):
+		return false
+	case strings.HasSuffix(lower, ".rpm"):
+		return !strings.Contains(lower, "-debuginfo") && !strings.Contains(lower, "-debugsource")
+	case strings.HasSuffix(lower, ".deb"):
+		return !strings.Contains(lower, "-dbgsym_") && !strings.Contains(lower, "-dbg_")
+	default:
+		return false
+	}
+}
+
+// PackageBinaries returns the distributable binary filenames for a package build target.
+// Source packages, debug info/symbols, and non-package artifacts are excluded.
+func (c *Client) PackageBinaries(ctx context.Context, project, repo, arch, pkg string) ([]string, error) {
+	path := fmt.Sprintf("/build/%s/%s/%s/%s",
+		url.PathEscape(project), url.PathEscape(repo),
+		url.PathEscape(arch), url.PathEscape(pkg))
+	resp, err := c.get(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var listing struct {
+		Binaries []struct {
+			Filename string `xml:"filename,attr"`
+		} `xml:"binary"`
+	}
+	if err := xml.NewDecoder(resp.Body).Decode(&listing); err != nil {
+		return nil, fmt.Errorf("parse binary list: %w", err)
+	}
+
+	var out []string
+	for _, b := range listing.Binaries {
+		if isDistributableBinary(b.Filename) {
+			out = append(out, b.Filename)
+		}
+	}
+	return out, nil
 }
 
 // PackageContainerInfoFilename returns the filename of the .containerinfo binary

@@ -49,7 +49,7 @@ func UpsertPackageState(db *sql.DB, p *model.Package, now time.Time) error {
 			trigger_what=excluded.trigger_what, trigger_kind=excluded.trigger_kind,
 			trigger_at=excluded.trigger_at, targets_json=excluded.targets_json,
 			updated_at=excluded.updated_at,
-			is_container=excluded.is_container,
+			is_container=CASE WHEN excluded.is_container IS NOT NULL THEN excluded.is_container ELSE is_container END,
 			version=excluded.version,
 			container_tags=excluded.container_tags,
 			state_changed_at = CASE
