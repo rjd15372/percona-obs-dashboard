@@ -65,7 +65,14 @@ export function useArtifacts(
     const exactProject = `${prefix}:${ver}`
     const rows: PackageRow[] = []
     for (const pkg of pkgs) {
-      if (pkg.project !== exactProject) continue
+      // Accept packages at the exact version project OR in sub-projects beneath it
+      // (e.g. PR packages live at isv:percona:PR:pr-33:ppg:18:containers:ubi9).
+      // Confirmed container images (is_container: true) are excluded — they belong
+      // in the Container Images tab, not here.
+      const inProject =
+        pkg.project === exactProject ||
+        pkg.project.startsWith(exactProject + ':')
+      if (!inProject || pkg.is_container === true) continue
 
       const target = pkg.targets?.find(
         (t: Target) => t.repo === repo.obs && t.arch === arch,

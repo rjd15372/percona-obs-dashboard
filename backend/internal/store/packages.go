@@ -143,9 +143,12 @@ func scanPackages(rows *sql.Rows) ([]*model.Package, error) {
 // (the "repo" field from targets_json) for non-container packages matching the
 // given project prefix.
 func QueryDistinctRepos(db *sql.DB, projectPrefix string) ([]string, error) {
+	// Exclude confirmed container images (is_container=1) so that their build
+	// repos aren't returned as package repos. Packages in :containers: subprojects
+	// with is_container=0 (e.g. PR builds) are intentionally included.
 	rows, err := db.Query(
 		`SELECT targets_json FROM packages
-		 WHERE project LIKE ? AND project NOT LIKE '%:containers:%'`,
+		 WHERE project LIKE ? AND (is_container IS NULL OR is_container = 0)`,
 		projectPrefix+"%",
 	)
 	if err != nil {
