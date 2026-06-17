@@ -173,10 +173,11 @@ watch(availableVersions, (versions) => {
   }
 })
 
-// Re-fetch repos when version changes
+// Re-fetch repos when version changes; immediate so repos load on mount
+// even when localVersion default ('17') matches the first available version
 watch(localVersion, (v) => {
   fetchRepos(v)
-})
+}, { immediate: true })
 
 onMounted(() => {
   fetchPackages(selectedContext.value)
