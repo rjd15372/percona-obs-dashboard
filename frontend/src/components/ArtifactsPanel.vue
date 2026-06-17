@@ -3,10 +3,12 @@
     <ArtifactsVersionBar
       :version="localVersion"
       :available-versions="availableVersions"
-      :obs-root="obsRoot"
+      :contexts="artifactsContexts"
+      :selected-context="selectedContext"
       :active-tab="artifactsTab"
       @update:version="onVersionChange"
       @update:tab="artifactsTab = $event"
+      @update:context="onContextChange"
     />
 
     <PackagesSubTab
@@ -32,8 +34,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import type { Package } from '../types/api'
+import { ref, computed, watch, onMounted } from 'vue'
+import type { Context, PRGroup } from '../types/api'
 import type { RepoInfo } from '../composables/useArtifacts'
 import { useArtifacts } from '../composables/useArtifacts'
 import ArtifactsVersionBar from './ArtifactsVersionBar.vue'
@@ -41,27 +43,115 @@ import PackagesSubTab from './PackagesSubTab.vue'
 import ContainersSubTab from './ContainersSubTab.vue'
 
 const props = defineProps<{
-  packages: Package[]
-  availableVersions: string[]
-  initialVersion?: string
+  prGroups: PRGroup[]
 }>()
 
-const localVersion = ref(props.initialVersion ?? props.availableVersions[0] ?? '17')
+// Fixed contexts
+const PPG_CONTEXT: Context = {
+  label: 'PPG',
+  apiBase: '/api/products/ppg',
+  prefix: 'isv:percona:ppg',
+}
+
+const RELEASES_CONTEXT: Context = {
+  label: 'Releases',
+  apiBase: '/api/releases/ppg',
+  prefix: 'isv:percona:ppg:releases',
+}
+
+// Derive PR contexts from prGroups
+const artifactsContexts = computed<Context[]>(() => {
+  const seen = new Set<string>()
+  const prContexts: Context[] = []
+
+  for (const group of props.prGroups) {
+    for (const pkg of group.packages) {
+      const parts = pkg.project.split(':')
+      const prIdx = parts.findIndex(p => p.toLowerCase() === 'pr')
+      if (prIdx < 0 || prIdx + 2 >= parts.length) continue
+      const prSegment = parts[prIdx + 1]   // "pr-92"
+      const subproject = parts[prIdx + 2]  // "ppg"
+      const key = `${prSegment}:${subproject}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      const prNum = prSegment.replace(/^pr-/i, '')
+      prContexts.push({
+        label: `PR #${prNum} · ${subproject}`,
+        apiBase: `/api/pr/${prSegment}/${subproject}`,
+        prefix: `isv:percona:PR:${prSegment}:${subproject}`,
+      })
+    }
+  }
+
+  prContexts.sort((a, b) => {
+    const na = parseInt(a.prefix.split(':')[3]?.replace(/^pr-/i, '') ?? '0')
+    const nb = parseInt(b.prefix.split(':')[3]?.replace(/^pr-/i, '') ?? '0')
+    return nb - na
+  })
+
+  return [PPG_CONTEXT, RELEASES_CONTEXT, ...prContexts]
+})
+
+// Context state
+const selectedContext = ref<Context>(PPG_CONTEXT)
+
+// Package state (self-fetched)
+const artifactsPackages = ref<import('../types/api').Package[]>([])
+const artifactsLoading = ref(false)
+
+// Version derived from fetched packages
+const availableVersions = computed<string[]>(() => {
+  const depth = selectedContext.value.prefix.split(':').length
+  const versions = new Set<string>()
+  for (const pkg of artifactsPackages.value) {
+    const parts = pkg.project.split(':')
+    const seg = parts[depth]
+    if (seg && /^\d+$/.test(seg)) {
+      versions.add(seg)
+    }
+  }
+  return [...versions].sort((a, b) => parseInt(b) - parseInt(a))
+})
+
+const localVersion = ref('17')
 const artifactsTab = ref<'packages' | 'containers'>('packages')
 const artRepoObs = ref<string>('')
 const artArch = ref<'x86_64' | 'aarch64'>('x86_64')
 const copiedKey = ref<string | null>(null)
 const repos = ref<RepoInfo[]>([])
 
-const obsRoot = computed(() => `isv:percona:ppg:${localVersion.value}`)
+const contextPrefix = computed(() => selectedContext.value.prefix)
 
 const selectedRepo = computed<RepoInfo | null>(
   () => repos.value.find(r => r.obs === artRepoObs.value) ?? null,
 )
 
-async function fetchRepos(version: string) {
+async function fetchPackages(ctx: Context) {
+  artifactsLoading.value = true
   try {
-    const res = await fetch(`/api/products/ppg/${version}/repos`)
+    const url = `${ctx.apiBase}/${localVersion.value}/packages`
+    const res = await fetch(url)
+    const data = await res.json()
+    artifactsPackages.value = Array.isArray(data) ? data : (data.packages ?? [])
+  } catch {
+    artifactsPackages.value = []
+  } finally {
+    artifactsLoading.value = false
+  }
+}
+
+async function fetchRepos(version: string) {
+  const ctx = selectedContext.value
+  let url: string
+  if (ctx.apiBase.startsWith('/api/products/')) {
+    url = `/api/products/ppg/${version}/repos`
+  } else if (ctx.apiBase.startsWith('/api/releases/')) {
+    url = `/api/releases/ppg/${version}/repos`
+  } else {
+    url = `${ctx.apiBase}/${version}/repos`
+  }
+  try {
+    const res = await fetch(url)
     const data = await res.json() as { rpm: { obs: string; name: string }[]; deb: { obs: string; name: string }[] }
     const next: RepoInfo[] = [
       ...data.rpm.map(r => ({ ...r, type: 'rpm' as const })),
@@ -76,20 +166,37 @@ async function fetchRepos(version: string) {
   }
 }
 
-function onVersionChange(v: string) {
-  localVersion.value = v
+// When available versions change, snap localVersion to the first one
+watch(availableVersions, (versions) => {
+  if (versions.length > 0) {
+    localVersion.value = versions[0]
+  }
+})
+
+// Re-fetch repos when version changes
+watch(localVersion, (v) => {
   fetchRepos(v)
+})
+
+onMounted(() => {
+  fetchPackages(selectedContext.value)
+})
+
+async function onContextChange(ctx: Context) {
+  selectedContext.value = ctx
+  await fetchPackages(ctx)
 }
 
-fetchRepos(localVersion.value)
-
-const packagesRef = computed(() => props.packages)
+function onVersionChange(v: string) {
+  localVersion.value = v
+}
 
 const { packageRows, containerImages } = useArtifacts(
-  packagesRef,
+  artifactsPackages,
   localVersion,
   selectedRepo,
   artArch,
+  contextPrefix,
 )
 
 let copyTimer: ReturnType<typeof setTimeout> | null = null

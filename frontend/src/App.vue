@@ -173,9 +173,7 @@ watch([windowMin, customFrom, customTo], () => refresh())
       </template>
       <ArtifactsPanel
         v-else
-        :packages="rawPackages"
-        :available-versions="availableVersions"
-        :initial-version="version || availableVersions[0] || '17'"
+        :pr-groups="prGroups"
       />
     </div>
   </div>
