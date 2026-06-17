@@ -86,9 +86,10 @@ export function useArtifacts(
 
   const containerImages = computed<ContainerImage[]>(() => {
     const pkgs = toValue(packages)
+    const ver = toValue(version)
 
     return pkgs
-      .filter(pkg => pkg.scope === 'container' && pkg.is_container !== false)
+      .filter(pkg => pkg.scope === 'container' && pkg.is_container !== false && pkg.project.includes(':ppg:' + ver + ':'))
       .map(pkg => {
         const tags = pkg.container_tags ?? []
         const baseOs = deriveBaseOs(pkg.project)
