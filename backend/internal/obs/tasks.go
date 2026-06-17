@@ -156,7 +156,7 @@ func (t ContainerTagsTask) Run(ctx context.Context, client *Client, pkg *model.P
 	if !pkg.IsContainer || len(pkg.Targets) == 0 {
 		return nil
 	}
-	target := pkg.Targets[0]
+	target := firstSucceededTarget(pkg.Targets)
 	filename, err := client.PackageContainerInfoFilename(ctx, pkg.Project, target.Repo, target.Arch, pkg.Name)
 	if err != nil {
 		slog.Warn("obs: container info filename", "pkg", pkg.Name, "err", err)
@@ -175,4 +175,13 @@ func (t ContainerTagsTask) Run(ctx context.Context, client *Client, pkg *model.P
 	}
 	pkg.Version = tag
 	return nil
+}
+
+func firstSucceededTarget(targets []model.Target) model.Target {
+	for _, t := range targets {
+		if t.State == "succeeded" {
+			return t
+		}
+	}
+	return targets[0]
 }
