@@ -1,26 +1,43 @@
 <script setup lang="ts">
+import type { Context } from '../types/api'
+
 defineProps<{
   version: string
   availableVersions: string[]
-  obsRoot: string
   activeTab: 'packages' | 'containers'
+  contexts: Context[]
+  selectedContext: Context
 }>()
 
 const emit = defineEmits<{
   'update:version': [v: string]
   'update:tab': [tab: 'packages' | 'containers']
+  'update:context': [ctx: Context]
 }>()
 </script>
 
 <template>
   <div class="version-bar">
-    <!-- Top row: badge + context + version + tab switcher -->
     <div class="top-row">
-      <!-- PostgreSQL badge — matches ContextBar exactly -->
+      <!-- PostgreSQL badge -->
       <span class="pg-badge">PostgreSQL</span>
 
-      <!-- OBS project context badge -->
-      <code class="obs-badge">{{ obsRoot }}</code>
+      <!-- Context: plain badge when only one context, dropdown when multiple -->
+      <code v-if="contexts.length <= 1" class="obs-badge">
+        {{ selectedContext.prefix }}:{{ version }}
+      </code>
+      <select
+        v-else
+        class="context-select"
+        :value="selectedContext.apiBase"
+        @change="emit('update:context', contexts.find(c => c.apiBase === ($event.target as HTMLSelectElement).value)!)"
+      >
+        <option
+          v-for="ctx in contexts"
+          :key="ctx.apiBase"
+          :value="ctx.apiBase"
+        >{{ ctx.label }}</option>
+      </select>
 
       <!-- Version segment control -->
       <div v-if="availableVersions.length > 0" class="inline-group">
@@ -72,7 +89,6 @@ const emit = defineEmits<{
   flex-wrap: wrap;
 }
 
-/* PostgreSQL badge — identical to ContextBar */
 .pg-badge {
   display: inline-flex;
   align-items: center;
@@ -86,7 +102,6 @@ const emit = defineEmits<{
   border: 1px solid rgba(0, 94, 214, 0.15);
 }
 
-/* OBS context code badge */
 .obs-badge {
   font-family: var(--font-mono);
   font-size: 12.5px;
@@ -94,6 +109,18 @@ const emit = defineEmits<{
   background: var(--bg-muted);
   padding: 5px 10px;
   border-radius: 7px;
+}
+
+.context-select {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  background: var(--bg-muted);
+  padding: 5px 10px;
+  border-radius: 7px;
+  border: none;
+  cursor: pointer;
+  appearance: auto;
 }
 
 .inline-group {
@@ -111,7 +138,6 @@ const emit = defineEmits<{
   margin-right: 2px;
 }
 
-/* Segment control — identical pattern to ContextBar + AppHeader */
 .segment {
   display: flex;
   gap: 3px;
