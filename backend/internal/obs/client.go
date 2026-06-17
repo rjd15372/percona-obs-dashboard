@@ -196,10 +196,9 @@ func (c *Client) BuildResults(ctx context.Context, project string) ([]PackageBui
 	return out, nil
 }
 
-// ProjectRepos returns the list of repository names configured for an OBS project
-// by reading /build/{project}/, which returns a directory listing of repo names.
-func (c *Client) ProjectRepos(ctx context.Context, project string) ([]string, error) {
-	resp, err := c.get(ctx, "/build/"+url.PathEscape(project)+"/")
+// projectDir fetches a /build/… directory listing and returns the entry names.
+func (c *Client) projectDir(ctx context.Context, path string) ([]string, error) {
+	resp, err := c.get(ctx, path)
 	if err != nil {
 		return nil, err
 	}
@@ -207,16 +206,35 @@ func (c *Client) ProjectRepos(ctx context.Context, project string) ([]string, er
 
 	var dir directoryListing
 	if err := xml.NewDecoder(resp.Body).Decode(&dir); err != nil {
-		return nil, fmt.Errorf("parse /build/%s/: %w", project, err)
+		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
 
-	repos := make([]string, 0, len(dir.Entries))
+	names := make([]string, 0, len(dir.Entries))
 	for _, e := range dir.Entries {
 		if e.Name != "" {
-			repos = append(repos, e.Name)
+			names = append(names, e.Name)
 		}
 	}
-	return repos, nil
+	return names, nil
+}
+
+// ProjectRepos returns the repository names configured for an OBS project.
+// Calls GET /build/{project}/.
+func (c *Client) ProjectRepos(ctx context.Context, project string) ([]string, error) {
+	return c.projectDir(ctx, "/build/"+url.PathEscape(project)+"/")
+}
+
+// ProjectRepoArchs returns the architectures available for a repository.
+// Calls GET /build/{project}/{repo}/.
+func (c *Client) ProjectRepoArchs(ctx context.Context, project, repo string) ([]string, error) {
+	return c.projectDir(ctx, "/build/"+url.PathEscape(project)+"/"+url.PathEscape(repo)+"/")
+}
+
+// ProjectRepoPackages returns the package names built in a specific repo/arch.
+// Calls GET /build/{project}/{repo}/{arch}/.
+func (c *Client) ProjectRepoPackages(ctx context.Context, project, repo, arch string) ([]string, error) {
+	return c.projectDir(ctx, "/build/"+url.PathEscape(project)+"/"+
+		url.PathEscape(repo)+"/"+url.PathEscape(arch)+"/")
 }
 
 // ProjectBuildResults fetches all build states for a project with version info

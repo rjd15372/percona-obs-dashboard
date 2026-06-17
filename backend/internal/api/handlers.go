@@ -281,9 +281,14 @@ func reposHandler(db *sql.DB) http.HandlerFunc {
 }
 
 // releasesPackagesHandler returns a handler for GET /api/releases/ppg/{version}/packages.
-// It queries OBS directly for build results (view=versrel) and constructs Package
-// objects with real targets and version strings — release packages in the DB carry
-// no build-target data, so the OBS API is the authoritative source.
+// It enumerates packages by traversing the OBS directory API:
+//
+//	/build/{project}/           → repos
+//	/build/{project}/{repo}/    → arches per repo
+//	/build/{project}/{repo}/{arch}/ → packages per repo+arch
+//
+// This is more accurate than _result because it reflects exactly what has been
+// published rather than inferring from build state.
 func releasesPackagesHandler(obsClient *obs.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		version := chi.URLParam(r, "version")
@@ -294,54 +299,53 @@ func releasesPackagesHandler(obsClient *obs.Client) http.HandlerFunc {
 			return
 		}
 
-		results, err := obsClient.ProjectBuildResults(r.Context(), project)
+		ctx := r.Context()
+
+		repos, err := obsClient.ProjectRepos(ctx, project)
 		if err != nil {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
 
-		// Aggregate per-package targets and versrel from OBS results.
+		// Aggregate package → targets by traversing repo → arch → package.
 		type pkgEntry struct {
-			version string
 			targets []model.Target
-			ok      int
 		}
 		byPkg := map[string]*pkgEntry{}
-		for _, res := range results {
-			if res.Package == "" {
-				continue
+
+		for _, repo := range repos {
+			archs, err := obsClient.ProjectRepoArchs(ctx, project, repo)
+			if err != nil {
+				continue // skip repos we can't read
 			}
-			e, exists := byPkg[res.Package]
-			if !exists {
-				e = &pkgEntry{}
-				byPkg[res.Package] = e
-			}
-			published := res.State == "published"
-			if published || res.State == "succeeded" {
-				e.ok++
-			}
-			e.targets = append(e.targets, model.Target{
-				Repo:      res.Repo,
-				Arch:      res.Arch,
-				State:     res.State,
-				Published: published,
-			})
-			if e.version == "" && res.Versrel != "" {
-				e.version = res.Versrel
+			for _, arch := range archs {
+				pkgNames, err := obsClient.ProjectRepoPackages(ctx, project, repo, arch)
+				if err != nil {
+					continue
+				}
+				for _, name := range pkgNames {
+					if _, ok := byPkg[name]; !ok {
+						byPkg[name] = &pkgEntry{}
+					}
+					byPkg[name].targets = append(byPkg[name].targets, model.Target{
+						Repo:      repo,
+						Arch:      arch,
+						State:     "succeeded",
+						Published: true,
+					})
+				}
 			}
 		}
 
 		pkgs := make([]*model.Package, 0, len(byPkg))
 		for name, e := range byPkg {
-			rollup := worstRollupFromTargets(e.targets)
 			pkgs = append(pkgs, &model.Package{
 				Project:      project,
 				Name:         name,
 				Scope:        model.ScopeRelease,
-				RollupState:  rollup,
-				OKTargets:    e.ok,
+				RollupState:  model.RollupSucceeded,
+				OKTargets:    len(e.targets),
 				TotalTargets: len(e.targets),
-				Version:      e.version,
 				Targets:      e.targets,
 			})
 		}
