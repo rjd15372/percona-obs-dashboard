@@ -27,7 +27,7 @@ func AppendEvent(db *sql.DB, e *model.Event) error {
 	return err
 }
 
-// QueryEvents returns events for a project prefix within [from, to], newest first.
+// QueryEvents returns up to 500 events for a project prefix within [from, to], newest first.
 func QueryEvents(db *sql.DB, projectPrefix string, from, to time.Time) ([]*model.Event, error) {
 	rows, err := db.Query(`
 		SELECT id, type, tags, project, package,
@@ -35,7 +35,8 @@ func QueryEvents(db *sql.DB, projectPrefix string, from, to time.Time) ([]*model
 		       what, why, url, at, COALESCE(version,'')
 		FROM events
 		WHERE project LIKE ? AND at >= ? AND at <= ?
-		ORDER BY at DESC`,
+		ORDER BY at DESC
+		LIMIT 500`,
 		projectPrefix+"%", from, to,
 	)
 	if err != nil {
