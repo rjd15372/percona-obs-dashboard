@@ -67,7 +67,9 @@ export function useRealtimeStream(
             p => p.project === pkg.project && p.name === pkg.name,
           )
           if (idx >= 0) {
-            packages.value[idx] = pkg
+            packages.value.splice(idx, 1, pkg)
+          } else {
+            refresh()
           }
         }
       } else if (msg.type === 'new_event') {
