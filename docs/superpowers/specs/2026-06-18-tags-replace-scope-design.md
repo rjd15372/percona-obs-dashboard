@@ -32,25 +32,42 @@ This repo uses inline startup migrations in `db.go`, not an external migration-f
 - `CREATE TABLE events`: replace `scope TEXT NOT NULL` with `tags TEXT NOT NULL DEFAULT '[]'`.
 - `migrateIsContainerNullable` internal rebuild: remove `scope` from its `CREATE TABLE packages_new` statement and its `INSERT INTO packages_new SELECT …` column list.
 
-**Additive migrations (new `db.Exec` calls appended after existing ones):**
-```go
-db.Exec(`ALTER TABLE packages DROP COLUMN scope`)
-db.Exec(`ALTER TABLE events ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'`)
-db.Exec(`ALTER TABLE events DROP COLUMN scope`)
-```
-Each call is idempotent: `ADD COLUMN` fails silently if the column already exists; `DROP COLUMN` fails silently if the column is already gone.
+**Execution order in `Open()` — critical:** The data backfill migrations that read `scope` must run BEFORE the `DROP COLUMN scope` calls. The correct sequence for new and modified lines, relative to existing calls:
 
-**Data migration — backfill events.tags from scope (new function `migrateEventTags`):**
-Run this BEFORE `DROP COLUMN scope` takes effect (i.e., call it before or immediately after the `ADD COLUMN tags` line, while scope still exists):
+```
+[existing] db.Exec(schema)                             // fresh DB: no scope column
+[existing] db.Exec(`ALTER TABLE packages ADD COLUMN tags ...`)
+[existing] db.Exec(`ALTER TABLE packages ADD COLUMN is_release ...`)
+[NEW]      db.Exec(`ALTER TABLE events ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'`)
+[existing] migrateIsContainerNullable(db)
+[existing] migrateTagsAndIsRelease(db)                 // reads packages.scope — must be BEFORE DROP
+[NEW]      migrateEventTags(db)                        // reads events.scope — must be BEFORE DROP
+[NEW]      db.Exec(`ALTER TABLE packages DROP COLUMN scope`)
+[NEW]      db.Exec(`ALTER TABLE events DROP COLUMN scope`)
+[existing] migrateSucceededToPublished(db)
+```
+
+All `ALTER TABLE` calls are idempotent: `ADD COLUMN` fails silently if the column already exists; `DROP COLUMN` fails silently if already gone.
+
+**`pragma_table_info` guards — both backfill functions need scope-exists checks:** Fresh databases created from the updated `schema` const will never have a `scope` column, so the `CASE … scope …` UPDATE would fail with "no such column". Add a helper and early-return to both functions:
+
 ```go
-if err := migrateEventTags(db); err != nil {
-    db.Close()
-    return nil, fmt.Errorf("migrate event tags: %w", err)
+func columnExists(db *sql.DB, table, col string) bool {
+    var n int
+    db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?`, table, col).Scan(&n)
+    return n > 0
 }
 ```
 
+- `migrateTagsAndIsRelease`: add `if !columnExists(db, "packages", "scope") { return nil }` at the top.
+- `migrateEventTags` (new): add `if !columnExists(db, "events", "scope") { return nil }` at the top.
+
+**New function `migrateEventTags`:**
 ```go
 func migrateEventTags(db *sql.DB) error {
+    if !columnExists(db, "events", "scope") {
+        return nil
+    }
     _, err := db.Exec(`
         UPDATE events SET tags = CASE
             WHEN scope = 'version'                              THEN '["ppg"]'
@@ -68,7 +85,7 @@ func migrateEventTags(db *sql.DB) error {
 }
 ```
 
-This mirrors the existing `migrateTagsAndIsRelease` scope→tags mapping for packages and is idempotent (only updates rows still at the default `'[]'`).
+Idempotent: only updates rows where `tags` is still the default `'[]'`.
 
 ## Section 2 — Backend Model (`internal/model/types.go`)
 
