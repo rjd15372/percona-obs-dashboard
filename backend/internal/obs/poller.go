@@ -160,6 +160,11 @@ func (p *Poller) tick(ctx context.Context) {
 			if err := store.DeletePackagesByProject(p.db, proj); err != nil {
 				slog.Error("poller: delete packages", "project", proj, "err", err)
 			}
+			for _, pkg := range existing {
+				if pkg.Project == proj {
+					p.ws.Remove(proj + "/" + pkg.Name)
+				}
+			}
 		}
 	}
 }
