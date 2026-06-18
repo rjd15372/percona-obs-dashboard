@@ -53,7 +53,7 @@ func run() error {
 	ws := workingset.New(cfg.WorkerPool.QueueSize)
 	ws.Seed(activePkgs)
 
-	tasks := []worker.Task{
+	devTasks := []worker.Task{
 		obs.PackageTypeTask{},
 		obs.BuildStateTask{},
 		obs.PublishStateTask{},
@@ -62,7 +62,11 @@ func run() error {
 		obs.BlockedReasonTask{},
 		obs.BuildReasonTask{},
 	}
-	pool := worker.NewPool(cfg.WorkerPool.Size, tasks, obsClient, db, h, ws)
+	releaseTasks := []worker.Task{
+		obs.PackageTypeTask{},
+		obs.BinariesCheckTask{},
+	}
+	pool := worker.NewPool(cfg.WorkerPool.Size, devTasks, releaseTasks, obsClient, db, h, ws)
 	pool.Start(ctx)
 	ws.StartScheduler(ctx, cfg.WorkerPool.PollInterval)
 

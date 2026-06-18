@@ -41,6 +41,13 @@ func (t succeedingTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package
 	return nil
 }
 
+type publishedTask struct{}
+
+func (t publishedTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package) error {
+	pkg.RollupState = model.RollupPublished
+	return nil
+}
+
 func openDB(t *testing.T) *sql.DB {
 	t.Helper()
 	db, err := store.Open(":memory:")
@@ -60,7 +67,7 @@ func TestPoolRunsTasksForDispatchedPackage(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	p := worker.NewPool(2, []worker.Task{capture}, nil, db, h, ws)
+	p := worker.NewPool(2, []worker.Task{capture}, nil, nil, db, h, ws)
 	p.Start(ctx)
 
 	pkg := &model.Package{
@@ -94,19 +101,19 @@ func TestPoolRemovesSucceededPackageFromWorkingSet(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	p := worker.NewPool(1, []worker.Task{succeedingTask{}}, nil, db, h, ws)
+	p := worker.NewPool(1, []worker.Task{publishedTask{}}, nil, nil, db, h, ws)
 	p.Start(ctx)
 
-	// Target is already succeeded and published so that allTargetsPublished
-	// returns true for the right reason (not vacuously because no succeeded
-	// target exists).
+	// IsContainer must be non-nil and RollupPublished must be set for removal.
+	isContainer := false
 	pkg := &model.Package{
 		Project: "isv:percona", Name: "pkg-a", Scope: model.ScopeCommon,
 		RollupState: model.RollupFailed, OKTargets: 1, TotalTargets: 1,
-		Targets:   []model.Target{{Repo: "repo", Arch: "x86_64", State: "succeeded", Published: true}},
-		UpdatedAt: time.Now().UTC(),
+		IsContainer: &isContainer,
+		Targets:     []model.Target{{Repo: "repo", Arch: "x86_64", State: "succeeded", Published: true}},
+		UpdatedAt:   time.Now().UTC(),
 	}
-	ws.Signal(pkg) // trigger worker — succeedingTask sets RollupSucceeded, then ws.Remove fires
+	ws.Signal(pkg) // trigger worker — publishedTask sets RollupPublished, then ws.Remove fires
 
 	time.Sleep(200 * time.Millisecond) // wait for worker to finish
 
@@ -135,7 +142,7 @@ func TestPoolDoesNotRemoveWhenUnpublished(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	p := worker.NewPool(1, []worker.Task{succeedingTask{}}, nil, db, h, ws)
+	p := worker.NewPool(1, []worker.Task{succeedingTask{}}, nil, nil, db, h, ws)
 	p.Start(ctx)
 
 	// Target is succeeded but NOT yet published — allTargetsPublished must
@@ -173,7 +180,7 @@ func TestPoolContinuesAfterTaskError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	p := worker.NewPool(1, []worker.Task{errorTask{}, capture}, nil, db, h, ws)
+	p := worker.NewPool(1, []worker.Task{errorTask{}, capture}, nil, nil, db, h, ws)
 	p.Start(ctx)
 
 	pkg := &model.Package{
@@ -264,7 +271,7 @@ func TestProcessOnceEmitsBuildStarted(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	pool := worker.NewPool(0, []worker.Task{setReasonTask{"source change"}}, nil, db, h, ws)
+	pool := worker.NewPool(0, []worker.Task{setReasonTask{"source change"}}, nil, nil, db, h, ws)
 	pool.ProcessOnce(context.Background(), pkg)
 
 	now := time.Now().UTC()
@@ -306,7 +313,7 @@ func TestProcessOnceEmitsFailedStates(t *testing.T) {
 
 			pool := worker.NewPool(0, []worker.Task{
 				setStateTask{"Ubuntu_24.04", "x86_64", tc.state, tc.details},
-			}, nil, db, h, ws)
+			}, nil, nil, db, h, ws)
 			pool.ProcessOnce(context.Background(), pkg)
 
 			now := time.Now().UTC()
@@ -341,7 +348,7 @@ func TestProcessOnceNoEventForBlocked(t *testing.T) {
 
 	pool := worker.NewPool(0, []worker.Task{
 		setStateTask{"Ubuntu_24.04", "x86_64", "blocked", ""},
-	}, nil, db, h, ws)
+	}, nil, nil, db, h, ws)
 	pool.ProcessOnce(context.Background(), pkg)
 
 	now := time.Now().UTC()
@@ -368,7 +375,7 @@ func TestProcessOnceEmitsPublished(t *testing.T) {
 
 	pool := worker.NewPool(0, []worker.Task{
 		setPublishedTask{"Ubuntu_24.04", "x86_64"},
-	}, nil, db, h, ws)
+	}, nil, nil, db, h, ws)
 	pool.ProcessOnce(context.Background(), pkg)
 
 	now := time.Now().UTC()

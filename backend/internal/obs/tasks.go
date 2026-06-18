@@ -65,6 +65,63 @@ func (t PublishStateTask) Run(ctx context.Context, client *Client, pkg *model.Pa
 			}
 		}
 	}
+
+	// Promote to published when all active (non-skipped) targets are published.
+	allPublished := true
+	activeCount := 0
+	for _, target := range pkg.Targets {
+		switch target.State {
+		case "disabled", "excluded", "locked":
+			continue
+		}
+		activeCount++
+		if target.State != "succeeded" || !target.Published {
+			allPublished = false
+			break
+		}
+	}
+	if allPublished && activeCount > 0 {
+		pkg.RollupState = model.RollupPublished
+	}
+	return nil
+}
+
+// BinariesCheckTask is used for release packages. It calls RepoPublishStates
+// to detect when all repos have published binaries, then promotes rollup to
+// RollupPublished. Unlike PublishStateTask it does not require targets to be
+// in "succeeded" state first — release packages use OBS repo state directly.
+type BinariesCheckTask struct{}
+
+func (t BinariesCheckTask) Run(ctx context.Context, client *Client, pkg *model.Package) error {
+	states, err := client.RepoPublishStates(ctx, pkg.Project, pkg.Name)
+	if err != nil {
+		slog.Warn("obs: binaries check repo states", "pkg", pkg.Name, "err", err)
+		return nil
+	}
+
+	for i, target := range pkg.Targets {
+		if states[target.Repo+"/"+target.Arch] == "published" {
+			pkg.Targets[i].Published = true
+		}
+	}
+
+	// Promote to published when all active targets have binaries published.
+	allPublished := true
+	activeCount := 0
+	for _, target := range pkg.Targets {
+		switch target.State {
+		case "disabled", "excluded", "locked":
+			continue
+		}
+		activeCount++
+		if !target.Published {
+			allPublished = false
+			break
+		}
+	}
+	if allPublished && activeCount > 0 {
+		pkg.RollupState = model.RollupPublished
+	}
 	return nil
 }
 

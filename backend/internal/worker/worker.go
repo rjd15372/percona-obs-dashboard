@@ -23,16 +23,18 @@ type Task interface {
 }
 
 type Pool struct {
-	size   int
-	tasks  []Task
-	client *obs.Client
-	db     *sql.DB
-	hub    *hubpkg.Hub
-	ws     *workingset.WorkingSet
+	size         int
+	devTasks     []Task
+	releaseTasks []Task
+	client       *obs.Client
+	db           *sql.DB
+	hub          *hubpkg.Hub
+	ws           *workingset.WorkingSet
 }
 
-func NewPool(size int, tasks []Task, client *obs.Client, db *sql.DB, hub *hubpkg.Hub, ws *workingset.WorkingSet) *Pool {
-	return &Pool{size: size, tasks: tasks, client: client, db: db, hub: hub, ws: ws}
+func NewPool(size int, devTasks, releaseTasks []Task, client *obs.Client, db *sql.DB, hub *hubpkg.Hub, ws *workingset.WorkingSet) *Pool {
+	return &Pool{size: size, devTasks: devTasks, releaseTasks: releaseTasks,
+		client: client, db: db, hub: hub, ws: ws}
 }
 
 func (p *Pool) Start(ctx context.Context) {
@@ -75,7 +77,11 @@ func (p *Pool) ProcessOnce(ctx context.Context, pkg *model.Package) {
 		oldTargets[i] = c
 	}
 
-	for _, t := range p.tasks {
+	tasks := p.devTasks
+	if pkg.IsRelease {
+		tasks = p.releaseTasks
+	}
+	for _, t := range tasks {
 		if err := t.Run(ctx, p.client, pkg); err != nil {
 			slog.Warn("worker: task error",
 				"task", fmt.Sprintf("%T", t),
@@ -87,22 +93,15 @@ func (p *Pool) ProcessOnce(ctx context.Context, pkg *model.Package) {
 	if err := store.UpsertPackageState(p.db, pkg, now); err != nil {
 		slog.Error("worker: upsert package state", "pkg", pkg.Project+"/"+pkg.Name, "err", err)
 	}
-	p.hub.Notify(hubpkg.PackageUpdate(pkg))
-	p.emitBuildEvents(pkg, oldTargets)
 
-	if pkg.RollupState == model.RollupSucceeded && allTargetsPublished(pkg) {
+	if !pkg.IsRelease {
+		p.hub.Notify(hubpkg.PackageUpdate(pkg))
+		p.emitBuildEvents(pkg, oldTargets)
+	}
+
+	if pkg.RollupState == model.RollupPublished && pkg.IsContainer != nil {
 		p.ws.Remove(pkg.Project + "/" + pkg.Name)
 	}
-}
-
-// allTargetsPublished returns true when every succeeded target has been published.
-func allTargetsPublished(pkg *model.Package) bool {
-	for _, t := range pkg.Targets {
-		if t.State == "succeeded" && !t.Published {
-			return false
-		}
-	}
-	return true
 }
 
 var failStates = map[string]bool{"failed": true, "unresolvable": true, "broken": true}
