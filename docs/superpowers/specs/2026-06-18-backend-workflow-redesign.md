@@ -182,8 +182,9 @@ Within each `tick()`, the classifier drives two code paths:
 3. Call `ws.Add(pkg)` for packages not yet in the working set.
 
 **Release projects** (`kind.IsRealTime() == false`):
-1. Use OBS directory traversal (`ProjectRepos` → `ProjectRepoArchs` → `ProjectRepoPackages`) to enumerate package names. `BuildResults` is not called — release packages are never built.
-2. Upsert new packages to DB with `is_release = 1`, `rollup_state = 'building'`, and project-level tags.
+1. Use OBS directory traversal (`ProjectRepos` → `ProjectRepoArchs` → `ProjectRepoPackages`) to enumerate package names and their repo/arch combinations. `BuildResults` is not called — all targets in release projects are disabled/excluded by OBS, so `_results` returns nothing useful.
+2. Store the discovered `(repo, arch)` pairs as the package's `targets_json` (without build state — use a placeholder state such as `unknown`). This is the only way to know which targets exist for a release package.
+3. Upsert new packages to DB with `is_release = 1`, `rollup_state = 'building'`, and project-level tags.
 3. Call `ws.Add(pkg)` for packages where `rollup_state != 'published' OR is_container IS NULL` — these need detection work (type check + binaries check). Newly inserted release packages always qualify since they start with `rollup_state = 'building'` and `is_container = NULL`.
 
 ### Garbage collection
@@ -246,10 +247,11 @@ The worker runs a different pipeline based on `pkg.IsRelease`:
 
 New task in `internal/obs/tasks.go`:
 
-- Iterates over the package's targets.
+- Iterates over the package's stored targets (populated from directory traversal — `BuildResults` is not used for release packages since all targets are disabled in OBS).
 - Calls `obs.PackageBinaries(ctx, project, repo, arch, pkg)` for each target.
-- If any target returns a non-empty binary list: sets `rollup_state = 'published'`.
-- Otherwise: sets `rollup_state = 'building'` (keeps package in working set for next check).
+- Marks each individual target as having binaries or not.
+- Only sets `rollup_state = 'published'` when **all** stored targets have a non-empty binary list — partial availability is not sufficient.
+- If any target has no binaries yet: sets `rollup_state = 'building'` (keeps package in working set for next check).
 
 ### Auto-remove from working set
 
@@ -271,7 +273,7 @@ This condition is identical for real-time and release packages:
 
 `QueryPackages` is split into two functions with distinct filters:
 
-- `QueryBuildPackages(db, root, product, version string) []Package` — returns non-release packages for the builds tab. Executes a union of three prefix queries: `<root>:<product>:<version>` (dev packages), `<root>:<product>:common` (product common deps), and `<root>:common` (global common packages). Adds `AND is_release = 0`. The `product` parameter preserves the generic `/api/products/{product}/{version}` route contract — the function is not PPG-specific.
+- `QueryBuildPackages(db, root, product, version string) []Package` — returns non-release packages for the builds tab. Executes a union using exact-plus-subproject matching to avoid version prefix collisions (e.g. version `1` matching `10`, `11`): `(project = '<root>:<product>:<version>' OR project LIKE '<root>:<product>:<version>:%')` for dev packages, same pattern for `<root>:<product>:common` and `<root>:common`. Adds `AND is_release = 0`. The `product` parameter preserves the generic `/api/products/{product}/{version}` route contract.
 - `QueryReleasePackages(db, prefix string) []Package` — returns only release packages (`AND is_release = 1`) for the artifacts tab. Used by `releasesPackagesHandler`.
 
 The original `QueryPackages(db, projectPrefix)` (prefix LIKE query, no release filter) is retained for internal uses such as GC that need to operate across all package types.
@@ -296,7 +298,7 @@ Response formats are unchanged.
 - `api.NewRouter(db, hub, obsClient, cfg)` — passes `cfg.OBSRoot` to handlers that build project-path prefixes.
 - `mq.NewConsumer(url, cfg.OBSRoot, ...)` — uses root to filter incoming AMQP messages.
 
-`obs.NewPoller` already receives config; no change needed there.
+`obs.NewPoller(client, db, interval, hub, ws)` also needs a `root string` parameter — today it does not receive config or root. Updated signature: `obs.NewPoller(client, db, interval, hub, ws, root string)`.
 
 ### SSE stream
 
