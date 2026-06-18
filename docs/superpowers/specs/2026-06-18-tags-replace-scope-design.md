@@ -39,13 +39,15 @@ This repo uses inline startup migrations in `db.go`, not an external migration-f
 [existing] db.Exec(`ALTER TABLE packages ADD COLUMN tags ...`)
 [existing] db.Exec(`ALTER TABLE packages ADD COLUMN is_release ...`)
 [NEW]      db.Exec(`ALTER TABLE events ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'`)
-[existing] migrateIsContainerNullable(db)
-[existing] migrateTagsAndIsRelease(db)                 // reads packages.scope — must be BEFORE DROP
+[existing] migrateTagsAndIsRelease(db)                 // reads packages.scope — BEFORE table rebuild
+[existing] migrateIsContainerNullable(db)              // rebuilds packages table; scope already backfilled
 [NEW]      migrateEventTags(db)                        // reads events.scope — must be BEFORE DROP
 [NEW]      db.Exec(`ALTER TABLE packages DROP COLUMN scope`)
 [NEW]      db.Exec(`ALTER TABLE events DROP COLUMN scope`)
 [existing] migrateSucceededToPublished(db)
 ```
+
+`migrateTagsAndIsRelease` is moved **before** `migrateIsContainerNullable`. On older DBs where `is_container` is still `NOT NULL`, `migrateIsContainerNullable` rebuilds the packages table. If the backfill ran after that rebuild, `packages.scope` would still exist in the rebuilt table — but on DBs where the rebuild already ran in a previous startup, the `columnExists` guard would silently skip the backfill. Moving the backfill first ensures it always sees `scope` while it exists, regardless of whether the structural rebuild fires.
 
 All `ALTER TABLE` calls are idempotent: `ADD COLUMN` fails silently if the column already exists; `DROP COLUMN` fails silently if already gone.
 
