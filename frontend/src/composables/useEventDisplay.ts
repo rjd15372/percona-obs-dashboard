@@ -23,18 +23,16 @@ export const GLYPH_BG: Record<EventType, string> = {
   build_finished: 'var(--blocked-tint)', version_change: 'var(--blocked-tint)', updated: 'var(--blocked-tint)',
 }
 
-export const SCOPE_STYLE: Record<string, string> = {
-  version:   'background: var(--brand-purple-tint); color: var(--brand-purple);',
-  container: 'background: var(--info-tint); color: var(--info);',
-  release:   'background: var(--ok-tint); color: var(--ok);',
+export const TAG_STYLE: Record<string, string> = {
+  ppg:       'background: var(--brand-purple-tint); color: var(--brand-purple);',
   common:    'background: var(--blocked-tint); color: var(--blocked);',
-  ppgcommon: 'background: var(--blocked-tint); color: var(--blocked);',
+  container: 'background: var(--info-tint); color: var(--info);',
   pr:        'background: var(--warn-tint); color: var(--warn);',
+  release:   'background: var(--ok-tint); color: var(--ok);',
 }
 
-export const SCOPE_LABEL: Record<string, string> = {
-  version: 'PPG', ppgcommon: 'PPG Common', common: 'Common',
-  container: 'Container', release: 'Release', pr: 'PR',
+export const TAG_LABEL: Record<string, string> = {
+  ppg: 'PPG', common: 'Common', container: 'Container', pr: 'PR', release: 'Release',
 }
 
 export function eventTitle(event: Event): string {

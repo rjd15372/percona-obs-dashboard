@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Event } from '../types/api'
-import { GLYPH, GLYPH_COLOR, GLYPH_BG, SCOPE_STYLE, SCOPE_LABEL, eventTitle, timeStr, showReason, displayVersion } from '../composables/useEventDisplay'
+import { GLYPH, GLYPH_COLOR, GLYPH_BG, TAG_STYLE, TAG_LABEL, eventTitle, timeStr, showReason, displayVersion } from '../composables/useEventDisplay'
 
 const props = defineProps<{
   project: string
   package: string
-  scope: string
+  tags: string[]
   events: Event[]
   expanded: boolean
 }>()
@@ -56,22 +56,25 @@ const head = computed(() => props.events[0])
         <span style="font-size: 11.5px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ eventTitle(head) }}</span>
         <!-- Row 3: scope chip + version badge + project path -->
         <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 1px;">
-          <span :style="`font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 6px; border-radius: 5px; ${SCOPE_STYLE[scope] ?? 'background: var(--blocked-tint); color: var(--blocked);'}`">{{ SCOPE_LABEL[scope] ?? scope }}</span>
           <span
-            v-if="displayVersion(head.version, scope === 'container')"
+            v-for="tag in tags" :key="tag"
+            :style="`font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 6px; border-radius: 5px; ${TAG_STYLE[tag] ?? 'background: var(--blocked-tint); color: var(--blocked);'}`"
+          >{{ TAG_LABEL[tag] ?? tag }}</span>
+          <span
+            v-if="displayVersion(head.version, tags.includes('container'))"
             :style="{
               fontFamily: 'var(--font-mono)',
               fontSize: '10px',
               fontWeight: '700',
               padding: '2px 7px',
               borderRadius: '5px',
-              background: scope === 'container' ? 'var(--brand-purple-tint)' : 'var(--bg-muted, var(--blocked-tint))',
-              color: scope === 'container' ? 'var(--brand-purple)' : 'var(--text-secondary)',
+              background: tags.includes('container') ? 'var(--brand-purple-tint)' : 'var(--bg-muted, var(--blocked-tint))',
+              color: tags.includes('container') ? 'var(--brand-purple)' : 'var(--text-secondary)',
               border: '1px solid var(--border)',
               whiteSpace: 'nowrap',
               flexShrink: '0',
             }"
-          >{{ displayVersion(head.version, scope === 'container') }}</span>
+          >{{ displayVersion(head.version, tags.includes('container')) }}</span>
           <code style="font-family: var(--font-mono); font-size: 10px; color: var(--text-muted);">{{ project }}</code>
         </div>
       </div>
@@ -108,20 +111,20 @@ const head = computed(() => props.events[0])
               style="font-size:11px;color:var(--text-secondary);background:var(--bg-muted,var(--blocked-tint));border:1px solid var(--border);border-radius:5px;padding:3px 7px;font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
             >{{ event.why }}</span>
             <span
-              v-if="displayVersion(event.version, scope === 'container')"
+              v-if="displayVersion(event.version, tags.includes('container'))"
               :style="{
                 fontFamily: 'var(--font-mono)',
                 fontSize: '10px',
                 fontWeight: '700',
                 padding: '2px 7px',
                 borderRadius: '5px',
-                background: scope === 'container' ? 'var(--brand-purple-tint)' : 'var(--bg-muted, var(--blocked-tint))',
-                color: scope === 'container' ? 'var(--brand-purple)' : 'var(--text-secondary)',
+                background: tags.includes('container') ? 'var(--brand-purple-tint)' : 'var(--bg-muted, var(--blocked-tint))',
+                color: tags.includes('container') ? 'var(--brand-purple)' : 'var(--text-secondary)',
                 border: '1px solid var(--border)',
                 whiteSpace: 'nowrap',
                 alignSelf: 'flex-start',
               }"
-            >{{ displayVersion(event.version, scope === 'container') }}</span>
+            >{{ displayVersion(event.version, tags.includes('container')) }}</span>
             <code v-if="event.repo" style="font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--text-secondary);">{{ event.repo }}/{{ event.arch }}</code>
           </div>
         </a>

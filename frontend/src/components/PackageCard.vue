@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { Package, Target } from '../types/api'
-import { displayVersion } from '../composables/useEventDisplay'
+import { displayVersion, TAG_LABEL } from '../composables/useEventDisplay'
 
 const props = defineProps<{ pkg: Package }>()
 
@@ -36,10 +36,6 @@ const STATE_LABEL: Record<string, string> = {
   finished: 'Finishing', scheduled: 'Scheduled',
 }
 
-const SCOPE_LABEL: Record<string, string> = {
-  common: 'Common', ppgcommon: 'PPG Common', version: 'PPG',
-  container: 'Container', release: 'Release',
-}
 
 const TARGET_SEVERITY: Record<string, number> = {
   broken: 6, unresolvable: 5, failed: 4, blocked: 3, building: 2, finished: 1, scheduled: 1, succeeded: 0,
@@ -190,7 +186,10 @@ function logUrl(repo: string, arch: string): string {
 
     <!-- Row 2: scope tag + version badge + project path -->
     <div style="display: flex; align-items: center; gap: 7px;">
-      <span style="font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 5px; background: var(--blocked-tint); color: var(--blocked);">{{ SCOPE_LABEL[pkg.scope] ?? pkg.scope }}</span>
+      <span
+        v-for="tag in (pkg.tags ?? [])" :key="tag"
+        style="font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 5px; background: var(--blocked-tint); color: var(--blocked);"
+      >{{ TAG_LABEL[tag] ?? tag }}</span>
       <span
         v-if="versionLabel"
         :style="{

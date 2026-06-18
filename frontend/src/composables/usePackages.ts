@@ -11,6 +11,7 @@ const SEVERITY: Record<string, number> = {
   finished: 1,
   scheduled: 1,
   succeeded: 0,
+  published: -1,
 }
 
 // matchesVersion returns true if pkg belongs to the selected version.
@@ -74,14 +75,16 @@ export function usePackages(
     const depth = toValue(prefixDepth)
     const knownVersions = new Set(availableVersions.value)
     return [...data.value]
-      .filter(pkg => pkg.scope !== 'release' && !pkg.project.toLowerCase().includes(':releases:') && matchesVersion(pkg, ver, depth, knownVersions))
+      .filter(pkg => !pkg.is_release && matchesVersion(pkg, ver, depth, knownVersions))
       .sort((a, b) => (SEVERITY[b.rollup_state] ?? 0) - (SEVERITY[a.rollup_state] ?? 0))
   })
 
-  function filterByScope(scopes: string[]) {
-    if (scopes.length === 0) return sorted.value
-    return sorted.value.filter(p => scopes.includes(p.scope))
+  function filterByTags(tags: string[]): Package[] {
+    if (tags.length === 0) return sorted.value
+    return sorted.value.filter(p =>
+      tags.every(t => (p.tags ?? []).includes(t))
+    )
   }
 
-  return { data: sorted, rawData: data, availableVersions, loading, error, refresh, filterByScope }
+  return { data: sorted, rawData: data, availableVersions, loading, error, refresh, filterByTags }
 }

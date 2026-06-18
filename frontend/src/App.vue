@@ -66,7 +66,7 @@ const customTo = ref<string | null>(null)
 
 // Data fetching
 const apiBase = computed(() => selectedContext.value.apiBase)
-const { data: allPackages, rawData: rawPackages, availableVersions, refresh: refreshPackages, filterByScope } = usePackages(apiBase, version, prefixDepth)
+const { data: allPackages, rawData: rawPackages, availableVersions, refresh: refreshPackages, filterByTags } = usePackages(apiBase, version, prefixDepth)
 const { data: events, refresh: refreshEvents, filterEvents } = useEvents(apiBase, version)
 const { data: prGroups, refresh: refreshPR } = usePRPackages()
 
@@ -111,7 +111,7 @@ const contexts = computed<Context[]>(() => {
   return [DEFAULT_CONTEXT, ...prContexts]
 })
 
-const filteredPackages = computed(() => filterByScope(activeScopes.value))
+const filteredPackages = computed(() => filterByTags(activeScopes.value))
 const filteredEvents = computed(() => filterEvents(activeScopes.value, version.value, prefixDepth.value, selectedContext.value.prefix))
 const updatedAt = ref<string | null>(null)
 

@@ -37,10 +37,10 @@ export function useEvents(apiBase: MaybeRef<string>, version: MaybeRef<string>) 
     return seg === version
   }
 
-  function filterEvents(scopes: string[], version: string, prefixDepth: number, prefix: string): Event[] {
+  function filterEvents(tags: string[], version: string, prefixDepth: number, prefix: string): Event[] {
     return data.value.filter(e => {
       if (prefix && e.project !== prefix && !e.project.startsWith(prefix + ':')) return false
-      if (scopes.length > 0 && !scopes.includes(e.scope)) return false
+      if (tags.length > 0 && !tags.every(t => (e.tags ?? []).includes(t))) return false
       return matchesEventVersion(e, version, prefixDepth)
     })
   }

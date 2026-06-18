@@ -12,7 +12,7 @@ export interface PackageRow {
   project: string
   name: string
   version: string
-  scope: 'common' | 'ppgcommon' | 'version'
+  tags: string[]
   state: string
   published: boolean
   repo: RepoInfo
@@ -83,7 +83,7 @@ export function useArtifacts(
         project: pkg.project,
         name: pkg.name,
         version: pkg.version ?? '',
-        scope: pkg.scope as 'common' | 'ppgcommon' | 'version',
+        tags: pkg.tags ?? [],
         state: target.state ?? '',
         published: target.published === true,
         repo,
@@ -100,8 +100,7 @@ export function useArtifacts(
 
     return pkgs
       .filter(pkg =>
-        pkg.scope === 'container' &&
-        pkg.is_container !== false &&
+        pkg.is_container === true &&
         pkg.project.startsWith(`${prefix}:${ver}:`)
       )
       .map(pkg => {

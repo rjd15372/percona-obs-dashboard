@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Event } from '../types/api'
-import { GLYPH, GLYPH_COLOR, GLYPH_BG, SCOPE_STYLE, SCOPE_LABEL, eventTitle, timeStr, showReason as _showReason, displayVersion } from '../composables/useEventDisplay'
+import { GLYPH, GLYPH_COLOR, GLYPH_BG, TAG_STYLE, TAG_LABEL, eventTitle, timeStr, showReason as _showReason, displayVersion } from '../composables/useEventDisplay'
 
 const props = defineProps<{ event: Event }>()
 
@@ -28,22 +28,25 @@ const showReason = computed(() => _showReason(props.event))
       >{{ props.event.why }}</span>
       <code v-if="props.event.repo" style="font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--text-secondary);">{{ props.event.repo }}/{{ props.event.arch }}</code>
       <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 2px;">
-        <span :style="`font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 6px; border-radius: 5px; ${SCOPE_STYLE[props.event.scope] ?? 'background: var(--blocked-tint); color: var(--blocked);'}`">{{ SCOPE_LABEL[props.event.scope] ?? props.event.scope }}</span>
         <span
-          v-if="displayVersion(props.event.version, props.event.scope === 'container')"
+          v-for="tag in (props.event.tags ?? [])" :key="tag"
+          :style="`font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 6px; border-radius: 5px; ${TAG_STYLE[tag] ?? 'background: var(--blocked-tint); color: var(--blocked);'}`"
+        >{{ TAG_LABEL[tag] ?? tag }}</span>
+        <span
+          v-if="displayVersion(props.event.version, (props.event.tags ?? []).includes('container'))"
           :style="{
             fontFamily: 'var(--font-mono)',
             fontSize: '10px',
             fontWeight: '700',
             padding: '2px 7px',
             borderRadius: '5px',
-            background: props.event.scope === 'container' ? 'var(--brand-purple-tint)' : 'var(--bg-muted, var(--blocked-tint))',
-            color: props.event.scope === 'container' ? 'var(--brand-purple)' : 'var(--text-secondary)',
+            background: (props.event.tags ?? []).includes('container') ? 'var(--brand-purple-tint)' : 'var(--bg-muted, var(--blocked-tint))',
+            color: (props.event.tags ?? []).includes('container') ? 'var(--brand-purple)' : 'var(--text-secondary)',
             border: '1px solid var(--border)',
             whiteSpace: 'nowrap',
             flexShrink: '0',
           }"
-        >{{ displayVersion(props.event.version, props.event.scope === 'container') }}</span>
+        >{{ displayVersion(props.event.version, (props.event.tags ?? []).includes('container')) }}</span>
         <code style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);">{{ props.event.project }}</code>
       </div>
     </div>

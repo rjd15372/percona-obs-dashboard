@@ -156,7 +156,7 @@ interface PackageGroup {
   key: string
   project: string
   pkg: string
-  scope: string
+  tags: string[]
   events: Event[]
 }
 
@@ -176,7 +176,7 @@ const groupedEvents = computed<PackageGroup[]>(() => {
   for (const [key, evts] of allMap) {
     if (!filteredKeys.has(key)) continue
     const sorted = [...evts].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
-    result.push({ key, project: sorted[0].project, pkg: sorted[0].package, scope: sorted[0].scope, events: sorted })
+    result.push({ key, project: sorted[0].project, pkg: sorted[0].package, tags: sorted[0].tags ?? [], events: sorted })
   }
 
   result.sort((a, b) => new Date(b.events[0].at).getTime() - new Date(a.events[0].at).getTime())
@@ -383,7 +383,7 @@ const groupedAndBucketed = computed(() => {
             :key="group.key"
             :project="group.project"
             :package="group.pkg"
-            :scope="group.scope"
+            :tags="group.tags"
             :events="group.events"
             :expanded="expandedGroups.get(group.key) ?? false"
             @toggle="toggleGroup(group.key)"

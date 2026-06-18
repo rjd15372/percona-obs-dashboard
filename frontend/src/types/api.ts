@@ -1,5 +1,4 @@
-export type BuildState = 'succeeded' | 'failed' | 'unresolvable' | 'broken' | 'blocked' | 'scheduled' | 'building' | 'finished'
-export type PackageScope = 'common' | 'ppgcommon' | 'version' | 'container' | 'release' | 'pr'
+export type BuildState = 'succeeded' | 'failed' | 'unresolvable' | 'broken' | 'blocked' | 'scheduled' | 'building' | 'finished' | 'published'
 export type EventType = 'triggered' | 'started' | 'succeeded' | 'failed' | 'unresolvable' | 'broken' | 'blocked' | 'published' | 'created' | 'deleted' | 'build_started' | 'build_finished' | 'version_change' | 'updated'
 
 export interface Context {
@@ -28,7 +27,8 @@ export interface Target {
 export interface Package {
   project: string
   name: string
-  scope: PackageScope
+  tags?: string[]
+  is_release?: boolean
   rollup_state: BuildState
   ok_targets: number
   total_targets: number
@@ -50,7 +50,7 @@ export interface PRGroup {
 export interface Event {
   id: string
   type: EventType
-  scope: string
+  tags?: string[]
   project: string
   package: string
   repo?: string // optional
