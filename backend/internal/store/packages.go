@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"log/slog"
 	"sort"
 	"time"
 
@@ -169,8 +170,14 @@ func DeletePackagesByProject(db *sql.DB, project string) error {
 	if _, err := db.Exec(`DELETE FROM target_state_durations WHERE project = ?`, project); err != nil {
 		return err
 	}
-	_, err := db.Exec(`DELETE FROM packages WHERE project = ?`, project)
-	return err
+	res, err := db.Exec(`DELETE FROM packages WHERE project = ?`, project)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		slog.Info("store: deleted packages for project", "project", project, "count", n)
+	}
+	return nil
 }
 
 // DeletePackage removes a single package row.
@@ -179,8 +186,14 @@ func DeletePackage(db *sql.DB, project, name string) error {
 	if _, err := db.Exec(`DELETE FROM target_state_durations WHERE project = ? AND package = ?`, project, name); err != nil {
 		return err
 	}
-	_, err := db.Exec(`DELETE FROM packages WHERE project = ? AND name = ?`, project, name)
-	return err
+	res, err := db.Exec(`DELETE FROM packages WHERE project = ? AND name = ?`, project, name)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		slog.Info("store: deleted package", "project", project, "pkg", name)
+	}
+	return nil
 }
 
 const packageSelectCols = ` project, name, rollup_state, ok_targets, total_targets,
