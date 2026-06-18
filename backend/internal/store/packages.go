@@ -79,6 +79,7 @@ func UpsertPackageState(db *sql.DB, p *model.Package, now time.Time) error {
 			version=excluded.version,
 			container_tags=excluded.container_tags,
 			tags=CASE WHEN excluded.tags != '[]' THEN excluded.tags ELSE tags END,
+			-- is_release is a one-way ratchet: once marked as release it cannot be un-set.
 			is_release=CASE WHEN excluded.is_release != 0 THEN 1 ELSE is_release END,
 			state_changed_at = CASE
 				WHEN excluded.rollup_state != rollup_state THEN excluded.state_changed_at
@@ -104,13 +105,15 @@ func UpsertPackageState(db *sql.DB, p *model.Package, now time.Time) error {
 // recordStateTransitions updates target_state_durations when a target's state
 // changes or a new target appears. Called only from UpsertPackageState.
 func recordStateTransitions(db *sql.DB, project, pkg string, prev, next []model.Target, now time.Time) {
-	nowStr := now.UTC().Format("2006-01-02T15:04:05.999Z07:00")
+	nowStr := now.UTC().Format(time.RFC3339Nano)
 	oldByKey := make(map[string]model.Target, len(prev))
 	for _, t := range prev {
 		oldByKey[t.Repo+"/"+t.Arch] = t
 	}
+	newKeys := make(map[string]bool, len(next))
 	for _, t := range next {
 		key := t.Repo + "/" + t.Arch
+		newKeys[key] = true
 		old, existed := oldByKey[key]
 		if existed && old.State == t.State {
 			continue // no change
@@ -133,12 +136,27 @@ func recordStateTransitions(db *sql.DB, project, pkg string, prev, next []model.
 			project, pkg, t.Repo, t.Arch, t.State, nowStr,
 		)
 	}
+	// Close open entries for targets that no longer exist in next.
+	for _, t := range prev {
+		if !newKeys[t.Repo+"/"+t.Arch] {
+			db.Exec(`
+				UPDATE target_state_durations
+				SET exited_at = ?,
+				    duration_ms = CAST((julianday(?) - julianday(entered_at)) * 86400000 AS INTEGER)
+				WHERE project = ? AND package = ? AND repo = ? AND arch = ?
+				  AND exited_at IS NULL`,
+				nowStr, nowStr, project, pkg, t.Repo, t.Arch,
+			)
+		}
+	}
 }
 
 // DeletePackagesByProject removes all package rows for an exact project name.
 // Used by the poller to garbage-collect projects that no longer exist in OBS.
 func DeletePackagesByProject(db *sql.DB, project string) error {
-	db.Exec(`DELETE FROM target_state_durations WHERE project = ?`, project)
+	if _, err := db.Exec(`DELETE FROM target_state_durations WHERE project = ?`, project); err != nil {
+		return err
+	}
 	_, err := db.Exec(`DELETE FROM packages WHERE project = ?`, project)
 	return err
 }
@@ -146,7 +164,9 @@ func DeletePackagesByProject(db *sql.DB, project string) error {
 // DeletePackage removes a single package row.
 // Used by the MQ consumer on package.delete events.
 func DeletePackage(db *sql.DB, project, name string) error {
-	db.Exec(`DELETE FROM target_state_durations WHERE project = ? AND package = ?`, project, name)
+	if _, err := db.Exec(`DELETE FROM target_state_durations WHERE project = ? AND package = ?`, project, name); err != nil {
+		return err
+	}
 	_, err := db.Exec(`DELETE FROM packages WHERE project = ? AND name = ?`, project, name)
 	return err
 }
@@ -156,10 +176,10 @@ const packageSelectCols = ` project, name, scope, rollup_state, ok_targets, tota
 	state_changed_at, is_container, version, container_tags, tags, is_release`
 
 // scanPackages is a helper that extracts the scan loop pattern used by multiple query functions.
-// It expects rows to have been created with the standard package column order:
-// project, name, scope, rollup_state, ok_targets, total_targets,
+// It expects rows to have been created with the standard package column order defined
+// in packageSelectCols: project, name, scope, rollup_state, ok_targets, total_targets,
 // trigger_what, trigger_kind, trigger_at, targets_json, updated_at, state_changed_at,
-// is_container, version
+// is_container, version, container_tags, tags, is_release.
 func scanPackages(rows *sql.Rows) ([]*model.Package, error) {
 	pkgs := make([]*model.Package, 0)
 	for rows.Next() {
