@@ -57,9 +57,9 @@ func (p *Pool) run(ctx context.Context) {
 	}
 }
 
-// ProcessOnce runs the full task chain for pkg, upserts to DB,
-// emits build events for state transitions, and removes pkg from the
-// working set once all succeeded targets are published.
+// ProcessOnce runs the task chain for pkg (devTasks or releaseTasks based on
+// pkg.IsRelease), upserts to DB, emits build events and SSE for real-time
+// packages only, and removes pkg from the working set when rollup reaches published.
 // Exported for testing.
 func (p *Pool) ProcessOnce(ctx context.Context, pkg *model.Package) {
 	// Capture now before tasks run so state_changed_at reflects when the state

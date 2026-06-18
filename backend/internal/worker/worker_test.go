@@ -387,3 +387,61 @@ func TestProcessOnceEmitsPublished(t *testing.T) {
 		t.Errorf("expected published, got %q", evts[0].Type)
 	}
 }
+
+type versionTask struct{ v string }
+
+func (t versionTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package) error {
+	pkg.Version = t.v
+	return nil
+}
+
+func TestPoolRoutesDevVsReleaseTasks(t *testing.T) {
+	db := openDB(t)
+	h := hubpkg.New()
+	ws := workingset.New(10)
+
+	devTasks := []worker.Task{versionTask{"dev"}}
+	releaseTasks := []worker.Task{versionTask{"release"}}
+
+	pool := worker.NewPool(0, devTasks, releaseTasks, nil, db, h, ws)
+
+	// Dev package: devTasks should run.
+	devPkg := &model.Package{
+		Project:     "isv:percona:ppg:17",
+		Name:        "pg_tde",
+		Scope:       model.ScopeVersion,
+		IsRelease:   false,
+		RollupState: model.RollupBuilding,
+		Targets:     []model.Target{{Repo: "RockyLinux_9", Arch: "x86_64", State: "building"}},
+		UpdatedAt:   time.Now().UTC(),
+	}
+	pool.ProcessOnce(context.Background(), devPkg)
+	if devPkg.Version != "dev" {
+		t.Errorf("dev package: expected version 'dev', got %q", devPkg.Version)
+	}
+
+	// Release package: releaseTasks should run, hub.Notify should NOT fire.
+	notifyCh := make(chan []byte, 16)
+	h.Register(notifyCh)
+	defer h.Unregister(notifyCh)
+
+	relPkg := &model.Package{
+		Project:     "isv:percona:ppg:releases:17",
+		Name:        "pg_tde",
+		Scope:       model.ScopeRelease,
+		IsRelease:   true,
+		RollupState: model.RollupBuilding,
+		Targets:     []model.Target{{Repo: "RockyLinux_9", Arch: "x86_64", State: "building"}},
+		UpdatedAt:   time.Now().UTC(),
+	}
+	pool.ProcessOnce(context.Background(), relPkg)
+	if relPkg.Version != "release" {
+		t.Errorf("release package: expected version 'release', got %q", relPkg.Version)
+	}
+
+	// Give a moment to drain any unexpected notifications.
+	time.Sleep(10 * time.Millisecond)
+	if len(notifyCh) > 0 {
+		t.Errorf("expected no hub notifications for release package, got %d", len(notifyCh))
+	}
+}

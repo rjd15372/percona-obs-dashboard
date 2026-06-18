@@ -93,6 +93,9 @@ func (t PublishStateTask) Run(ctx context.Context, client *Client, pkg *model.Pa
 type BinariesCheckTask struct{}
 
 func (t BinariesCheckTask) Run(ctx context.Context, client *Client, pkg *model.Package) error {
+	if len(pkg.Targets) == 0 {
+		return nil
+	}
 	states, err := client.RepoPublishStates(ctx, pkg.Project, pkg.Name)
 	if err != nil {
 		slog.Warn("obs: binaries check repo states", "pkg", pkg.Name, "err", err)
