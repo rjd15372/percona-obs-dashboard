@@ -11,6 +11,11 @@ type ProjectKind int
 
 const (
 	KindUnknown   ProjectKind = iota
+	// KindDev covers <root>:ppg:<version>[:<subproject>]. Container subprojects
+	// (e.g. <root>:ppg:17:containers:ubi9) intentionally map here, not a separate
+	// KindContainer. Container detection is per-package via is_container, not at the
+	// project level — this was an explicit design decision. Events from container
+	// subprojects therefore use scope ScopeVersion, not ScopeContainer.
 	KindDev       // <root>:ppg:<version>[:<subproject>]
 	KindPR        // <root>:PR:pr-<n>:ppg:<version>[:<subproject>]
 	KindPPGCommon // <root>:ppg:common[:<subproject>]
@@ -40,6 +45,8 @@ func (k ProjectKind) EventScope() model.Scope {
 	case KindRelease:
 		return model.ScopeRelease
 	default:
+		// KindUnknown returns ScopeCommon as a safe fallback. Callers that need to
+		// filter unknowns should check kind == KindUnknown before calling EventScope.
 		return model.ScopeCommon
 	}
 }
@@ -53,9 +60,6 @@ func Classify(root, project string) ProjectKind {
 	}
 	rel := project[len(prefix):]
 	parts := strings.Split(rel, ":")
-	if len(parts) == 0 {
-		return KindUnknown
-	}
 	switch parts[0] {
 	case "ppg":
 		if len(parts) < 2 {
@@ -72,6 +76,9 @@ func Classify(root, project string) ProjectKind {
 		default:
 			return KindDev
 		}
+	case "ppgcommon":
+		// Legacy flat-form project name for PPG common packages.
+		return KindPPGCommon
 	case "PR":
 		return KindPR
 	case "common":

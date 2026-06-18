@@ -21,6 +21,7 @@ func TestClassify(t *testing.T) {
 		{"isv:percona:PR:pr-42:ppg:17:containers:ubi9", KindPR},
 		{"isv:percona:ppg:common", KindPPGCommon},
 		{"isv:percona:ppg:common:deps", KindPPGCommon},
+		{"isv:percona:ppgcommon", KindPPGCommon},
 		{"isv:percona:common", KindCommon},
 		{"isv:percona:common:containers:ubi9", KindCommon},
 		{"isv:other:project", KindUnknown},
@@ -83,6 +84,7 @@ func TestProjectTags(t *testing.T) {
 		{"isv:percona:ppg:releases:17", []string{"ppg", "release"}},
 		{"isv:percona:PR:pr-42:ppg:17", []string{"ppg", "pr"}},
 		{"isv:percona:ppg:common", []string{"ppg", "common"}},
+		{"isv:percona:ppgcommon", []string{"ppg", "common"}},
 		{"isv:percona:common", []string{"common"}},
 		{"isv:other", []string{}},
 	}
