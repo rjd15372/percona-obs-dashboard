@@ -45,10 +45,11 @@ type Consumer struct {
 	hub       *hubpkg.Hub
 	obsClient *obs.Client
 	ws        *workingset.WorkingSet
+	root      string
 }
 
-func NewConsumer(url string, db *sql.DB, h *hubpkg.Hub, obsClient *obs.Client, ws *workingset.WorkingSet) *Consumer {
-	return &Consumer{url: url, db: db, hub: h, obsClient: obsClient, ws: ws}
+func NewConsumer(url string, db *sql.DB, h *hubpkg.Hub, obsClient *obs.Client, ws *workingset.WorkingSet, root string) *Consumer {
+	return &Consumer{url: url, db: db, hub: h, obsClient: obsClient, ws: ws, root: root}
 }
 
 // appendEvent writes evt to the store and notifies SSE clients.
@@ -162,8 +163,8 @@ func (c *Consumer) handle(ctx context.Context, msg amqp.Delivery) {
 		return
 	}
 
-	// Filter: only process isv:percona projects
-	if !strings.HasPrefix(m.Project, "isv:percona") {
+	// Filter: only process projects under our configured root.
+	if !strings.HasPrefix(m.Project, c.root+":") {
 		return
 	}
 
@@ -174,11 +175,16 @@ func (c *Consumer) handle(ctx context.Context, msg amqp.Delivery) {
 		slog.Debug("mq: received raw message", "key", msg.RoutingKey, "payload", payload)
 	}
 
+	kind := obs.Classify(c.root, m.Project)
+	scope := kind.EventScope()
+
 	key := msg.RoutingKey
 	switch {
 	case key == repoRouteKey:
-		// No event emitted — published events come from PublishStateTask per target.
-		// Signal succeeded packages to re-check publish state immediately.
+		// Release projects: BinariesCheckTask handles publish detection; ignore MQ repo events.
+		if kind == obs.KindRelease {
+			return
+		}
 		finished, err := store.GetFinishedPackagesByProject(c.db, m.Project)
 		if err != nil {
 			slog.Warn("mq: get finished packages for publish signal", "project", m.Project, "err", err)
@@ -189,10 +195,13 @@ func (c *Consumer) handle(ctx context.Context, msg amqp.Delivery) {
 		}
 
 	case key == "opensuse.obs.project.create":
+		if kind == obs.KindRelease {
+			return // release project creation is handled by the poller
+		}
 		c.appendEvent(&model.Event{
 			ID:      "evt_" + ulid.Make().String(),
 			Type:    model.EventCreated,
-			Scope:   inferScopeFromProject(m.Project),
+			Scope:   scope,
 			Project: m.Project,
 			What:    fmt.Sprintf("project %s created", m.Project),
 			Why:     m.Sender,
@@ -201,7 +210,6 @@ func (c *Consumer) handle(ctx context.Context, msg amqp.Delivery) {
 		})
 
 	case key == "opensuse.obs.project.delete":
-		scope := inferScopeFromProject(m.Project)
 		if err := store.DeletePackagesByProject(c.db, m.Project); err != nil {
 			slog.Error("mq: delete packages for project", "project", m.Project, "err", err)
 		}
@@ -217,10 +225,13 @@ func (c *Consumer) handle(ctx context.Context, msg amqp.Delivery) {
 		})
 
 	case key == "opensuse.obs.package.create":
+		if kind == obs.KindRelease {
+			return // release packages are discovered by the poller
+		}
 		c.appendEvent(&model.Event{
 			ID:      "evt_" + ulid.Make().String(),
 			Type:    model.EventCreated,
-			Scope:   inferScopeFromProject(m.Project),
+			Scope:   scope,
 			Project: m.Project,
 			Package: m.Package,
 			What:    fmt.Sprintf("package %s created", m.Package),
@@ -231,7 +242,7 @@ func (c *Consumer) handle(ctx context.Context, msg amqp.Delivery) {
 		stub := &model.Package{
 			Project: m.Project,
 			Name:    m.Package,
-			Scope:   inferScopeFromProject(m.Project),
+			Scope:   scope,
 		}
 		c.ws.Signal(stub)
 
@@ -242,7 +253,7 @@ func (c *Consumer) handle(ctx context.Context, msg amqp.Delivery) {
 		c.appendEvent(&model.Event{
 			ID:      "evt_" + ulid.Make().String(),
 			Type:    model.EventDeleted,
-			Scope:   inferScopeFromProject(m.Project),
+			Scope:   scope,
 			Project: m.Project,
 			Package: m.Package,
 			What:    fmt.Sprintf("package %s deleted", m.Package),
@@ -252,11 +263,12 @@ func (c *Consumer) handle(ctx context.Context, msg amqp.Delivery) {
 		})
 
 	case isPackageBuildEvent(key):
+		if kind == obs.KindRelease {
+			return // release build events are ignored; poller owns release state
+		}
 		if key == "opensuse.obs.package.build_unchanged" {
-			// No event — unchanged builds are noise; state tracking not needed.
 			return
 		}
-		scope := inferScopeFromProject(m.Project)
 		rollup := mqStateToRollup(key)
 		pkg := c.mergePackageTarget(m, scope, rollup)
 		if err := c.upsertPackage(pkg); err != nil {
@@ -266,7 +278,6 @@ func (c *Consumer) handle(ctx context.Context, msg amqp.Delivery) {
 		if pkg.RollupState != model.RollupSucceeded {
 			c.ws.Signal(pkg)
 		}
-		// No appendEvent — build events are emitted by the worker diff (Task 3)
 	}
 }
 
@@ -350,20 +361,3 @@ func mqStateToRollup(key string) model.RollupState {
 	}
 }
 
-func inferScopeFromProject(project string) model.Scope {
-	lower := strings.ToLower(project)
-	switch {
-	case strings.HasPrefix(lower, "isv:percona:pr:"):
-		return model.ScopePR
-	case strings.Contains(lower, "container"):
-		return model.ScopeContainer
-	case strings.Contains(lower, "release"):
-		return model.ScopeRelease
-	case strings.Contains(lower, "ppgcommon"):
-		return model.ScopePPGCommon
-	case strings.Contains(lower, "common"):
-		return model.ScopeCommon
-	default:
-		return model.ScopeVersion
-	}
-}

@@ -71,7 +71,7 @@ func run() error {
 	ws.StartScheduler(ctx, cfg.WorkerPool.PollInterval)
 
 	poller := obs.NewPoller(obsClient, db, cfg.Poller.Interval, h, ws, cfg.OBSRoot)
-	consumer := mq.NewConsumer(cfg.MQ.URL, db, h, obsClient, ws)
+	consumer := mq.NewConsumer(cfg.MQ.URL, db, h, obsClient, ws, cfg.OBSRoot)
 
 	go poller.Run(ctx)
 	go consumer.Run(ctx)
