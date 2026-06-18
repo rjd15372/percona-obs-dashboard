@@ -6,7 +6,7 @@ Replace the `scope` field on both `Package` and `Event` throughout the full stac
 
 ## Architecture
 
-Tags are a string slice stored as JSON in both the `packages` and `events` tables. The backend classifier assigns project-level tags; the store layer splices in `"container"` when `is_container` becomes true. Events inherit the emitting package's tags. The frontend renders a fixed known set of tag pills (`ppg`, `common`, `container`) with AND multi-select semantics.
+Tags are a string slice stored as JSON in both the `packages` and `events` tables. The backend classifier assigns project-level tags; the store layer splices in `"container"` when `is_container` becomes true. Worker-emitted events inherit the full package tags (including `container` when set). MQ-emitted events use `ProjectTags` (project-level tags only, without `container`, since container detection is async). The frontend renders a fixed known set of tag pills (`ppg`, `common`, `container`) with AND multi-select semantics.
 
 ## Tech Stack
 
@@ -34,6 +34,8 @@ ALTER TABLE events   DROP COLUMN scope;
 ```
 
 The `scope` column is dropped from `packages` (no longer written or read). `tags` is added to `events`; the `scope` column is then dropped from `events` too.
+
+**Fresh-schema update (`internal/store/db.go`):** The `CREATE TABLE packages` statement must have its `scope TEXT NOT NULL DEFAULT 'common'` column removed. The `CREATE TABLE events` statement must have `scope TEXT NOT NULL DEFAULT 'common'` replaced with `tags TEXT NOT NULL DEFAULT '[]'`. This ensures newly-created databases are schema-consistent with migrated ones.
 
 ## Section 2 — Backend Model (`internal/model/types.go`)
 
@@ -80,9 +82,9 @@ func QueryBuildPackages(db *sql.DB, root, product, version string) ([]*model.Pac
         vp := root + ":" + product + ":" + version
         rows, err = db.Query(`SELECT`+packageSelectCols+`
             FROM packages
-            WHERE (project = ? OR project LIKE ? || ':%')
-               OR (project = ? OR project LIKE ? || ':%')
-               OR (project = ? OR project LIKE ? || ':%')
+            WHERE ((project = ? OR project LIKE ? || ':%') AND is_release = 0)
+               OR  (project = ? OR project LIKE ? || ':%')
+               OR  (project = ? OR project LIKE ? || ':%')
             ORDER BY project, name`,
             vp, vp, cp, cp, gp, gp,
         )
@@ -109,25 +111,32 @@ _, err := db.Exec(`
 
 **`QueryEvents`:** SELECT `tags` instead of `scope`; unmarshal into `e.Tags`.
 
-## Section 5 — Backend Worker (`internal/worker/worker.go`)
+## Section 5 — Backend Poller (`internal/obs/poller.go`)
+
+- `buildPackage(project, name string, scope model.Scope, targets)` — drop the `scope` parameter; add `tags []string`. Set `Tags: tags` on the returned package instead of `Scope: scope`.
+- The call site in `tick`/`discoverProjects`: replace `scope := InferScope(project)` with `tags := ProjectTags(p.root, project)`. Pass `tags` to `buildPackage`.
+- `stateChangeEvent(pkg, prev)` at line 304: replace `Scope: pkg.Scope` with `Tags: pkg.Tags`.
+- `InferScope` function is removed entirely — all callers now use `ProjectTags` or `Classify`.
+
+## Section 6 — Backend Worker (`internal/worker/worker.go`)
 
 `emitBuildEvents`: replace `Scope: pkg.Scope` with `Tags: pkg.Tags` on all four event structs (`EventBuildStarted`, `EventFailed`, `EventSucceeded`, `EventPublished`).
 
-## Section 6 — Backend MQ Consumer (`internal/mq/consumer.go`)
+## Section 7 — Backend MQ Consumer (`internal/mq/consumer.go`)
 
 - Remove `scope := kind.EventScope()` and all `Scope: scope` event field assignments.
 - For events created from MQ messages, use `Tags: obs.ProjectTags(c.root, m.Project)`.
 - `mergePackageTarget`: drop the `scope model.Scope` parameter; set `Tags: obs.ProjectTags(c.root, m.Project)` on the returned `model.Package`. Remove `Scope: scope` from the package literal.
 - All callers of `mergePackageTarget` updated accordingly.
 
-## Section 7 — Frontend Types (`frontend/src/types/api.ts`)
+## Section 8 — Frontend Types (`frontend/src/types/api.ts`)
 
 - Remove `PackageScope` type.
 - `Package`: remove `scope: PackageScope`; add `tags?: string[]`, `is_release?: boolean`.
 - `Event`: remove `scope: string`; add `tags?: string[]`.
 - `BuildState`: add `'published'`.
 
-## Section 8 — Frontend `usePackages.ts`
+## Section 9 — Frontend `usePackages.ts`
 
 - `SEVERITY`: add `published: -1` (sorts last — least urgent).
 - `sorted` filter: replace `pkg.scope !== 'release'` and the `:releases:` string check with `!pkg.is_release`.
@@ -142,7 +151,7 @@ function filterByTags(tags: string[]): Package[] {
 }
 ```
 
-## Section 9 — Frontend `useEvents.ts`
+## Section 10 — Frontend `useEvents.ts`
 
 `filterEvents` parameter `scopes: string[]` → `tags: string[]`. Filter logic:
 
@@ -150,7 +159,33 @@ function filterByTags(tags: string[]): Package[] {
 if (tags.length > 0 && !tags.every(t => (e.tags ?? []).includes(t))) return false
 ```
 
-## Section 10 — Frontend `ContextBar.vue`
+## Section 11 — Frontend `useArtifacts.ts`
+
+- `PackageRow` interface: replace `scope: 'common' | 'ppgcommon' | 'version'` with `tags: string[]`.
+- Inside `packageRows` computed: replace `scope: pkg.scope as ...` with `tags: pkg.tags ?? []`.
+- `containerImages` computed filter: replace `pkg.scope === 'container'` with `pkg.is_container === true` (already present as a secondary check; remove the scope check entirely).
+
+## Section 12 — Frontend `EventLog.vue`
+
+`EventLog` groups events by package. The group object currently carries `scope: string` (line 159) derived from `sorted[0].scope`. Replace:
+- The group type `scope: string` → `tags: string[]`
+- `scope: sorted[0].scope` → `tags: sorted[0].tags ?? []`
+- The `:scope="group.scope"` prop pass to `PackageEventGroup` → `:tags="group.tags"`
+
+## Section 13 — Frontend `PackageEventGroup.vue`
+
+This component receives a `scope: string` prop and uses it in three ways:
+- Single scope badge rendered via `SCOPE_STYLE[scope]` / `SCOPE_LABEL[scope]`
+- `displayVersion` container check: `scope === 'container'`
+- Version badge style conditional on `scope === 'container'`
+
+Replace:
+- Prop `scope: string` → `tags: string[]`
+- Scope badge → one pill per tag using `TAG_STYLE[tag]` / `TAG_LABEL[tag]` (same pattern as `EventRow.vue`)
+- All `scope === 'container'` → `tags.includes('container')`
+- Import `TAG_STYLE`, `TAG_LABEL` from `useEventDisplay.ts`
+
+## Section 14 — Frontend `ContextBar.vue`
 
 - Remove `SCOPES` array and `activeScopes` prop; add `activeTags: string[]` prop.
 - Rename emit `toggle-scope` → `toggle-tag`.
@@ -158,14 +193,14 @@ if (tags.length > 0 && !tags.every(t => (e.tags ?? []).includes(t))) return fals
 - A pill is greyed out (inactive border style) if `activeTags` does not include it; active (filled) if it does.
 - No "All" pill — deselecting all tags returns to show-everything, same as before. The label reads "Tags" instead of "Scope".
 
-## Section 11 — Frontend `App.vue`
+## Section 15 — Frontend `App.vue`
 
 - `activeScopes` → `activeTags`, `toggleScope` → `toggleTag`.
 - `filterByScope(activeScopes.value)` → `filterByTags(activeTags.value)`.
 - `filterEvents(activeScopes.value, ...)` → `filterEvents(activeTags.value, ...)`.
 - ContextBar: `active-scopes` → `active-tags`, `@toggle-scope` → `@toggle-tag`.
 
-## Section 12 — Frontend `useEventDisplay.ts`
+## Section 16 — Frontend `useEventDisplay.ts`
 
 Replace `SCOPE_STYLE` / `SCOPE_LABEL` with `TAG_STYLE` / `TAG_LABEL`:
 
@@ -183,7 +218,7 @@ export const TAG_LABEL: Record<string, string> = {
 }
 ```
 
-## Section 13 — Frontend `EventRow.vue`
+## Section 17 — Frontend `EventRow.vue`
 
 - Replace the single scope badge with one pill per tag in `event.tags`:
 
@@ -197,7 +232,7 @@ export const TAG_LABEL: Record<string, string> = {
 
 - `displayVersion` container-detection: `event.scope === 'container'` → `(event.tags ?? []).includes('container')`.
 
-## Section 14 — Frontend `PackageCard.vue`
+## Section 18 — Frontend `PackageCard.vue`
 
 - Add `published` to `STATE_COLOR` / `STATE_BG` / `STATE_LABEL`:
   - `STATE_COLOR.published = 'var(--ok)'`
@@ -205,7 +240,7 @@ export const TAG_LABEL: Record<string, string> = {
   - `STATE_LABEL.published = 'Published'`
 - Remove `SCOPE_LABEL` map; replace the scope badge with tag pills using `TAG_LABEL` / `TAG_STYLE` from `useEventDisplay.ts`. Render one pill per tag in `pkg.tags`.
 
-## Section 15 — Frontend `HealthHeader.vue`
+## Section 19 — Frontend `HealthHeader.vue`
 
 Treat `published` as a success state everywhere `succeeded` appears:
 
@@ -213,12 +248,13 @@ Treat `published` as a success state everywhere `succeeded` appears:
 - `buildingCount` / other counts: unchanged (published is not in those buckets).
 - `allGreen`: unchanged (uses `okCount === total`).
 
-## Section 16 — Frontend `FailureBoard.vue`
+## Section 20 — Frontend `FailureBoard.vue`
 
 - `failingPackages`: add `&& p.rollup_state !== 'published'`
 - `okPackages`: add `|| p.rollup_state === 'published'`
 
-## Section 17 — Cleanup
+## Section 21 — Cleanup
 
 - Delete `frontend/src/components/ScopeChip.vue` (unused).
-- `classifier.go`: `EventScope()` method can be removed once all callers in `mq/consumer.go` are replaced with `ProjectTags`.
+- `classifier.go`: `EventScope()` method removed once all callers in `mq/consumer.go` and `poller.go` are replaced with `ProjectTags`.
+- `poller.go`: `InferScope` function removed (replaced by `ProjectTags` throughout).
