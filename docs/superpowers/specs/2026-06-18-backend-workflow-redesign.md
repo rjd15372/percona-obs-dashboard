@@ -31,7 +31,7 @@ Add one field to `config.go`:
 OBSRoot string // default "isv:percona"
 ```
 
-All hardcoded `"isv:percona"` strings (poller roots, MQ filter, handlers) are replaced with `cfg.OBSRoot`. The hardcoded `"isv:common"` root is removed — it does not exist.
+All hardcoded `"isv:percona"` strings (poller roots, MQ filter, handlers) are replaced with `cfg.OBSRoot`. The hardcoded `"isv:common"` root is removed — confirmed non-existent.
 
 ### ProjectClassifier (`internal/obs/classifier.go`)
 
@@ -212,7 +212,14 @@ When `PackageTypeTask` confirms `is_container = 1`, the worker appends `"contain
 
 ### State duration recording
 
-`BuildStateTask` calls `store.RecordStateTransitions(db, pkg, oldTargets, newTargets, now)` after computing new target states. The store function closes open duration rows for changed targets and opens new ones.
+State transitions must be recorded at the persistence layer, not in `BuildStateTask`. Both the poller and the MQ consumer upsert package state before signalling the working set, so by the time `BuildStateTask` runs the prior target state is already overwritten in the DB.
+
+`store.UpsertPackageState` is extended to record transitions inline:
+1. Before writing, read the current `targets_json` from the DB for this `(project, package)`.
+2. For each target where `old.state != new.state`, call the duration recording logic: close the open `target_state_durations` row (`SET exited_at = now`) and open a new one (`INSERT ... entered_at = now`).
+3. Write the new `targets_json`.
+
+This means every upsert path — poller, MQ consumer, and worker — automatically records transitions with no additional caller changes.
 
 ### Task pipeline split
 
@@ -260,28 +267,31 @@ This condition is identical for real-time and release packages:
 
 ## Section 5: API Handler Changes
 
+### Store query split: build packages vs. release packages
+
+`QueryPackages` is split into two functions with distinct filters:
+
+- `QueryBuildPackages(db, root, version string) []Package` — returns non-release packages for the builds tab. Executes a union of three prefix queries: `<root>:ppg:<version>` (dev packages), `<root>:ppg:common` (PPG common deps), and `<root>:common` (global common packages). Adds `AND is_release = 0` to exclude any misclassified rows.
+- `QueryReleasePackages(db, prefix string) []Package` — returns only release packages (`AND is_release = 1`) for the artifacts tab. Used by `releasesPackagesHandler`.
+
+The original `QueryPackages(db, projectPrefix)` (prefix LIKE query, no release filter) is retained for internal uses such as `GetActivePackages` and GC that need to operate across all package types.
+
+### `packagesHandler` — replace manual common-package append
+
+Currently `packagesHandler` manually appends `isv:percona:common` packages. It is replaced with a call to `store.QueryBuildPackages(db, cfg.OBSRoot, version)`, which covers dev, PPG common, and global common packages in a single store call.
+
 ### Releases packages — DB instead of live OBS
 
 `releasesPackagesHandler` and `releasesReposHandler` currently do live OBS enumeration. Since the poller now syncs release packages to the DB, both switch to DB queries:
 
-- `releasesPackagesHandler` → `store.QueryPackages(db, cfg.OBSRoot+":ppg:releases")`
+- `releasesPackagesHandler` → `store.QueryReleasePackages(db, cfg.OBSRoot+":ppg:releases")`
 - `releasesReposHandler` → `store.QueryDistinctRepos(db, cfg.OBSRoot+":ppg:releases:"+version)`
 
 Response formats are unchanged.
 
-### `packagesHandler` — remove manual common-package append
-
-Currently `packagesHandler` manually appends `isv:percona:common` packages to version-specific results. Since the poller now syncs all projects under `cfg.OBSRoot` (including `common` subtree), common packages appear in the DB naturally. The handler becomes a single query:
-
-```go
-store.QueryPackages(db, cfg.OBSRoot+":ppg:"+version)
-```
-
-`QueryPackages` gains an `AND is_release = 0` filter to ensure release packages never appear in builds tab responses.
-
 ### SSE stream
 
-No changes. Release packages never reach the worker's broadcast path since their task pipeline has no `BuildStateTask`.
+The worker suppresses hub notifications for release packages. After the task pipeline completes, `hub.Notify` is only called when `!pkg.IsRelease`. Release packages go through the detection pipeline (type check, binaries check) but their state changes are not broadcast — the artifacts tab fetches on demand from the DB.
 
 ---
 
@@ -292,9 +302,9 @@ No changes. Release packages never reach the worker's broadcast path since their
 | Config | Add `OBSRoot` (default `isv:percona`) |
 | Classifier | New `internal/obs/classifier.go` — `Classify`, `ProjectTags`, `ProjectKind.IsRealTime()` |
 | DB schema | `scope` → `tags` (JSON array); add `is_release`; add `published` rollup state; add `target_state_durations` table |
-| Model | Add `published` to `RollupState` enum; replace `Scope` field with `Tags []string` and `IsRelease bool` |
-| Store | `GetActivePackages`: `rollup_state != 'published' OR is_container IS NULL`; new `RecordStateTransitions`; `QueryPackages` adds `is_release = 0` filter; `DeletePackagesByProject` cascades to `target_state_durations` |
+| Model | Add `published` to `RollupState` enum; replace `Package.Scope` with `Tags []string` and `IsRelease bool`; `Event.Scope` and `events.scope` column are **unchanged** (events keep legacy scope) |
+| Store | `GetActivePackages`: `rollup_state != 'published' OR is_container IS NULL`; `UpsertPackageState` records state transitions inline; split `QueryPackages` into `QueryBuildPackages` + `QueryReleasePackages`; `DeletePackagesByProject` cascades to `target_state_durations` |
 | Poller | Immediate startup trigger; single configurable root; real-time vs. release discovery split; sets `is_release` on upsert; adds release packages to working set when detection incomplete |
-| Worker | `container` tag write-back on `is_container=1`; `RecordStateTransitions` in `BuildStateTask`; split task pipeline (real-time vs. release); `PublishStateTask` promotes to `published`; new `BinariesCheckTask` |
+| Worker | `container` tag write-back on `is_container=1`; split task pipeline (real-time vs. release); `PublishStateTask` promotes to `published`; new `BinariesCheckTask`; suppress `hub.Notify` for release packages |
 | MQ | Filter uses `cfg.OBSRoot` |
-| Handlers | Releases served from DB; `packagesHandler` drops manual common-package append |
+| Handlers | Releases served from DB via `QueryReleasePackages`; `packagesHandler` uses `QueryBuildPackages` (union of dev + ppg-common + common); worker suppresses SSE for release packages |
