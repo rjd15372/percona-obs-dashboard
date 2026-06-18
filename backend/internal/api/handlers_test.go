@@ -34,7 +34,7 @@ func setupTestServer(t *testing.T) http.Handler {
 	t.Cleanup(func() { db.Close() })
 	obsSrv := stubOBSServer(t)
 	obsClient := obs.NewClient(obsSrv.URL, "user", "pass")
-	return NewRouter(db, hub.New(), obsClient)
+	return NewRouter(db, hub.New(), obsClient, "isv:percona")
 }
 
 func TestPackagesHandler_EmptyDB(t *testing.T) {

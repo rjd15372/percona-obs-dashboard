@@ -77,7 +77,7 @@ func run() error {
 	go consumer.Run(ctx)
 	go runPruner(ctx, db, cfg.Poller.Interval, cfg.Store.EventRetention)
 
-	router := api.NewRouter(db, h, obsClient)
+	router := api.NewRouter(db, h, obsClient, cfg.OBSRoot)
 
 	var handler http.Handler = router
 	if cfg.Server.FrontendDir != "" {

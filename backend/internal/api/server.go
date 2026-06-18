@@ -12,20 +12,20 @@ import (
 )
 
 // NewRouter creates the chi router with all API routes registered.
-func NewRouter(db *sql.DB, h *hub.Hub, obsClient *obs.Client) http.Handler {
+func NewRouter(db *sql.DB, h *hub.Hub, obsClient *obs.Client, root string) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 
 	r.Route("/api/products/{product}/{version}", func(r chi.Router) {
-		r.Get("/packages", packagesHandler(db))
+		r.Get("/packages", packagesHandler(db, root))
 		r.Get("/events", eventsHandler(db))
 		r.Get("/repos", reposHandler(db))
 	})
 
 	r.Route("/api/releases/ppg/{version}", func(r chi.Router) {
-		r.Get("/packages", releasesPackagesHandler(obsClient))
-		r.Get("/repos", releasesReposHandler(obsClient))
+		r.Get("/packages", releasesPackagesHandler(db, root))
+		r.Get("/repos", releasesReposHandler(db, root))
 	})
 
 	r.Get("/api/pr/packages", prPackagesHandler(db))

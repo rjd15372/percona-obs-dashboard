@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -18,38 +17,19 @@ import (
 )
 
 // packagesHandler returns a handler for GET /api/products/{product}/{version}/packages.
-func packagesHandler(db *sql.DB) http.HandlerFunc {
+func packagesHandler(db *sql.DB, root string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		product := chi.URLParam(r, "product")
-		// Use the product-level prefix so common packages (isv:percona:ppg:common)
-		// are included alongside version-specific ones. Version filtering is done
-		// client-side so the version tabs actually work.
-		prefix := "isv:percona:" + product
+		version := chi.URLParam(r, "version")
 
-		pkgs, err := store.QueryPackages(db, prefix)
+		pkgs, err := store.QueryBuildPackages(db, root, product, version)
 		if err != nil {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
-
-		// isv:percona:common:* subprojects are product-agnostic shared dependencies.
-		perconaCommon, err := store.QueryPackages(db, "isv:percona:common")
-		if err != nil {
-			http.Error(w, "internal server error", http.StatusInternalServerError)
-			return
-		}
-		pkgs = append(pkgs, perconaCommon...)
-
-		isvCommon, err := store.QueryPackages(db, "isv:common")
-		if err != nil {
-			http.Error(w, "internal server error", http.StatusInternalServerError)
-			return
-		}
-		pkgs = append(pkgs, isvCommon...)
 
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(pkgs); err != nil {
-			// Response already started; nothing we can do.
 			return
 		}
 	}
@@ -281,136 +261,43 @@ func reposHandler(db *sql.DB) http.HandlerFunc {
 	})
 }
 
-// enumerateReleaseProject traverses /build/{project}/ → repos → arches → packages
-// and returns one Package per (pkgName, project) with targets populated.
-func enumerateReleaseProject(ctx context.Context, obsClient *obs.Client, project string) ([]*model.Package, error) {
-	repos, err := obsClient.ProjectRepos(ctx, project)
-	if err != nil {
-		return nil, err
-	}
-
-	type pkgEntry struct {
-		targets []model.Target
-	}
-	byPkg := map[string]*pkgEntry{}
-
-	for _, repo := range repos {
-		archs, err := obsClient.ProjectRepoArchs(ctx, project, repo)
-		if err != nil {
-			continue
-		}
-		for _, arch := range archs {
-			names, err := obsClient.ProjectRepoPackages(ctx, project, repo, arch)
-			if err != nil {
-				continue
-			}
-			for _, name := range names {
-				if _, ok := byPkg[name]; !ok {
-					byPkg[name] = &pkgEntry{}
-				}
-				byPkg[name].targets = append(byPkg[name].targets, model.Target{
-					Repo:      repo,
-					Arch:      arch,
-					State:     "succeeded",
-					Published: true,
-				})
-			}
-		}
-	}
-
-	pkgs := make([]*model.Package, 0, len(byPkg))
-	for name, e := range byPkg {
-		pkgs = append(pkgs, &model.Package{
-			Project:      project,
-			Name:         name,
-			Scope:        model.ScopeRelease,
-			RollupState:  model.RollupSucceeded,
-			OKTargets:    len(e.targets),
-			TotalTargets: len(e.targets),
-			Targets:      e.targets,
-		})
-	}
-	return pkgs, nil
-}
-
 // releasesPackagesHandler returns a handler for GET /api/releases/ppg/{version}/packages.
-// The {version} URL param is accepted for symmetry but ignored — this handler
-// always returns packages across ALL release versions so the client can populate
-// the version selector (same pattern as packagesHandler for PPG).
-// It discovers versions via SearchProjects("isv:percona:ppg:releases") and then
-// enumerates each version project via the OBS directory API.
-func releasesPackagesHandler(obsClient *obs.Client) http.HandlerFunc {
+// Serves release packages from the DB instead of hitting OBS live.
+func releasesPackagesHandler(db *sql.DB, root string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if obsClient == nil {
-			http.Error(w, "OBS client not configured", http.StatusServiceUnavailable)
-			return
-		}
-
-		ctx := r.Context()
-
-		// Discover all isv:percona:ppg:releases:{version} sub-projects.
-		versionProjects, err := obsClient.SearchProjects(ctx, "isv:percona:ppg:releases")
+		prefix := root + ":ppg:releases"
+		pkgs, err := store.QueryReleasePackages(db, prefix)
 		if err != nil {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
-
-		allPkgs := make([]*model.Package, 0)
-		for _, project := range versionProjects {
-			pkgs, err := enumerateReleaseProject(ctx, obsClient, project)
-			if err != nil {
-				continue // skip versions we can't reach
-			}
-			allPkgs = append(allPkgs, pkgs...)
-		}
-
-		sort.Slice(allPkgs, func(i, j int) bool {
-			if allPkgs[i].Project != allPkgs[j].Project {
-				return allPkgs[i].Project < allPkgs[j].Project
-			}
-			return allPkgs[i].Name < allPkgs[j].Name
-		})
-
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(allPkgs); err != nil {
-			return
-		}
+		json.NewEncoder(w).Encode(pkgs)
 	}
 }
 
 // releasesReposHandler returns a handler for GET /api/releases/ppg/{version}/repos.
-// It queries /build/{project}/ which returns the list of configured repo names
-// directly — much cheaper than scanning all build results.
-func releasesReposHandler(obsClient *obs.Client) http.HandlerFunc {
+// Serves repos from the DB instead of hitting OBS live.
+func releasesReposHandler(db *sql.DB, root string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		version := chi.URLParam(r, "version")
-		project := "isv:percona:ppg:releases:" + version
-
-		if obsClient == nil {
-			http.Error(w, "OBS client not configured", http.StatusServiceUnavailable)
-			return
-		}
-
-		repoNames, err := obsClient.ProjectRepos(r.Context(), project)
+		prefix := root + ":ppg:releases:" + version
+		repos, err := store.QueryDistinctRepos(db, prefix)
 		if err != nil {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
-
 		resp := ReposResponse{RPM: []RepoInfo{}, DEB: []RepoInfo{}}
-		for _, name := range repoNames {
-			info := RepoInfo{OBS: name, Name: repoDisplayName(name)}
-			if repoType(name) == "deb" {
+		for _, obsName := range repos {
+			info := RepoInfo{OBS: obsName, Name: repoDisplayName(obsName)}
+			if repoType(obsName) == "deb" {
 				resp.DEB = append(resp.DEB, info)
 			} else {
 				resp.RPM = append(resp.RPM, info)
 			}
 		}
-
 		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(resp); err != nil {
-			return
-		}
+		json.NewEncoder(w).Encode(resp)
 	}
 }
 
