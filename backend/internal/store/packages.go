@@ -13,17 +13,31 @@ import (
 func UpsertPackageState(db *sql.DB, p *model.Package, now time.Time) error {
 	// Read current targets for state-duration recording (before overwrite).
 	var prevTargetsJSON string
+	var prevIsContainer sql.NullInt64
 	var prevTargets []model.Target
-	if err := db.QueryRow(`SELECT targets_json FROM packages WHERE project = ? AND name = ?`,
-		p.Project, p.Name).Scan(&prevTargetsJSON); err == nil {
-		_ = json.Unmarshal([]byte(prevTargetsJSON), &prevTargets)
-	}
+	db.QueryRow(`SELECT targets_json, is_container FROM packages WHERE project = ? AND name = ?`,
+		p.Project, p.Name).Scan(&prevTargetsJSON, &prevIsContainer)
+	_ = json.Unmarshal([]byte(prevTargetsJSON), &prevTargets)
 
 	targetsJSON, err := json.Marshal(p.Targets)
 	if err != nil {
 		return err
 	}
-	tagsJSON, err := json.Marshal(p.Tags)
+
+	// Splice container tag when is_container is true now or was true previously.
+	isContainer := (p.IsContainer != nil && *p.IsContainer) ||
+		(prevIsContainer.Valid && prevIsContainer.Int64 != 0)
+	mergedTags := p.Tags
+	if isContainer {
+		seen := make(map[string]bool, len(p.Tags)+1)
+		for _, t := range p.Tags {
+			seen[t] = true
+		}
+		if !seen["container"] {
+			mergedTags = append(append([]string(nil), p.Tags...), "container")
+		}
+	}
+	tagsJSON, err := json.Marshal(mergedTags)
 	if err != nil {
 		return err
 	}
@@ -60,12 +74,11 @@ func UpsertPackageState(db *sql.DB, p *model.Package, now time.Time) error {
 
 	_, err = db.Exec(`
 		INSERT INTO packages
-			(project, name, scope, rollup_state, ok_targets, total_targets,
+			(project, name, rollup_state, ok_targets, total_targets,
 			 trigger_what, trigger_kind, trigger_at, targets_json, updated_at,
 			 state_changed_at, is_container, version, container_tags, tags, is_release)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(project, name) DO UPDATE SET
-			scope=excluded.scope,
 			rollup_state=excluded.rollup_state,
 			ok_targets=excluded.ok_targets,
 			total_targets=excluded.total_targets,
@@ -79,14 +92,13 @@ func UpsertPackageState(db *sql.DB, p *model.Package, now time.Time) error {
 			version=excluded.version,
 			container_tags=excluded.container_tags,
 			tags=CASE WHEN excluded.tags != '[]' THEN excluded.tags ELSE tags END,
-			-- is_release is a one-way ratchet: once marked as release it cannot be un-set.
 			is_release=CASE WHEN excluded.is_release != 0 THEN 1 ELSE is_release END,
 			state_changed_at = CASE
 				WHEN excluded.rollup_state != rollup_state THEN excluded.state_changed_at
 				WHEN state_changed_at IS NULL              THEN excluded.state_changed_at
 				ELSE state_changed_at
 			END`,
-		p.Project, p.Name, string(p.Scope), string(p.RollupState),
+		p.Project, p.Name, string(p.RollupState),
 		p.OKTargets, p.TotalTargets,
 		trigWhat, trigKind, trigAt,
 		string(targetsJSON), p.UpdatedAt, now,
@@ -171,13 +183,13 @@ func DeletePackage(db *sql.DB, project, name string) error {
 	return err
 }
 
-const packageSelectCols = ` project, name, scope, rollup_state, ok_targets, total_targets,
+const packageSelectCols = ` project, name, rollup_state, ok_targets, total_targets,
 	trigger_what, trigger_kind, trigger_at, targets_json, updated_at,
 	state_changed_at, is_container, version, container_tags, tags, is_release`
 
 // scanPackages is a helper that extracts the scan loop pattern used by multiple query functions.
 // It expects rows to have been created with the standard package column order defined
-// in packageSelectCols: project, name, scope, rollup_state, ok_targets, total_targets,
+// in packageSelectCols: project, name, rollup_state, ok_targets, total_targets,
 // trigger_what, trigger_kind, trigger_at, targets_json, updated_at, state_changed_at,
 // is_container, version, container_tags, tags, is_release.
 func scanPackages(rows *sql.Rows) ([]*model.Package, error) {
@@ -193,7 +205,7 @@ func scanPackages(rows *sql.Rows) ([]*model.Package, error) {
 		var tagsJSON string
 		var isRelease int
 		if err := rows.Scan(
-			&p.Project, &p.Name, &p.Scope, &p.RollupState,
+			&p.Project, &p.Name, &p.RollupState,
 			&p.OKTargets, &p.TotalTargets,
 			&trigWhat, &trigKind, &trigAt,
 			&targetsJSON, &p.UpdatedAt,
@@ -299,18 +311,34 @@ func QueryPackages(db *sql.DB, projectPrefix string) ([]*model.Package, error) {
 // QueryBuildPackages returns packages for the builds tab: version-specific project
 // (including container subprojects), product-common subtree, and global common subtree.
 // root is e.g. "isv:percona", product is "ppg", version is "17".
+// When version is "_" or "", all versions under the product subtree are returned.
 func QueryBuildPackages(db *sql.DB, root, product, version string) ([]*model.Package, error) {
-	vp := root + ":" + product + ":" + version
-	cp := root + ":" + product + ":common"
 	gp := root + ":common"
-	rows, err := db.Query(`SELECT`+packageSelectCols+`
-		FROM packages
-		WHERE (project = ? OR project LIKE ? || ':%')
-		   OR (project = ? OR project LIKE ? || ':%')
-		   OR (project = ? OR project LIKE ? || ':%')
-		ORDER BY project, name`,
-		vp, vp, cp, cp, gp, gp,
-	)
+	var rows *sql.Rows
+	var err error
+	if version == "_" || version == "" {
+		pp := root + ":" + product
+		rows, err = db.Query(`SELECT`+packageSelectCols+`
+			FROM packages
+			WHERE is_release = 0
+			  AND (  (project = ? OR project LIKE ? || ':%')
+			      OR (project = ? OR project LIKE ? || ':%') )
+			ORDER BY project, name`,
+			pp, pp, gp, gp,
+		)
+	} else {
+		vp := root + ":" + product + ":" + version
+		cp := root + ":" + product + ":common"
+		rows, err = db.Query(`SELECT`+packageSelectCols+`
+			FROM packages
+			WHERE is_release = 0
+			  AND (  (project = ? OR project LIKE ? || ':%')
+			      OR (project = ? OR project LIKE ? || ':%')
+			      OR (project = ? OR project LIKE ? || ':%') )
+			ORDER BY project, name`,
+			vp, vp, cp, cp, gp, gp,
+		)
+	}
 	if err != nil {
 		return nil, err
 	}

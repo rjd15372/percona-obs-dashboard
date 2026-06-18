@@ -36,17 +36,6 @@ func (s RollupState) Severity() int {
 	}
 }
 
-type Scope string
-
-const (
-	ScopeCommon    Scope = "common"
-	ScopePPGCommon Scope = "ppgcommon"
-	ScopeVersion   Scope = "version"
-	ScopeContainer Scope = "container"
-	ScopeRelease   Scope = "release"
-	ScopePR        Scope = "pr"
-)
-
 type Target struct {
 	Repo                string   `json:"repo"`
 	Arch                string   `json:"arch"`
@@ -67,7 +56,6 @@ type Trigger struct {
 type Package struct {
 	Project        string      `json:"project"`
 	Name           string      `json:"name"`
-	Scope          Scope       `json:"scope"`
 	Tags           []string    `json:"tags,omitempty"`
 	IsRelease      bool        `json:"is_release,omitempty"`
 	RollupState    RollupState `json:"rollup_state"`
@@ -104,7 +92,7 @@ const (
 type Event struct {
 	ID      string    `json:"id"`
 	Type    EventType `json:"type"`
-	Scope   Scope     `json:"scope"`
+	Tags    []string  `json:"tags,omitempty"`
 	Project string    `json:"project"`
 	Package string    `json:"package"`
 	Repo    string    `json:"repo,omitempty"`

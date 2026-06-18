@@ -18,7 +18,7 @@ func TestAppendQueryPruneEvents(t *testing.T) {
 	e := &model.Event{
 		ID:      "evt_01",
 		Type:    model.EventFailed,
-		Scope:   model.ScopeVersion,
+		Tags:    []string{"ppg"},
 		Project: "isv:percona:ppg:17",
 		Package: "pg_tde",
 		What:    "build failed",
@@ -37,6 +37,9 @@ func TestAppendQueryPruneEvents(t *testing.T) {
 	}
 	if len(events) != 1 || events[0].ID != "evt_01" {
 		t.Errorf("expected 1 event evt_01, got %d events", len(events))
+	}
+	if len(events[0].Tags) != 1 || events[0].Tags[0] != "ppg" {
+		t.Errorf("expected tags [ppg], got %v", events[0].Tags)
 	}
 
 	// Query out of range — should find 0 events
@@ -66,7 +69,7 @@ func TestEventVersionRoundtrip(t *testing.T) {
 	evt := &model.Event{
 		ID:      "evt_01JTEST",
 		Type:    model.EventSucceeded,
-		Scope:   model.ScopeVersion,
+		Tags:    []string{"ppg"},
 		Project: "isv:percona:ppg:17",
 		Package: "percona-pg_tde",
 		Repo:    "UBI_9",
@@ -95,7 +98,7 @@ func TestEventVersionRoundtrip(t *testing.T) {
 	evt2 := &model.Event{
 		ID:      "evt_02JTEST",
 		Type:    model.EventBuildStarted,
-		Scope:   model.ScopeVersion,
+		Tags:    []string{"ppg"},
 		Project: "isv:percona:ppg:17",
 		Package: "percona-pg_tde",
 		Repo:    "UBI_9",
