@@ -31,7 +31,7 @@ const attentionCount = computed(() => failingPackages.value.length)
     <!-- All green state -->
     <div v-if="failingPackages.length === 0 && packages.length > 0" style="background: var(--ok-tint); border: 1px solid var(--ok); border-radius: 12px; padding: 28px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center;">
       <span style="font-size: 26px; color: var(--ok); font-weight: 800;">✓</span>
-      <span style="font-size: 15px; font-weight: 700; color: var(--text-primary);">All green in scope</span>
+      <span style="font-size: 15px; font-weight: 700; color: var(--text-primary);">All packages green</span>
     </div>
 
     <!-- Empty state -->
