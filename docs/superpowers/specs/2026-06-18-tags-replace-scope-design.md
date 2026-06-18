@@ -169,6 +169,7 @@ _, err := db.Exec(`
 
 - `buildPackage(project, name string, scope model.Scope, targets)` — drop the `scope` parameter; add `tags []string`. Set `Tags: tags` on the returned package instead of `Scope: scope`.
 - The call site in `tick`/`discoverProjects`: replace `scope := InferScope(project)` with `tags := ProjectTags(p.root, project)`. Pass `tags` to `buildPackage`.
+- `tasks.go` line 19 (`BuildStateTask.Run`): the second call site of `buildPackage` passes `pkg.Scope`. After the signature change this becomes `buildPackage(pkg.Project, pkg.Name, pkg.Tags, results)` — `pkg.Tags` already carries the correct tags from the store layer.
 - `stateChangeEvent(pkg, prev)` at line 304: replace `Scope: pkg.Scope` with `Tags: pkg.Tags`.
 - `InferScope` function is removed entirely — all callers now use `ProjectTags` or `Classify`.
 
