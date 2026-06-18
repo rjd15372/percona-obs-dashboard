@@ -10,6 +10,7 @@ import (
 )
 
 type Config struct {
+	OBSRoot    string
 	OBS        OBSConfig
 	MQ         MQConfig
 	Poller     PollerConfig
@@ -50,6 +51,9 @@ type WorkerPoolConfig struct {
 
 func Load() (*Config, error) {
 	v := viper.New()
+
+	v.SetDefault("obs_root", "isv:percona")
+	_ = v.BindEnv("obs_root", "OBS_ROOT")
 
 	v.SetDefault("obs.base_url", "https://api.opensuse.org")
 	v.SetDefault("mq.url", "amqps://opensuse:opensuse@rabbit.opensuse.org:5671/")
@@ -106,6 +110,7 @@ func Load() (*Config, error) {
 	}
 
 	cfg := &Config{
+		OBSRoot: v.GetString("obs_root"),
 		OBS: OBSConfig{
 			Username: v.GetString("obs.username"),
 			Password: v.GetString("obs.password"),
