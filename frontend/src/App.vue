@@ -56,7 +56,7 @@ function selectContext(ctx: Context) {
 }
 
 // Event window state
-const windowMin = ref(1440)
+const windowMin = ref(60)
 const customFrom = ref<string | null>(null)
 const customTo = ref<string | null>(null)
 
