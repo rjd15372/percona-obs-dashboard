@@ -39,11 +39,14 @@ export function useArtifactMetadata(
   const metadataMap = ref(new Map<string, ArtifactMetadataResult>())
   const isLoading = ref(false)
   let controller: AbortController | null = null
+  let requestSeq = 0
 
   async function fetchMetadata() {
+    const requestId = ++requestSeq
     controller?.abort()
-    controller = new AbortController()
-    const signal = controller.signal
+    const currentController = new AbortController()
+    controller = currentController
+    const signal = currentController.signal
     isLoading.value = true
 
     try {
@@ -90,7 +93,9 @@ export function useArtifactMetadata(
     } catch {
       // metadata is best-effort; silently ignore network/parse errors (including AbortError)
     } finally {
-      isLoading.value = false
+      if (requestId === requestSeq) {
+        isLoading.value = false
+      }
     }
   }
 
