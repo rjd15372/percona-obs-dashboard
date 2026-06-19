@@ -36,8 +36,13 @@ export function useArtifactMetadata(
   enrichedContainerImages: ComputedRef<ContainerImage[]>
 } {
   const metadataMap = ref(new Map<string, ArtifactMetadataResult>())
+  let controller: AbortController | null = null
 
   async function fetchMetadata() {
+    controller?.abort()
+    controller = new AbortController()
+    const signal = controller.signal
+
     if (!isLiveContext.value) {
       metadataMap.value = new Map()
       return
@@ -70,8 +75,9 @@ export function useArtifactMetadata(
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items }),
+        signal,
       })
-      if (!res.ok) return
+      if (!res.ok || signal.aborted) return
       const data = await res.json() as { items: ArtifactMetadataResult[] }
       const newMap = new Map<string, ArtifactMetadataResult>()
       for (const result of data.items) {
@@ -79,7 +85,7 @@ export function useArtifactMetadata(
       }
       metadataMap.value = newMap
     } catch {
-      // metadata is best-effort; silently ignore network/parse errors
+      // metadata is best-effort; silently ignore network/parse errors (including AbortError)
     }
   }
 
