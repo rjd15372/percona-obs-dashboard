@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive } from 'vue'
 import type { ArtifactBinary, PackageRow, RepoInfo } from '../composables/useArtifacts'
+import { distroGroup } from '../composables/useArtifacts'
 
 const props = defineProps<{
   packageRows: PackageRow[]
@@ -17,8 +18,26 @@ const emit = defineEmits<{
   'copy': [key: string, text: string]
 }>()
 
-const rpmRepos = computed(() => props.repos.filter(r => r.type === 'rpm'))
-const debRepos = computed(() => props.repos.filter(r => r.type === 'deb'))
+const rhelRepos = computed(() =>
+  props.repos.filter(r => distroGroup(r) === 'RHEL')
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+)
+const opensuseRepos = computed(() =>
+  props.repos.filter(r => distroGroup(r) === 'openSUSE')
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+)
+const ubuntuRepos = computed(() =>
+  props.repos.filter(r => distroGroup(r) === 'Ubuntu')
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+)
+const debianRepos = computed(() =>
+  props.repos.filter(r => distroGroup(r) === 'Debian')
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+)
+const otherRepos = computed(() =>
+  props.repos.filter(r => distroGroup(r) === 'Other')
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+)
 const showPackageList = computed(() => props.selectedRepo !== null || props.packageRows.length > 0)
 
 // ----- snippet -----
@@ -140,10 +159,10 @@ function stateClass(state: string): string {
   <div class="packages-subtab">
     <!-- Sidebar -->
     <div class="sidebar">
-      <template v-if="rpmRepos.length > 0">
-        <div class="group-label rpm-label">RPM</div>
+      <template v-if="rhelRepos.length > 0">
+        <div class="group-label">RHEL</div>
         <button
-          v-for="repo in rpmRepos"
+          v-for="repo in rhelRepos"
           :key="repo.obs"
           class="sidebar-row"
           :class="{ active: selectedRepo?.obs === repo.obs }"
@@ -151,10 +170,43 @@ function stateClass(state: string): string {
         >{{ repo.name }}</button>
       </template>
 
-      <template v-if="debRepos.length > 0">
-        <div class="group-label deb-label">DEB</div>
+      <template v-if="opensuseRepos.length > 0">
+        <div class="group-label">openSUSE</div>
         <button
-          v-for="repo in debRepos"
+          v-for="repo in opensuseRepos"
+          :key="repo.obs"
+          class="sidebar-row"
+          :class="{ active: selectedRepo?.obs === repo.obs }"
+          @click="emit('update:art-repo', repo.obs)"
+        >{{ repo.name }}</button>
+      </template>
+
+      <template v-if="ubuntuRepos.length > 0">
+        <div class="group-label">Ubuntu</div>
+        <button
+          v-for="repo in ubuntuRepos"
+          :key="repo.obs"
+          class="sidebar-row"
+          :class="{ active: selectedRepo?.obs === repo.obs }"
+          @click="emit('update:art-repo', repo.obs)"
+        >{{ repo.name }}</button>
+      </template>
+
+      <template v-if="debianRepos.length > 0">
+        <div class="group-label">Debian</div>
+        <button
+          v-for="repo in debianRepos"
+          :key="repo.obs"
+          class="sidebar-row"
+          :class="{ active: selectedRepo?.obs === repo.obs }"
+          @click="emit('update:art-repo', repo.obs)"
+        >{{ repo.name }}</button>
+      </template>
+
+      <template v-if="otherRepos.length > 0">
+        <div class="group-label">Other</div>
+        <button
+          v-for="repo in otherRepos"
           :key="repo.obs"
           class="sidebar-row"
           :class="{ active: selectedRepo?.obs === repo.obs }"
@@ -308,15 +360,12 @@ function stateClass(state: string): string {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-muted);
-}
-
-.rpm-label {
-  border-bottom: 1px solid var(--border);
-}
-
-.deb-label {
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
+}
+
+.sidebar > .group-label:first-child {
+  border-top: none;
 }
 
 .sidebar-row {

@@ -62,6 +62,15 @@ export function deriveBaseOs(project: string): string {
   return project
 }
 
+export function distroGroup(repo: RepoInfo): string {
+  const name = repo.name.toLowerCase()
+  if (/rhel|centos|rocky|oracle|ubi/.test(name)) return 'RHEL'
+  if (/opensuse|suse/.test(name)) return 'openSUSE'
+  if (/ubuntu/.test(name)) return 'Ubuntu'
+  if (/debian/.test(name)) return 'Debian'
+  return 'Other'
+}
+
 export function useArtifacts(
   packages: MaybeRef<Package[]>,
   version: MaybeRef<string>,
