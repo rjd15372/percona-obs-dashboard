@@ -18,6 +18,7 @@ func NewRouter(db *sql.DB, h *hub.Hub, obsClient *obs.Client, root string) http.
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	releaseArtifacts := newReleaseArtifactsCache(10 * time.Minute)
+	metadataCache := newBinaryListCache(5 * time.Minute)
 
 	r.Route("/api/products/{product}/{version}", func(r chi.Router) {
 		r.Get("/packages", packagesHandler(db, root))
@@ -41,6 +42,7 @@ func NewRouter(db *sql.DB, h *hub.Hub, obsClient *obs.Client, root string) http.
 
 	r.Get("/api/stream", streamHandler(h))
 	r.Get("/api/binaries", binariesHandler(obsClient))
+	r.Post("/api/artifacts/metadata", artifactMetadataHandler(obsClient, metadataCache))
 
 	return r
 }
