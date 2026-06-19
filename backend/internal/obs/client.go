@@ -691,3 +691,43 @@ func (c *Client) PackageContainerTags(ctx context.Context, project, repo, arch, 
 	}
 	return tags, nil
 }
+
+// stripEpoch removes the "N:" epoch prefix from an EVR string if present.
+// "2:16.4-2.3" → "16.4-2.3"; "3.5.30-2.1" → "3.5.30-2.1" (unchanged).
+func stripEpoch(evr string) string {
+	if i := strings.Index(evr, ":"); i >= 0 {
+		return evr[i+1:]
+	}
+	return evr
+}
+
+// RepoBinaryVersions returns a map of filename → evr for all binaries in the
+// given (project, repo, arch) target. Epoch prefixes are stripped from the evr
+// values. Returns an empty map (not an error) if the list is empty.
+func (c *Client) RepoBinaryVersions(ctx context.Context, project, repo, arch string) (map[string]string, error) {
+	path := fmt.Sprintf("/build/%s/%s/%s/_repository?view=binaryversions&withevr=1",
+		url.PathEscape(project), url.PathEscape(repo), url.PathEscape(arch))
+	resp, err := c.get(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var raw struct {
+		Binaries []struct {
+			Name string `xml:"name,attr"`
+			EVR  string `xml:"evr,attr"`
+		} `xml:"binary"`
+	}
+	if err := xml.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, fmt.Errorf("parse binaryversionlist for %s/%s/%s: %w", project, repo, arch, err)
+	}
+
+	out := make(map[string]string, len(raw.Binaries))
+	for _, b := range raw.Binaries {
+		if b.Name != "" && b.EVR != "" {
+			out[b.Name] = stripEpoch(b.EVR)
+		}
+	}
+	return out, nil
+}

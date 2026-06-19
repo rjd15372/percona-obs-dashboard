@@ -451,3 +451,75 @@ func TestPackageContainerTagsEmpty(t *testing.T) {
 		t.Errorf("expected empty, got %v", tags)
 	}
 }
+
+func TestRepoBinaryVersions(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/build/isv:percona:ppg:releases:17/openSUSE_Tumbleweed/x86_64/_repository" {
+			http.NotFound(w, r)
+			return
+		}
+		if r.URL.Query().Get("view") != "binaryversions" || r.URL.Query().Get("withevr") != "1" {
+			http.Error(w, "bad query", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/xml")
+		w.Write([]byte(`<binaryversionlist>
+			<binary name="etcd-3.5.30-2.1.x86_64.rpm" sizek="17985" evr="3.5.30-2.1" arch="x86_64"/>
+			<binary name="etcd-debugsource-3.5.30-2.1.x86_64.rpm" sizek="100" evr="3.5.30-2.1" arch="x86_64"/>
+		</binaryversionlist>`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "u", "p")
+	versions, err := c.RepoBinaryVersions(context.Background(),
+		"isv:percona:ppg:releases:17", "openSUSE_Tumbleweed", "x86_64")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(versions) != 2 {
+		t.Fatalf("expected 2 entries, got %d: %v", len(versions), versions)
+	}
+	if versions["etcd-3.5.30-2.1.x86_64.rpm"] != "3.5.30-2.1" {
+		t.Errorf("expected '3.5.30-2.1', got %q", versions["etcd-3.5.30-2.1.x86_64.rpm"])
+	}
+	if versions["etcd-debugsource-3.5.30-2.1.x86_64.rpm"] != "3.5.30-2.1" {
+		t.Errorf("expected '3.5.30-2.1', got %q", versions["etcd-debugsource-3.5.30-2.1.x86_64.rpm"])
+	}
+}
+
+func TestRepoBinaryVersionsStripsEpoch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		w.Write([]byte(`<binaryversionlist>
+			<binary name="postgresql16-16.4-2.3.x86_64.rpm" sizek="1234" evr="2:16.4-2.3" arch="x86_64"/>
+		</binaryversionlist>`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "u", "p")
+	versions, err := c.RepoBinaryVersions(context.Background(), "proj", "repo", "x86_64")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if versions["postgresql16-16.4-2.3.x86_64.rpm"] != "16.4-2.3" {
+		t.Errorf("expected epoch stripped to '16.4-2.3', got %q",
+			versions["postgresql16-16.4-2.3.x86_64.rpm"])
+	}
+}
+
+func TestRepoBinaryVersionsEmpty(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		w.Write([]byte(`<binaryversionlist></binaryversionlist>`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "u", "p")
+	versions, err := c.RepoBinaryVersions(context.Background(), "proj", "repo", "arch")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(versions) != 0 {
+		t.Errorf("expected empty map, got %v", versions)
+	}
+}
