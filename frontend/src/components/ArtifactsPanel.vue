@@ -247,7 +247,7 @@ const { enrichedPackageRows, enrichedContainerImages, isLoading: metadataLoading
 const isLoading = computed(() => artifactsLoading.value || metadataLoading.value)
 
 const packageRows = computed<PackageRow[]>(() => {
-  if (!isReleaseContext.value) return enrichedPackageRows.value
+  if (!isReleaseContext.value) return enrichedPackageRows.value.filter(row => row.binaries && row.binaries.length > 0)
   const repo = selectedRepo.value
   if (!repo || !releaseArtifacts.value) return []
   return releaseArtifacts.value.packages

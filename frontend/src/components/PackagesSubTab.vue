@@ -280,11 +280,11 @@ function stateClass(state: string): string {
             <button
               class="pkg-row"
               :class="{ expanded: expanded[rowKey(row)] }"
-              @click="row.binariesAvailable && row.state === 'succeeded' ? toggleRow(row) : undefined"
-              :disabled="!row.binariesAvailable || row.state !== 'succeeded'"
-              :title="!row.binariesAvailable ? 'No target binaries available' : (row.state !== 'succeeded' ? 'Not built' : 'Click to show binaries')"
+              @click="row.state === 'succeeded' ? toggleRow(row) : undefined"
+              :disabled="row.state !== 'succeeded'"
+              :title="row.state !== 'succeeded' ? 'Package is not in succeeded state' : 'Click to show binaries'"
             >
-              <span class="expand-glyph">{{ row.binariesAvailable ? (expanded[rowKey(row)] ? '▼' : '▶') : '' }}</span>
+              <span class="expand-glyph">{{ row.state === 'succeeded' ? (expanded[rowKey(row)] ? '▼' : '▶') : '' }}</span>
               <code class="pkg-name">{{ row.name }}</code>
               <code v-if="row.version" class="pkg-version">{{ row.version }}</code>
               <span v-if="row.builtAt" class="pkg-built-at">{{ formatArtifactTime(row.builtAt) }}</span>
