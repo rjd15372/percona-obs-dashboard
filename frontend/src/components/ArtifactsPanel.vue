@@ -19,6 +19,7 @@
       :version="localVersion"
       :art-arch="artArch"
       :copied-key="copiedKey"
+      :loading="isLoading"
       @update:art-repo="artRepoObs = $event"
       @update:art-arch="artArch = $event as 'x86_64' | 'aarch64'"
       @copy="onCopy"
@@ -237,11 +238,13 @@ const { packageRows: livePackageRows, containerImages: liveContainerImages } = u
   contextPrefix,
 )
 
-const { enrichedPackageRows, enrichedContainerImages } = useArtifactMetadata(
+const { enrichedPackageRows, enrichedContainerImages, isLoading: metadataLoading } = useArtifactMetadata(
   livePackageRows,
   liveContainerImages,
   computed(() => !isReleaseContext.value),
 )
+
+const isLoading = computed(() => artifactsLoading.value || metadataLoading.value)
 
 const packageRows = computed<PackageRow[]>(() => {
   if (!isReleaseContext.value) return enrichedPackageRows.value

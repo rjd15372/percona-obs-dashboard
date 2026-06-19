@@ -34,43 +34,46 @@ export function useArtifactMetadata(
 ): {
   enrichedPackageRows: ComputedRef<PackageRow[]>
   enrichedContainerImages: ComputedRef<ContainerImage[]>
+  isLoading: Ref<boolean>
 } {
   const metadataMap = ref(new Map<string, ArtifactMetadataResult>())
+  const isLoading = ref(false)
   let controller: AbortController | null = null
 
   async function fetchMetadata() {
     controller?.abort()
     controller = new AbortController()
     const signal = controller.signal
-
-    if (!isLiveContext.value) {
-      metadataMap.value = new Map()
-      return
-    }
-
-    const items: ArtifactMetadataItem[] = [
-      ...packageRows.value.map(row => ({
-        project: row.project,
-        name: row.name,
-        repo: row.repo.obs,
-        arch: row.arch,
-        kind: 'package' as const,
-      })),
-      ...containerImages.value.map(img => ({
-        project: img.project,
-        name: img.imageName,
-        repo: '',
-        arch: '',
-        kind: 'container' as const,
-      })),
-    ]
-
-    if (items.length === 0) {
-      metadataMap.value = new Map()
-      return
-    }
+    isLoading.value = true
 
     try {
+      if (!isLiveContext.value) {
+        metadataMap.value = new Map()
+        return
+      }
+
+      const items: ArtifactMetadataItem[] = [
+        ...packageRows.value.map(row => ({
+          project: row.project,
+          name: row.name,
+          repo: row.repo.obs,
+          arch: row.arch,
+          kind: 'package' as const,
+        })),
+        ...containerImages.value.map(img => ({
+          project: img.project,
+          name: img.imageName,
+          repo: '',
+          arch: '',
+          kind: 'container' as const,
+        })),
+      ]
+
+      if (items.length === 0) {
+        metadataMap.value = new Map()
+        return
+      }
+
       const res = await fetch('/api/artifacts/metadata', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -86,6 +89,8 @@ export function useArtifactMetadata(
       metadataMap.value = newMap
     } catch {
       // metadata is best-effort; silently ignore network/parse errors (including AbortError)
+    } finally {
+      isLoading.value = false
     }
   }
 
@@ -122,5 +127,5 @@ export function useArtifactMetadata(
     })
   )
 
-  return { enrichedPackageRows, enrichedContainerImages }
+  return { enrichedPackageRows, enrichedContainerImages, isLoading }
 }

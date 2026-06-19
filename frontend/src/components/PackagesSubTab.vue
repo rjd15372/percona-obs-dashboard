@@ -10,6 +10,7 @@ const props = defineProps<{
   version: string
   artArch: string
   copiedKey: string | null
+  loading?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -265,7 +266,11 @@ function stateClass(state: string): string {
             <template v-if="selectedRepo"> · {{ selectedRepo.name }} / {{ artArch }}</template>
           </span>
         </div>
-        <div class="pkg-list">
+        <div v-if="loading" class="packages-loading">
+          <div class="spinner"></div>
+          <span class="loading-label">Fetching packages…</span>
+        </div>
+        <div v-else class="pkg-list">
           <div
             v-for="row in packageRows"
             :key="rowKey(row)"
@@ -529,6 +534,33 @@ function stateClass(state: string): string {
 
 .pkg-list {
   overflow-y: auto;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.packages-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 0;
+  gap: 12px;
+}
+
+.spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--border);
+  border-top-color: var(--brand-purple);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.loading-label {
+  font-size: 13px;
+  color: var(--text-muted);
 }
 
 .pkg-group {
