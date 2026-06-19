@@ -184,25 +184,25 @@ func TestGetFinishedPackagesByProject(t *testing.T) {
 	pkgSucceeded1 := &model.Package{
 		Project: "isv:percona:ppg:17", Name: "postgres17",
 		RollupState: model.RollupSucceeded, OKTargets: 1, TotalTargets: 1,
-		Targets: []model.Target{{Repo: "Percona-PPG-17", Arch: "x86_64", State: "succeeded"}},
+		Targets:   []model.Target{{Repo: "Percona-PPG-17", Arch: "x86_64", State: "succeeded"}},
 		UpdatedAt: now,
 	}
 	pkgSucceeded2 := &model.Package{
 		Project: "isv:percona:ppg:17", Name: "pgaudit17",
 		RollupState: model.RollupSucceeded, OKTargets: 1, TotalTargets: 1,
-		Targets: []model.Target{{Repo: "Percona-PPG-17", Arch: "aarch64", State: "succeeded"}},
+		Targets:   []model.Target{{Repo: "Percona-PPG-17", Arch: "aarch64", State: "succeeded"}},
 		UpdatedAt: now,
 	}
 	pkgBuilding := &model.Package{
 		Project: "isv:percona:ppg:17", Name: "pg_stat_monitor",
 		RollupState: model.RollupBuilding, OKTargets: 0, TotalTargets: 1,
-		Targets: []model.Target{{Repo: "Percona-PPG-17", Arch: "x86_64", State: "building"}},
+		Targets:   []model.Target{{Repo: "Percona-PPG-17", Arch: "x86_64", State: "building"}},
 		UpdatedAt: now,
 	}
 	pkgOtherProject := &model.Package{
 		Project: "isv:percona:ppg:16", Name: "postgres16",
 		RollupState: model.RollupSucceeded, OKTargets: 1, TotalTargets: 1,
-		Targets: []model.Target{{Repo: "Percona-PPG-16", Arch: "x86_64", State: "succeeded"}},
+		Targets:   []model.Target{{Repo: "Percona-PPG-16", Arch: "x86_64", State: "succeeded"}},
 		UpdatedAt: now,
 	}
 	for _, pkg := range []*model.Package{pkgSucceeded1, pkgSucceeded2, pkgBuilding, pkgOtherProject} {
@@ -278,6 +278,85 @@ func TestQueryBuildPackages(t *testing.T) {
 	}
 	if names["release_pkg"] {
 		t.Error("release_pkg should not appear in build packages")
+	}
+}
+
+func TestQueryPRBuildPackagesIncludesPRCommon(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	now := time.Now().UTC()
+	insert := func(project, name string) {
+		t.Helper()
+		if _, err := db.Exec(`INSERT INTO packages (project, name, rollup_state, ok_targets, total_targets, targets_json, updated_at)
+            VALUES (?, ?, 'building', 0, 0, '[]', ?)`, project, name, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	insert("isv:percona:PR:pr-104:ppg:17", "pg_tde")
+	insert("isv:percona:PR:pr-104:ppg:17:containers:ubi9", "pg_container")
+	insert("isv:percona:PR:pr-104:common", "common_pkg")
+	insert("isv:percona:PR:pr-104:common:deps", "common_dep")
+	insert("isv:percona:PR:pr-104:other:17", "other_pkg")
+	insert("isv:percona:PR:pr-105:common", "other_pr_common")
+
+	pkgs, err := QueryPRBuildPackages(db, "isv:percona", "pr-104", "ppg")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	names := make(map[string]bool)
+	for _, p := range pkgs {
+		names[p.Name] = true
+	}
+	for _, want := range []string{"pg_tde", "pg_container", "common_pkg", "common_dep"} {
+		if !names[want] {
+			t.Errorf("missing expected package %q", want)
+		}
+	}
+	for _, unwanted := range []string{"other_pkg", "other_pr_common"} {
+		if names[unwanted] {
+			t.Errorf("unexpected package %q", unwanted)
+		}
+	}
+}
+
+func TestQueryPRDistinctReposIncludesPRCommon(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	now := time.Now().UTC()
+	insert := func(project, name, targets string) {
+		t.Helper()
+		if _, err := db.Exec(`INSERT INTO packages (project, name, rollup_state, ok_targets, total_targets, targets_json, updated_at)
+            VALUES (?, ?, 'building', 0, 0, ?, ?)`, project, name, targets, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	insert("isv:percona:PR:pr-104:ppg:17", "pg_tde", `[{"repo":"EL_9"}]`)
+	insert("isv:percona:PR:pr-104:common", "common_pkg", `[{"repo":"Debian_12"}]`)
+	insert("isv:percona:PR:pr-104:ppg:18", "pg_tde18", `[{"repo":"EL_8"}]`)
+
+	repos, err := QueryPRDistinctRepos(db, "isv:percona", "pr-104", "ppg", "17")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got := make(map[string]bool)
+	for _, repo := range repos {
+		got[repo] = true
+	}
+	if !got["EL_9"] || !got["Debian_12"] {
+		t.Fatalf("expected version and common repos, got %v", repos)
+	}
+	if got["EL_8"] {
+		t.Fatalf("unexpected repo from another version: %v", repos)
 	}
 }
 

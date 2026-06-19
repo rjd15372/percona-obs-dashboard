@@ -100,13 +100,12 @@ func eventsHandler(db *sql.DB) http.HandlerFunc {
 // Builds the OBS prefix as isv:percona:PR:{pr}:{subproject}.
 // {version} is accepted for URL symmetry with /api/products routes but ignored server-side;
 // the prefix covers all versions and version filtering is done client-side.
-func prContextPackagesHandler(db *sql.DB) http.HandlerFunc {
+func prContextPackagesHandler(db *sql.DB, root string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		pr := chi.URLParam(r, "pr")
 		subproject := chi.URLParam(r, "subproject")
-		prefix := "isv:percona:PR:" + pr + ":" + subproject
 
-		pkgs, err := store.QueryPackages(db, prefix)
+		pkgs, err := store.QueryPRBuildPackages(db, root, pr, subproject)
 		if err != nil {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
@@ -122,11 +121,10 @@ func prContextPackagesHandler(db *sql.DB) http.HandlerFunc {
 // prContextEventsHandler returns a handler for GET /api/pr/{pr}/{subproject}/{version}/events.
 // Builds the OBS prefix as isv:percona:PR:{pr}:{subproject}.
 // {version} is accepted for URL symmetry but ignored server-side (filtering is client-side).
-func prContextEventsHandler(db *sql.DB) http.HandlerFunc {
+func prContextEventsHandler(db *sql.DB, root string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		pr := chi.URLParam(r, "pr")
 		subproject := chi.URLParam(r, "subproject")
-		prefix := "isv:percona:PR:" + pr + ":" + subproject
 
 		from, to, err := parseTimeWindow(r)
 		if err != nil {
@@ -134,7 +132,7 @@ func prContextEventsHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		events, err := store.QueryEvents(db, prefix, from, to)
+		events, err := store.QueryPRBuildEvents(db, root, pr, subproject, from, to)
 		if err != nil {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
@@ -149,7 +147,7 @@ func prContextEventsHandler(db *sql.DB) http.HandlerFunc {
 
 // PRGroup groups all packages under a single PR project number.
 type PRGroup struct {
-	PR          string           `json:"pr"`
+	PR          string            `json:"pr"`
 	RollupState model.RollupState `json:"rollup_state"`
 	Packages    []*model.Package  `json:"packages"`
 }
@@ -306,11 +304,33 @@ func releasesReposHandler(db *sql.DB, root string) http.HandlerFunc {
 }
 
 // prReposHandler returns a handler for GET /api/pr/{pr}/{subproject}/{version}/repos.
-func prReposHandler(db *sql.DB) http.HandlerFunc {
-	return reposHandlerWithPrefix(db, func(r *http.Request) string {
-		return "isv:percona:PR:" + chi.URLParam(r, "pr") + ":" +
-			chi.URLParam(r, "subproject") + ":" + chi.URLParam(r, "version")
-	})
+func prReposHandler(db *sql.DB, root string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		repos, err := store.QueryPRDistinctRepos(
+			db,
+			root,
+			chi.URLParam(r, "pr"),
+			chi.URLParam(r, "subproject"),
+			chi.URLParam(r, "version"),
+		)
+		if err != nil {
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+		resp := ReposResponse{RPM: []RepoInfo{}, DEB: []RepoInfo{}}
+		for _, obsName := range repos {
+			info := RepoInfo{OBS: obsName, Name: repoDisplayName(obsName)}
+			if repoType(obsName) == "deb" {
+				resp.DEB = append(resp.DEB, info)
+			} else {
+				resp.RPM = append(resp.RPM, info)
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			return
+		}
+	}
 }
 
 // binariesHandler returns a handler for GET /api/binaries.

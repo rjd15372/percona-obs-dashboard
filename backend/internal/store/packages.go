@@ -314,11 +314,64 @@ func QueryDistinctRepos(db *sql.DB, projectPrefix string) ([]string, error) {
 	return repos, nil
 }
 
+func scanDistinctRepos(rows *sql.Rows) ([]string, error) {
+	defer rows.Close()
+
+	seen := map[string]struct{}{}
+	for rows.Next() {
+		var targetsJSON string
+		if err := rows.Scan(&targetsJSON); err != nil {
+			return nil, err
+		}
+		var targets []struct {
+			Repo string `json:"repo"`
+		}
+		if err := json.Unmarshal([]byte(targetsJSON), &targets); err != nil {
+			continue
+		}
+		for _, t := range targets {
+			if t.Repo != "" {
+				seen[t.Repo] = struct{}{}
+			}
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	repos := make([]string, 0, len(seen))
+	for r := range seen {
+		repos = append(repos, r)
+	}
+	sort.Strings(repos)
+	return repos, nil
+}
+
 // QueryPackages returns all packages for a given OBS project prefix.
 func QueryPackages(db *sql.DB, projectPrefix string) ([]*model.Package, error) {
 	rows, err := db.Query(`SELECT`+packageSelectCols+`
 		FROM packages WHERE project LIKE ? ORDER BY project, name`,
 		projectPrefix+"%",
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanPackages(rows)
+}
+
+// QueryPRBuildPackages returns packages for a PR context: the selected
+// subproject subtree plus the PR-local common subtree.
+func QueryPRBuildPackages(db *sql.DB, root, pr, subproject string) ([]*model.Package, error) {
+	sp := root + ":PR:" + pr + ":" + subproject
+	cp := root + ":PR:" + pr + ":common"
+	rows, err := db.Query(`SELECT`+packageSelectCols+`
+		FROM packages
+		WHERE is_release = 0
+		  AND (  (project = ? OR project LIKE ? || ':%')
+		      OR (project = ? OR project LIKE ? || ':%') )
+		ORDER BY project, name`,
+		sp, sp, cp, cp,
 	)
 	if err != nil {
 		return nil, err
@@ -365,6 +418,24 @@ func QueryBuildPackages(db *sql.DB, root, product, version string) ([]*model.Pac
 	return scanPackages(rows)
 }
 
+// QueryPRDistinctRepos returns package repos for a PR version subtree plus the
+// PR-local common subtree.
+func QueryPRDistinctRepos(db *sql.DB, root, pr, subproject, version string) ([]string, error) {
+	vp := root + ":PR:" + pr + ":" + subproject + ":" + version
+	cp := root + ":PR:" + pr + ":common"
+	rows, err := db.Query(
+		`SELECT targets_json FROM packages
+		 WHERE (is_container IS NULL OR is_container = 0)
+		   AND (  (project = ? OR project LIKE ? || ':%')
+		       OR (project = ? OR project LIKE ? || ':%') )`,
+		vp, vp, cp, cp,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return scanDistinctRepos(rows)
+}
+
 // QueryReleasePackages returns packages in the release subtree (is_release=1).
 // prefix is e.g. "isv:percona:ppg:releases".
 func QueryReleasePackages(db *sql.DB, prefix string) ([]*model.Package, error) {
@@ -383,11 +454,11 @@ func QueryReleasePackages(db *sql.DB, prefix string) ([]*model.Package, error) {
 }
 
 // GetActivePackages returns packages that need worker attention:
-// - packages not yet in a final succeeded state, plus
-// - packages whose is_container type has not yet been detected (is_container IS NULL),
-//   so PackageTypeTask can run for them even if they already succeeded.
+//   - packages not yet in a final succeeded state, plus
+//   - packages whose is_container type has not yet been detected (is_container IS NULL),
+//     so PackageTypeTask can run for them even if they already succeeded.
 func GetActivePackages(db *sql.DB) ([]*model.Package, error) {
-	rows, err := db.Query(`SELECT`+packageSelectCols+`
+	rows, err := db.Query(`SELECT` + packageSelectCols + `
 		FROM packages
 		WHERE rollup_state != 'published' OR is_container IS NULL
 		ORDER BY project, name`,

@@ -62,6 +62,46 @@ func QueryEvents(db *sql.DB, projectPrefix string, from, to time.Time) ([]*model
 	return events, rows.Err()
 }
 
+// QueryPRBuildEvents returns events for a PR context: the selected subproject
+// subtree plus the PR-local common subtree.
+func QueryPRBuildEvents(db *sql.DB, root, pr, subproject string, from, to time.Time) ([]*model.Event, error) {
+	sp := root + ":PR:" + pr + ":" + subproject
+	cp := root + ":PR:" + pr + ":common"
+	rows, err := db.Query(`
+		SELECT id, type, tags, project, package,
+		       COALESCE(repo,''), COALESCE(arch,''),
+		       what, why, url, at, COALESCE(version,'')
+		FROM events
+		WHERE at >= ? AND at <= ?
+		  AND (  (project = ? OR project LIKE ? || ':%')
+		      OR (project = ? OR project LIKE ? || ':%') )
+		ORDER BY at DESC
+		LIMIT 500`,
+		from, to, sp, sp, cp, cp,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	events := make([]*model.Event, 0)
+	for rows.Next() {
+		e := &model.Event{}
+		var tagsJSON string
+		if err := rows.Scan(
+			&e.ID, &e.Type, &tagsJSON, &e.Project, &e.Package,
+			&e.Repo, &e.Arch, &e.What, &e.Why, &e.URL, &e.At, &e.Version,
+		); err != nil {
+			return nil, err
+		}
+		if tagsJSON != "" && tagsJSON != "[]" {
+			_ = json.Unmarshal([]byte(tagsJSON), &e.Tags)
+		}
+		events = append(events, e)
+	}
+	return events, rows.Err()
+}
+
 // PruneEvents deletes events older than cutoff.
 func PruneEvents(db *sql.DB, cutoff time.Time) error {
 	_, err := db.Exec("DELETE FROM events WHERE at < ?", cutoff)

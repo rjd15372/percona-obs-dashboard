@@ -87,6 +87,7 @@ const contexts = computed<Context[]>(() => {
       if (prIdx < 0 || prIdx + 2 >= parts.length) continue
       const prSegment = parts[prIdx + 1]   // "pr-92"
       const subproject = parts[prIdx + 2]  // "ppg"
+      if (subproject.toLowerCase() === 'common') continue
       const key = `${prSegment}:${subproject}`
       if (seen.has(key)) continue
       seen.add(key)

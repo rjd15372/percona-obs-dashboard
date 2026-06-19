@@ -35,9 +35,9 @@ func NewRouter(db *sql.DB, h *hub.Hub, obsClient *obs.Client, root string) http.
 	r.Get("/api/pr/packages", prPackagesHandler(db))
 
 	r.Route("/api/pr/{pr}/{subproject}/{version}", func(r chi.Router) {
-		r.Get("/packages", prContextPackagesHandler(db))
-		r.Get("/events", prContextEventsHandler(db))
-		r.Get("/repos", prReposHandler(db))
+		r.Get("/packages", prContextPackagesHandler(db, root))
+		r.Get("/events", prContextEventsHandler(db, root))
+		r.Get("/repos", prReposHandler(db, root))
 	})
 
 	r.Get("/api/stream", streamHandler(h))

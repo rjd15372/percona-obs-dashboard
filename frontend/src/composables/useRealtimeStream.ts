@@ -18,8 +18,14 @@ function prNumberFromProject(project: string): string {
 function projectInContext(project: string, prefix: string): boolean {
   if (project === prefix || project.startsWith(prefix + ':')) return true
 
+  if (prefix.includes(':PR:')) {
+    const parts = prefix.split(':')
+    const commonPrefix = `${parts.slice(0, 4).join(':')}:common`
+    return project === commonPrefix || project.startsWith(`${commonPrefix}:`)
+  }
+
   // The main PPG board includes product packages plus product/global common
-  // packages. PR and release contexts are exact subtrees.
+  // packages. Release contexts are exact subtrees.
   if (prefix.endsWith(':ppg') && !prefix.includes(':PR:') && !prefix.includes(':releases')) {
     const root = prefix.slice(0, -':ppg'.length)
     return project === `${prefix}:common` ||

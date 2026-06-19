@@ -37,9 +37,18 @@ export function useEvents(apiBase: MaybeRef<string>, version: MaybeRef<string>) 
     return seg === version
   }
 
+  function matchesContext(project: string, prefix: string): boolean {
+    if (!prefix || project === prefix || project.startsWith(prefix + ':')) return true
+    if (!prefix.includes(':PR:')) return false
+
+    const parts = prefix.split(':')
+    const commonPrefix = `${parts.slice(0, 4).join(':')}:common`
+    return project === commonPrefix || project.startsWith(`${commonPrefix}:`)
+  }
+
   function filterEvents(tags: string[], version: string, prefixDepth: number, prefix: string): Event[] {
     return data.value.filter(e => {
-      if (prefix && e.project !== prefix && !e.project.startsWith(prefix + ':')) return false
+      if (!matchesContext(e.project, prefix)) return false
       if (tags.length > 0 && !tags.every(t => (e.tags ?? []).includes(t))) return false
       return matchesEventVersion(e, version, prefixDepth)
     })
