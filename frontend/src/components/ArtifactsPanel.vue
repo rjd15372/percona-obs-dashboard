@@ -261,7 +261,7 @@ const packageRows = computed<PackageRow[]>(() => {
     .map(pkg => ({
       project: pkg.project,
       name: pkg.name,
-      version: '',
+      version: pkg.version ?? '',
       tags: ['release'],
       state: 'succeeded',
       published: true,
@@ -310,6 +310,7 @@ function reposFromReleaseArtifacts(data: ReleaseArtifactsResponse): RepoInfo[] {
 interface ReleasePackageArtifact {
   project: string
   name: string
+  version?: string
   repo: string
   repo_name: string
   repo_type: 'rpm' | 'deb'
