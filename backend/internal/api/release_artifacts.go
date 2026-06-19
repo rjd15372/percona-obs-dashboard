@@ -24,6 +24,7 @@ type ArtifactBinary struct {
 type ReleasePackageArtifact struct {
 	Project  string           `json:"project"`
 	Name     string           `json:"name"`
+	Version  string           `json:"version"`
 	Repo     string           `json:"repo"`
 	RepoName string           `json:"repo_name"`
 	RepoType string           `json:"repo_type"`
@@ -158,16 +159,50 @@ func buildReleaseArtifacts(ctx context.Context, client *obs.Client, root, versio
 		containerBinaries = append(containerBinaries, items...)
 	}
 
+	// Fetch binary EVR versions: one goroutine per distinct (repo, arch) pair.
+	type repoArch struct{ repo, arch string }
+	pairs := map[repoArch]struct{}{}
+	for _, b := range binaries {
+		if obs.IsDistributableBinary(b.Filename) {
+			pairs[repoArch{b.Repo, b.Arch}] = struct{}{}
+		}
+	}
+	var (
+		vmu      sync.Mutex
+		versions = make(map[string]string) // repo+"\x00"+arch+"\x00"+filename → evr
+		vwg      sync.WaitGroup
+	)
+	for ra := range pairs {
+		ra := ra
+		vwg.Add(1)
+		go func() {
+			defer vwg.Done()
+			m, err := client.RepoBinaryVersions(ctx, project, ra.repo, ra.arch)
+			if err != nil {
+				return // non-fatal: version stays empty for this repo/arch
+			}
+			vmu.Lock()
+			for filename, evr := range m {
+				versions[ra.repo+"\x00"+ra.arch+"\x00"+filename] = evr
+			}
+			vmu.Unlock()
+		}()
+	}
+	vwg.Wait()
+
 	response := ReleaseArtifactsResponse{
 		Version:         version,
 		RefreshedAt:     time.Now().UTC().Format(time.RFC3339),
-		Packages:        buildReleasePackageArtifacts(binaries),
+		Packages:        buildReleasePackageArtifacts(binaries, versions),
 		ContainerImages: buildReleaseContainerArtifacts(ctx, client, containerBinaries),
 	}
 	return response, nil
 }
 
-func buildReleasePackageArtifacts(binaries []obs.BinaryArtifact) []ReleasePackageArtifact {
+// buildReleasePackageArtifacts groups distributable binaries into per-package
+// artifacts. versions is a lookup map keyed by "repo\x00arch\x00filename" → evr;
+// pass nil if version data is unavailable.
+func buildReleasePackageArtifacts(binaries []obs.BinaryArtifact, versions map[string]string) []ReleasePackageArtifact {
 	byKey := map[string]*ReleasePackageArtifact{}
 	latestMTime := map[string]int64{}
 	for _, binary := range binaries {
@@ -186,6 +221,11 @@ func buildReleasePackageArtifacts(binaries []obs.BinaryArtifact) []ReleasePackag
 				Arch:     binary.Arch,
 			}
 			byKey[key] = artifact
+		}
+		if artifact.Version == "" {
+			if evr, ok := versions[binary.Repo+"\x00"+binary.Arch+"\x00"+binary.Filename]; ok {
+				artifact.Version = evr
+			}
 		}
 		artifact.Binaries = append(artifact.Binaries, releaseBinary(binary))
 		if binary.MTime > latestMTime[key] {
