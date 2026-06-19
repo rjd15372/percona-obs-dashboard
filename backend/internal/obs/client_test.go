@@ -361,6 +361,37 @@ func TestPackageContainerInfoFilename(t *testing.T) {
 	}
 }
 
+func TestProjectBinaryListParsesMTime(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`<resultlist>
+			<result project="isv:percona:ppg:releases:17" repository="openSUSE_Tumbleweed" arch="x86_64">
+				<binarylist package="etcd">
+					<binary filename="etcd-3.5.30-2.1.x86_64.rpm" size="18544085" mtime="1779201973"/>
+				</binarylist>
+			</result>
+		</resultlist>`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "u", "p")
+	items, err := c.ProjectBinaryList(context.Background(), "isv:percona:ppg:releases:17")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(items))
+	}
+	if items[0].Package != "etcd" {
+		t.Errorf("Package = %q", items[0].Package)
+	}
+	if items[0].MTime != 1779201973 {
+		t.Errorf("MTime = %d", items[0].MTime)
+	}
+	if got := items[0].BuiltAt.Unix(); got != 1779201973 {
+		t.Errorf("BuiltAt unix = %d", got)
+	}
+}
+
 func TestPackageContainerInfoFilenameAbsent(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`<binarylist></binarylist>`))

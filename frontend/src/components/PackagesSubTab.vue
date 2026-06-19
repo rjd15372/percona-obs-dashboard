@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive } from 'vue'
-import type { PackageRow, RepoInfo } from '../composables/useArtifacts'
+import type { ArtifactBinary, PackageRow, RepoInfo } from '../composables/useArtifacts'
 
 const props = defineProps<{
   packageRows: PackageRow[]
@@ -20,15 +20,13 @@ const emit = defineEmits<{
 const rpmRepos = computed(() => props.repos.filter(r => r.type === 'rpm'))
 const debRepos = computed(() => props.repos.filter(r => r.type === 'deb'))
 const showPackageList = computed(() => props.selectedRepo !== null || props.packageRows.length > 0)
-const isReleaseSnapshot = computed(() => props.selectedRepo?.obs === 'release')
 
 // ----- snippet -----
 
 const snippet = computed(() => {
   const repo = props.selectedRepo
   if (!repo) return ''
-  const ver = props.version
-  const obsProject = `isv:percona:ppg:${ver}`
+  const obsProject = props.packageRows[0]?.project ?? `isv:percona:ppg:${props.version}`
   const obsProjectUrl = obsProject.split(':').join(':/')
   const baseUrl = `https://download.opensuse.org/repositories/${obsProjectUrl}/${repo.obs}/`
   const projectId = obsProject.split(':').join('_')
@@ -60,7 +58,7 @@ apt update`
 
 // ----- binary expansion -----
 
-type BinaryState = string[] | 'loading' | 'error'
+type BinaryState = ArtifactBinary[] | 'loading' | 'error'
 const binaryCache = reactive<Record<string, BinaryState>>({})
 const expanded = reactive<Record<string, boolean>>({})
 
@@ -73,6 +71,11 @@ async function toggleRow(row: PackageRow) {
   expanded[key] = !expanded[key]
   if (!expanded[key] || binaryCache[key] !== undefined) return
 
+  if (row.binaries) {
+    binaryCache[key] = row.binaries
+    return
+  }
+
   binaryCache[key] = 'loading'
   try {
     const params = new URLSearchParams({
@@ -84,7 +87,7 @@ async function toggleRow(row: PackageRow) {
     const res = await fetch(`/api/binaries?${params}`)
     if (!res.ok) throw new Error(res.statusText)
     const data = await res.json() as { binaries: string[] }
-    binaryCache[key] = data.binaries
+    binaryCache[key] = data.binaries.map(filename => ({ filename }))
   } catch {
     binaryCache[key] = 'error'
   }
@@ -93,6 +96,16 @@ async function toggleRow(row: PackageRow) {
 function downloadUrl(row: PackageRow, filename: string): string {
   const obsProjectUrl = row.project.split(':').join(':/')
   return `https://download.opensuse.org/repositories/${obsProjectUrl}/${row.repo.obs}/${row.arch}/${filename}`
+}
+
+function formatArtifactTime(value?: string): string {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date)
 }
 
 // ----- labels -----
@@ -157,7 +170,7 @@ function stateClass(state: string): string {
     <!-- Main content -->
     <div class="content">
       <!-- Combined repo header + snippet card -->
-      <div class="repo-card" v-if="selectedRepo && !isReleaseSnapshot">
+      <div class="repo-card" v-if="selectedRepo">
         <div class="repo-header">
           <div class="repo-header-left">
             <span class="repo-title">{{ selectedRepo.name }}</span>
@@ -197,8 +210,7 @@ function stateClass(state: string): string {
           <span class="pkg-card-title">Packages</span>
           <span class="pkg-card-subtitle">
             {{ packageRows.length }} available
-            <template v-if="selectedRepo && !isReleaseSnapshot"> · {{ selectedRepo.name }} / {{ artArch }}</template>
-            <template v-else-if="isReleaseSnapshot"> · Release snapshot</template>
+            <template v-if="selectedRepo"> · {{ selectedRepo.name }} / {{ artArch }}</template>
           </span>
         </div>
         <div class="pkg-list">
@@ -218,7 +230,8 @@ function stateClass(state: string): string {
               <span class="expand-glyph">{{ row.binariesAvailable ? (expanded[rowKey(row)] ? '▼' : '▶') : '' }}</span>
               <code class="pkg-name">{{ row.name }}</code>
               <code v-if="row.version" class="pkg-version">{{ row.version }}</code>
-<span class="status-badge" :class="row.published ? 'status-published' : stateClass(row.state)">
+              <span v-if="row.builtAt" class="pkg-built-at">{{ formatArtifactTime(row.builtAt) }}</span>
+              <span class="status-badge" :class="row.published ? 'status-published' : stateClass(row.state)">
                 {{ row.published ? 'Published' : stateLabel(row.state) }}
               </span>
             </button>
@@ -233,18 +246,21 @@ function stateClass(state: string): string {
               </div>
               <template v-else-if="Array.isArray(binaryCache[rowKey(row)])">
                 <div
-                  v-for="filename in (binaryCache[rowKey(row)] as string[])"
-                  :key="filename"
+                  v-for="binary in (binaryCache[rowKey(row)] as ArtifactBinary[])"
+                  :key="binary.filename"
                   class="binary-row"
                 >
-                  <code class="binary-name">{{ filename }}</code>
+                  <div class="binary-details">
+                    <code class="binary-name">{{ binary.filename }}</code>
+                    <span v-if="binary.built_at" class="binary-built-at">{{ formatArtifactTime(binary.built_at) }}</span>
+                  </div>
                   <a
                     class="download-btn"
-                    :href="downloadUrl(row, filename)"
+                    :href="downloadUrl(row, binary.filename)"
                     target="_blank"
                   >&#x2193; Download</a>
                 </div>
-                <div v-if="(binaryCache[rowKey(row)] as string[]).length === 0" class="binary-empty">
+                <div v-if="(binaryCache[rowKey(row)] as ArtifactBinary[]).length === 0" class="binary-empty">
                   No distributable binaries.
                 </div>
               </template>
@@ -540,6 +556,12 @@ function stateClass(state: string): string {
   flex-shrink: 0;
 }
 
+.pkg-built-at {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
 
 .status-badge {
   font-size: 11px;
@@ -550,8 +572,8 @@ function stateClass(state: string): string {
 }
 
 .status-published {
-  background: #dbeafe;
-  color: #1d4ed8;
+  background: var(--success-tint, #d1fae5);
+  color: var(--success, #16a34a);
 }
 
 .status-built {
@@ -593,6 +615,13 @@ function stateClass(state: string): string {
   background: var(--bg-muted);
 }
 
+.binary-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
 .binary-name {
   font-family: var(--font-mono);
   font-size: 12px;
@@ -600,6 +629,11 @@ function stateClass(state: string): string {
   flex: 1;
   min-width: 0;
   word-break: break-all;
+}
+
+.binary-built-at {
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 .download-btn {

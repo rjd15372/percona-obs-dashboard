@@ -8,6 +8,13 @@ export interface RepoInfo {
   type: 'rpm' | 'deb'
 }
 
+export interface ArtifactBinary {
+  filename: string
+  size?: number
+  mtime?: number
+  built_at?: string
+}
+
 export interface PackageRow {
   project: string
   name: string
@@ -18,6 +25,8 @@ export interface PackageRow {
   repo: RepoInfo
   arch: string
   binariesAvailable: boolean
+  binaries?: ArtifactBinary[]
+  builtAt?: string
 }
 
 export interface ContainerImage {
@@ -29,6 +38,8 @@ export interface ContainerImage {
   pullCmd: string
   rollupState: string
   published: boolean
+  mtime?: number
+  builtAt?: string
 }
 
 export function deriveBaseOs(project: string): string {
@@ -61,9 +72,7 @@ export function useArtifacts(
     const arch = toValue(artArch)
     const prefix = toValue(contextPrefix)
 
-    const releaseRepo: RepoInfo = { obs: 'release', name: 'Release', type: 'rpm' }
-    const isReleaseContext = prefix.includes(':releases')
-    if (!repo && !isReleaseContext) return []
+    if (!repo) return []
 
     const exactProject = `${prefix}:${ver}`
     const rows: PackageRow[] = []
@@ -77,22 +86,6 @@ export function useArtifacts(
         pkg.project.startsWith(exactProject + ':')
       if (!inProject || pkg.is_container === true) continue
 
-      if (isReleaseContext && (pkg.targets?.length ?? 0) === 0) {
-        rows.push({
-          project: pkg.project,
-          name: pkg.name,
-          version: pkg.version ?? '',
-          tags: pkg.tags ?? [],
-          state: pkg.rollup_state ?? '',
-          published: pkg.rollup_state === 'succeeded' || pkg.rollup_state === 'published',
-          repo: repo ?? releaseRepo,
-          arch: '',
-          binariesAvailable: false,
-        })
-        continue
-      }
-
-      if (!repo) continue
       const target = pkg.targets?.find(
         (t: Target) => t.repo === repo.obs && t.arch === arch,
       )

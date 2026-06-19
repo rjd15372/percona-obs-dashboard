@@ -17,6 +17,7 @@ func NewRouter(db *sql.DB, h *hub.Hub, obsClient *obs.Client, root string) http.
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	releaseArtifacts := newReleaseArtifactsCache(10 * time.Minute)
 
 	r.Route("/api/products/{product}/{version}", func(r chi.Router) {
 		r.Get("/packages", packagesHandler(db, root))
@@ -27,6 +28,7 @@ func NewRouter(db *sql.DB, h *hub.Hub, obsClient *obs.Client, root string) http.
 	r.Route("/api/releases/ppg/{version}", func(r chi.Router) {
 		r.Get("/packages", releasesPackagesHandler(db, root))
 		r.Get("/repos", releasesReposHandler(db, root))
+		r.Get("/artifacts", releaseArtifactsHandler(obsClient, root, releaseArtifacts))
 	})
 
 	r.Get("/api/pr/packages", prPackagesHandler(db))

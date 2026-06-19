@@ -126,6 +126,18 @@ type PackageBuildState struct {
 	Versrel string // version-release string, e.g. "17.5-1"; empty if not available
 }
 
+// BinaryArtifact is one binary entry from OBS _result?view=binarylist.
+type BinaryArtifact struct {
+	Project  string
+	Repo     string
+	Arch     string
+	Package  string
+	Filename string
+	Size     int64
+	MTime    int64
+	BuiltAt  time.Time
+}
+
 // BuildReasonResult represents the result of a build reason query.
 type BuildReasonResult struct {
 	Explain  string
@@ -513,9 +525,64 @@ func (c *Client) PackageVersionResult(ctx context.Context, project, pkg string) 
 	return "", nil
 }
 
-// isDistributableBinary returns true for binary files that users can install:
+// ProjectBinaryList returns every binary entry from _result?view=binarylist.
+func (c *Client) ProjectBinaryList(ctx context.Context, project string) ([]BinaryArtifact, error) {
+	path := fmt.Sprintf("/build/%s/_result?view=binarylist", url.PathEscape(project))
+	resp, err := c.get(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var raw struct {
+		Results []struct {
+			Project    string `xml:"project,attr"`
+			Repository string `xml:"repository,attr"`
+			Arch       string `xml:"arch,attr"`
+			BinaryList []struct {
+				Package  string `xml:"package,attr"`
+				Binaries []struct {
+					Filename string `xml:"filename,attr"`
+					Size     int64  `xml:"size,attr"`
+					MTime    int64  `xml:"mtime,attr"`
+				} `xml:"binary"`
+			} `xml:"binarylist"`
+		} `xml:"result"`
+	}
+	if err := xml.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, fmt.Errorf("parse /build/%s/_result?view=binarylist: %w", project, err)
+	}
+
+	var out []BinaryArtifact
+	for _, result := range raw.Results {
+		resultProject := result.Project
+		if resultProject == "" {
+			resultProject = project
+		}
+		for _, list := range result.BinaryList {
+			for _, binary := range list.Binaries {
+				artifact := BinaryArtifact{
+					Project:  resultProject,
+					Repo:     result.Repository,
+					Arch:     result.Arch,
+					Package:  list.Package,
+					Filename: binary.Filename,
+					Size:     binary.Size,
+					MTime:    binary.MTime,
+				}
+				if binary.MTime > 0 {
+					artifact.BuiltAt = time.Unix(binary.MTime, 0).UTC()
+				}
+				out = append(out, artifact)
+			}
+		}
+	}
+	return out, nil
+}
+
+// IsDistributableBinary returns true for binary files that users can install:
 // .rpm (excluding .src.rpm and debuginfo/debugsource) and .deb (excluding dbgsym/dbg).
-func isDistributableBinary(filename string) bool {
+func IsDistributableBinary(filename string) bool {
 	lower := strings.ToLower(filename)
 	switch {
 	case strings.HasSuffix(lower, ".src.rpm"):
@@ -552,7 +619,7 @@ func (c *Client) PackageBinaries(ctx context.Context, project, repo, arch, pkg s
 
 	var out []string
 	for _, b := range listing.Binaries {
-		if isDistributableBinary(b.Filename) {
+		if IsDistributableBinary(b.Filename) {
 			out = append(out, b.Filename)
 		}
 	}

@@ -46,6 +46,16 @@ function stateClass(img: ContainerImage): string {
   if (['failed', 'broken', 'unresolvable'].includes(img.rollupState)) return 'failed'
   return 'other'
 }
+
+function formatArtifactTime(value?: string): string {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date)
+}
 </script>
 
 <template>
@@ -82,6 +92,11 @@ function stateClass(img: ContainerImage): string {
             <div class="registry-section">
               <div class="section-label">REGISTRY</div>
               <code class="registry-path">{{ image.registry }}</code>
+            </div>
+
+            <div v-if="image.builtAt" class="built-section">
+              <div class="section-label">BUILT</div>
+              <span class="built-time">{{ formatArtifactTime(image.builtAt) }}</span>
             </div>
 
             <!-- Tags -->
@@ -225,6 +240,18 @@ function stateClass(img: ContainerImage): string {
   background: var(--bg-card-2);
   padding: 10px 18px;
   border-bottom: 1px solid var(--border);
+}
+
+.built-section {
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.built-time {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 /* Tags */

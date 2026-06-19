@@ -36,7 +36,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import type { Context, PRGroup } from '../types/api'
-import type { RepoInfo } from '../composables/useArtifacts'
+import type { ArtifactBinary, ContainerImage, PackageRow, RepoInfo } from '../composables/useArtifacts'
 import { useArtifacts } from '../composables/useArtifacts'
 import ArtifactsVersionBar from './ArtifactsVersionBar.vue'
 import PackagesSubTab from './PackagesSubTab.vue'
@@ -119,8 +119,10 @@ const artRepoObs = ref<string>('')
 const artArch = ref<'x86_64' | 'aarch64'>('x86_64')
 const copiedKey = ref<string | null>(null)
 const repos = ref<RepoInfo[]>([])
+const releaseArtifacts = ref<ReleaseArtifactsResponse | null>(null)
 
 const contextPrefix = computed(() => selectedContext.value.prefix)
+const isReleaseContext = computed(() => selectedContext.value.apiBase.startsWith('/api/releases/'))
 
 const selectedRepo = computed<RepoInfo | null>(
   () => repos.value.find(r => r.obs === artRepoObs.value) ?? null,
@@ -145,12 +147,9 @@ async function fetchPackages(ctx: Context) {
 
 async function fetchRepos(version: string) {
   const ctx = selectedContext.value
-  const isReleaseContext = ctx.apiBase.startsWith('/api/releases/')
   let url: string
   if (ctx.apiBase.startsWith('/api/products/')) {
     url = `/api/products/ppg/${version}/repos`
-  } else if (isReleaseContext) {
-    url = `/api/releases/ppg/${version}/repos`
   } else {
     url = `${ctx.apiBase}/${version}/repos`
   }
@@ -161,16 +160,28 @@ async function fetchRepos(version: string) {
       ...data.rpm.map(r => ({ ...r, type: 'rpm' as const })),
       ...data.deb.map(r => ({ ...r, type: 'deb' as const })),
     ]
-    repos.value = isReleaseContext && next.length === 0
-      ? [{ obs: 'release', name: 'Release snapshot', type: 'rpm' as const }]
-      : next
+    repos.value = next
     if (repos.value.length > 0 && !repos.value.find(r => r.obs === artRepoObs.value)) {
       artRepoObs.value = repos.value.find(r => r.type === 'rpm')?.obs ?? repos.value[0].obs
     }
   } catch {
-    repos.value = isReleaseContext
-      ? [{ obs: 'release', name: 'Release snapshot', type: 'rpm' as const }]
-      : []
+    repos.value = []
+  }
+}
+
+async function fetchReleaseArtifacts(version: string) {
+  try {
+    const res = await fetch(`/api/releases/ppg/${version}/artifacts`)
+    if (!res.ok) throw new Error(res.statusText)
+    const data = await res.json() as ReleaseArtifactsResponse
+    releaseArtifacts.value = data
+    repos.value = reposFromReleaseArtifacts(data)
+    if (repos.value.length > 0 && !repos.value.find(r => r.obs === artRepoObs.value)) {
+      artRepoObs.value = repos.value.find(r => r.type === 'rpm')?.obs ?? repos.value[0].obs
+    }
+  } catch {
+    releaseArtifacts.value = null
+    repos.value = []
   }
 }
 
@@ -184,7 +195,11 @@ watch(availableVersions, (versions) => {
 // Re-fetch repos when version changes; immediate so repos load on mount
 // even when localVersion default ('17') matches the first available version
 watch(localVersion, (v) => {
-  fetchRepos(v)
+  if (isReleaseContext.value) {
+    fetchReleaseArtifacts(v)
+  } else {
+    fetchRepos(v)
+  }
 }, { immediate: true })
 
 onMounted(() => {
@@ -194,13 +209,16 @@ onMounted(() => {
 async function onContextChange(ctx: Context) {
   selectedContext.value = ctx
   artRepoObs.value = ''  // clear stale repo so new context auto-selects its first repo
+  releaseArtifacts.value = null
   await fetchPackages(ctx)
   // availableVersions watcher only fires fetchRepos when localVersion actually changes.
   // If the version stays the same (e.g. PPG and Releases both have '17'), the watcher
   // is silent and repos for the new context are never fetched — so we call explicitly.
   const versions = availableVersions.value
   if (versions.length > 0 && localVersion.value !== versions[0]) {
-    localVersion.value = versions[0]  // watcher fires fetchRepos
+    localVersion.value = versions[0]  // watcher fires fetchRepos/fetchReleaseArtifacts
+  } else if (isReleaseContext.value) {
+    await fetchReleaseArtifacts(localVersion.value)
   } else {
     await fetchRepos(localVersion.value)
   }
@@ -210,13 +228,97 @@ function onVersionChange(v: string) {
   localVersion.value = v
 }
 
-const { packageRows, containerImages } = useArtifacts(
+const { packageRows: livePackageRows, containerImages: liveContainerImages } = useArtifacts(
   artifactsPackages,
   localVersion,
   selectedRepo,
   artArch,
   contextPrefix,
 )
+
+const packageRows = computed<PackageRow[]>(() => {
+  if (!isReleaseContext.value) return livePackageRows.value
+  const repo = selectedRepo.value
+  if (!repo || !releaseArtifacts.value) return []
+  return releaseArtifacts.value.packages
+    .filter(pkg => pkg.repo === repo.obs && pkg.arch === artArch.value)
+    .map(pkg => ({
+      project: pkg.project,
+      name: pkg.name,
+      version: '',
+      tags: ['release'],
+      state: 'succeeded',
+      published: true,
+      repo: { obs: pkg.repo, name: pkg.repo_name, type: pkg.repo_type as 'rpm' | 'deb' },
+      arch: pkg.arch,
+      binariesAvailable: pkg.binaries.length > 0,
+      binaries: pkg.binaries,
+      builtAt: pkg.built_at,
+    }))
+})
+
+const containerImages = computed<ContainerImage[]>(() => {
+  if (!isReleaseContext.value) return liveContainerImages.value
+  if (!releaseArtifacts.value) return []
+  return releaseArtifacts.value.container_images.map(img => ({
+    id: `${img.project}/${img.image_name}`,
+    imageName: img.image_name,
+    baseOs: img.base_os,
+    registry: img.registry,
+    tags: img.tags,
+    pullCmd: img.pull_cmd,
+    rollupState: 'succeeded',
+    published: true,
+    mtime: img.mtime,
+    builtAt: img.built_at,
+  }))
+})
+
+function reposFromReleaseArtifacts(data: ReleaseArtifactsResponse): RepoInfo[] {
+  const byObs = new Map<string, RepoInfo>()
+  for (const pkg of data.packages) {
+    if (!byObs.has(pkg.repo)) {
+      byObs.set(pkg.repo, {
+        obs: pkg.repo,
+        name: pkg.repo_name,
+        type: pkg.repo_type,
+      })
+    }
+  }
+  return [...byObs.values()].sort((a, b) => {
+    if (a.type !== b.type) return a.type === 'rpm' ? -1 : 1
+    return a.name.localeCompare(b.name)
+  })
+}
+
+interface ReleasePackageArtifact {
+  project: string
+  name: string
+  repo: string
+  repo_name: string
+  repo_type: 'rpm' | 'deb'
+  arch: string
+  binaries: ArtifactBinary[]
+  built_at: string
+}
+
+interface ReleaseContainerArtifact {
+  project: string
+  image_name: string
+  base_os: string
+  registry: string
+  tags: string[]
+  pull_cmd: string
+  mtime: number
+  built_at: string
+}
+
+interface ReleaseArtifactsResponse {
+  version: string
+  refreshed_at: string
+  packages: ReleasePackageArtifact[]
+  container_images: ReleaseContainerArtifact[]
+}
 
 let copyTimer: ReturnType<typeof setTimeout> | null = null
 function onCopy(key: string, text: string) {
