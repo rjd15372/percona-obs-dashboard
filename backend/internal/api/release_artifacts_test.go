@@ -71,7 +71,7 @@ func TestBuildReleasePackageArtifactsVersion(t *testing.T) {
 	}
 
 	versions := map[string]string{
-		"openSUSE_Tumbleweed\x00x86_64\x00etcd-3.5.30-2.1.x86_64.rpm": "3.5.30-2.1",
+		"openSUSE_Tumbleweed\x00x86_64\x00etcd.rpm": "3.5.30-2.1",
 		// Ubuntu_24.04 intentionally absent — Version should stay ""
 	}
 
@@ -98,5 +98,26 @@ func TestBuildReleasePackageArtifactsVersion(t *testing.T) {
 	}
 	if ubuntu.Version != "" {
 		t.Errorf("Ubuntu Version = %q, want ''", ubuntu.Version)
+	}
+}
+
+func TestBinaryBaseName(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"postgresql16-16.4-2.3.x86_64.rpm", "postgresql16.rpm"},
+		{"postgresql16-devel-16.4-2.3.x86_64.rpm", "postgresql16-devel.rpm"},
+		{"perl-YAML-LibYAML-0.88-1.1.noarch.rpm", "perl-YAML-LibYAML.rpm"},
+		{"etcd-3.5.30-2.1.x86_64.rpm", "etcd.rpm"},
+		{"etcd_3.5.30-2ubuntu1_amd64.deb", "etcd.deb"},
+		{"postgresql-16_16.4-2ubuntu1_amd64.deb", "postgresql-16.deb"},
+		{"something.containerinfo", "something.containerinfo"},
+	}
+	for _, c := range cases {
+		got := binaryBaseName(c.in)
+		if got != c.want {
+			t.Errorf("binaryBaseName(%q) = %q, want %q", c.in, got, c.want)
+		}
 	}
 }

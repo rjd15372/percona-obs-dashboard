@@ -223,7 +223,7 @@ func buildReleasePackageArtifacts(binaries []obs.BinaryArtifact, versions map[st
 			byKey[key] = artifact
 		}
 		if artifact.Version == "" {
-			if evr, ok := versions[binary.Repo+"\x00"+binary.Arch+"\x00"+binary.Filename]; ok {
+			if evr, ok := versions[binary.Repo+"\x00"+binary.Arch+"\x00"+binaryBaseName(binary.Filename)]; ok {
 				artifact.Version = evr
 			}
 		}
@@ -320,6 +320,29 @@ func releaseBinary(binary obs.BinaryArtifact) ArtifactBinary {
 		out.BuiltAt = binary.BuiltAt.Format(time.RFC3339)
 	}
 	return out
+}
+
+// binaryBaseName derives the base binary name (package name + extension) from a
+// full versioned filename, to match the names returned by OBS binaryversions API.
+// RPM: "postgresql16-devel-16.4-2.3.x86_64.rpm" → "postgresql16-devel.rpm"
+// DEB: "postgresql-16_16.4-2ubuntu1_amd64.deb"  → "postgresql-16.deb"
+func binaryBaseName(filename string) string {
+	if strings.HasSuffix(filename, ".rpm") && !strings.HasSuffix(filename, ".src.rpm") {
+		base := filename[:len(filename)-4] // strip .rpm
+		if lastDot := strings.LastIndex(base, "."); lastDot >= 0 {
+			base = base[:lastDot] // strip .arch
+		}
+		parts := strings.Split(base, "-")
+		if len(parts) >= 3 {
+			return strings.Join(parts[:len(parts)-2], "-") + ".rpm"
+		}
+	}
+	if strings.HasSuffix(filename, ".deb") {
+		if i := strings.Index(filename, "_"); i >= 0 {
+			return filename[:i] + ".deb"
+		}
+	}
+	return filename
 }
 
 func deriveBaseOS(project string) string {
