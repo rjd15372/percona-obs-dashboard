@@ -1,0 +1,22 @@
+[
+  {
+    "id": 48,
+    "subject": "Task 1: OBS client RepoBinaryVersions",
+    "status": "pending",
+    "description": "**Goal:** Add a method to the OBS client that fetches `filename → evr` for all binaries in a single `(project, repo, arch)` target, with epoch stripped.\n\n**Files:**\n- Modify: `backend/internal/obs/client.go`\n- Modify: `backend/internal/obs/client_test.go`\n\n**Acceptance Criteria:**\n- [ ] `RepoBinaryVersions` calls `/build/{project}/{repo}/{arch}/_repository?view=binaryversions&withevr=1`\n- [ ] Returns a `map[string]string` of `filename → evr`\n- [ ] Epoch prefix (e.g. `2:`) is stripped — `2:16.4-2.3` → `16.4-2.3`; no epoch → returned as-is\n- [ ] Empty `<binaryversionlist>` returns an empty map, not an error\n- [ ] `go test ./backend/internal/obs/... -run TestRepoBinaryVersions` passes (3 tests)\n\n**Verify:** `cd backend && go test ./internal/obs/... -run TestRepoBinaryVersions -v` → 3 tests PASS\n\n```json:metadata\n{\"files\": [\"backend/internal/obs/client.go\", \"backend/internal/obs/client_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/obs/... -run TestRepoBinaryVersions -v\", \"acceptanceCriteria\": [\"RepoBinaryVersions calls correct OBS URL with view=binaryversions&withevr=1\", \"Returns map[filename]evr\", \"Epoch prefix stripped from evr values\", \"Empty list returns empty map without error\"], \"modelTier\": \"mechanical\"}\n```"
+  },
+  {
+    "id": 49,
+    "subject": "Task 2: Enrich release package artifacts with version",
+    "status": "pending",
+    "blockedBy": [48],
+    "description": "**Goal:** `ReleasePackageArtifact` gains a `Version` field populated from a parallel fan-out of `RepoBinaryVersions` calls, one per distinct `(repo, arch)` in the release.\n\n**Files:**\n- Modify: `backend/internal/api/release_artifacts.go`\n- Modify: `backend/internal/api/release_artifacts_test.go`\n\n**Acceptance Criteria:**\n- [ ] `ReleasePackageArtifact` has `Version string json:\"version\"`\n- [ ] `buildReleaseArtifacts` fans out one goroutine per distinct `(repo, arch)` from distributable binaries, calls `client.RepoBinaryVersions`, merges into a lookup map\n- [ ] Version-fetch errors are non-fatal (affected packages get empty `Version`)\n- [ ] `buildReleasePackageArtifacts` sets `artifact.Version` from the lookup on the first matching binary filename\n- [ ] Existing test `TestBuildReleasePackageArtifactsUsesDistributableMTime` still passes\n- [ ] New test `TestBuildReleasePackageArtifactsVersion` passes\n\n**Verify:** `cd backend && go test ./internal/api/... -run TestBuildReleasePackage -v` → all tests PASS\n\n```json:metadata\n{\"files\": [\"backend/internal/api/release_artifacts.go\", \"backend/internal/api/release_artifacts_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/api/... -run TestBuildReleasePackage -v\", \"acceptanceCriteria\": [\"ReleasePackageArtifact.Version field added\", \"buildReleaseArtifacts fans out goroutines per repo/arch pair\", \"Version-fetch errors are non-fatal\", \"buildReleasePackageArtifacts sets Version from first matching binary\", \"All existing tests still pass\"], \"modelTier\": \"mechanical\"}\n```"
+  },
+  {
+    "id": 50,
+    "subject": "Task 3: Frontend — read version from release artifact",
+    "status": "pending",
+    "blockedBy": [49],
+    "description": "**Goal:** The release row mapper in `ArtifactsPanel.vue` reads `pkg.version` instead of hardcoding `''`, so the existing version badge in `PackagesSubTab.vue` renders the EVR.\n\n**Files:**\n- Modify: `frontend/src/components/ArtifactsPanel.vue`\n\n**Acceptance Criteria:**\n- [ ] The local `ReleasePackageArtifact` TypeScript interface includes `version?: string`\n- [ ] The release row mapper uses `version: pkg.version ?? ''` instead of `version: ''`\n- [ ] `cd frontend && npm run build` completes with no TypeScript errors\n\n**Verify:** `cd frontend && npm run build` → `built in X.XXs` with no errors\n\n```json:metadata\n{\"files\": [\"frontend/src/components/ArtifactsPanel.vue\"], \"verifyCommand\": \"cd frontend && npm run build\", \"acceptanceCriteria\": [\"ReleasePackageArtifact TS interface has version?: string\", \"Row mapper uses pkg.version ?? '' instead of ''\", \"npm run build passes with no TypeScript errors\"], \"modelTier\": \"mechanical\"}\n```"
+  }
+]
