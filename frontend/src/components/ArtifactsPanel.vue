@@ -99,7 +99,7 @@ const selectedContext = ref<Context>(PPG_CONTEXT)
 
 // Package state (self-fetched)
 const artifactsPackages = ref<import('../types/api').Package[]>([])
-const artifactsLoading = ref(false)
+const artifactsLoading = ref(true)
 
 // Version derived from fetched packages
 const availableVersions = computed<string[]>(() => {
