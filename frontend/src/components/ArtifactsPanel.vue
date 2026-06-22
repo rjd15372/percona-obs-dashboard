@@ -1,18 +1,18 @@
 <template>
   <div class="artifacts-panel">
     <ArtifactsVersionBar
-      :version="localVersion"
+      :version="props.artifactsVersion"
       :available-versions="availableVersions"
-      :contexts="artifactsContexts"
-      :selected-context="selectedContext"
-      :active-tab="artifactsTab"
+      :contexts="props.artifactsContexts"
+      :selected-context="props.artifactsContext"
+      :active-tab="props.artifactsTab"
       @update:version="onVersionChange"
-      @update:tab="artifactsTab = $event"
+      @update:tab="emit('update:artifactsTab', $event)"
       @update:context="onContextChange"
     />
 
     <PackagesSubTab
-      v-if="artifactsTab === 'packages'"
+      v-if="props.artifactsTab === 'packages'"
       :package-rows="packageRows"
       :repos="repos"
       :selected-repo="selectedRepo"
@@ -36,55 +36,31 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import type { Context, PRGroup } from '../types/api'
+import type { Context } from '../types/api'
 import type { ArtifactBinary, ContainerImage, PackageRow, RepoInfo } from '../composables/useArtifacts'
 import { useArtifacts } from '../composables/useArtifacts'
 import { useArtifactMetadata } from '../composables/useArtifactMetadata'
-import { PPG_CONTEXT, RELEASES_CONTEXT } from '../lib/contexts'
 import ArtifactsVersionBar from './ArtifactsVersionBar.vue'
 import PackagesSubTab from './PackagesSubTab.vue'
 import ContainersSubTab from './ContainersSubTab.vue'
 
 const props = defineProps<{
-  prGroups: PRGroup[]
+  artifactsContexts: Context[]
+  artifactsVersion: string
+  artifactsContext: Context
+  artifactsTab: 'packages' | 'containers'
 }>()
 
-// Derive PR contexts from prGroups
-const artifactsContexts = computed<Context[]>(() => {
-  const seen = new Set<string>()
-  const prContexts: Context[] = []
+const emit = defineEmits<{
+  'update:artifactsVersion': [v: string]
+  'update:artifactsContext': [ctx: Context]
+  'update:artifactsTab': [tab: 'packages' | 'containers']
+}>()
 
-  for (const group of props.prGroups) {
-    for (const pkg of group.packages) {
-      const parts = pkg.project.split(':')
-      const prIdx = parts.findIndex(p => p.toLowerCase() === 'pr')
-      if (prIdx < 0 || prIdx + 2 >= parts.length) continue
-      const prSegment = parts[prIdx + 1]   // "pr-92"
-      const subproject = parts[prIdx + 2]  // "ppg"
-      if (subproject.toLowerCase() === 'common') continue
-      const key = `${prSegment}:${subproject}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      const prNum = prSegment.replace(/^pr-/i, '')
-      prContexts.push({
-        label: `PR #${prNum} · ${subproject}`,
-        apiBase: `/api/pr/${prSegment}/${subproject}`,
-        prefix: `isv:percona:PR:${prSegment}:${subproject}`,
-      })
-    }
-  }
-
-  prContexts.sort((a, b) => {
-    const na = parseInt(a.prefix.split(':')[3]?.replace(/^pr-/i, '') ?? '0')
-    const nb = parseInt(b.prefix.split(':')[3]?.replace(/^pr-/i, '') ?? '0')
-    return nb - na
-  })
-
-  return [PPG_CONTEXT, RELEASES_CONTEXT, ...prContexts]
-})
-
-// Context state
-const selectedContext = ref<Context>(PPG_CONTEXT)
+// Computed aliases so the rest of the component body can use them unchanged
+const localVersion = computed(() => props.artifactsVersion)
+const contextPrefix = computed(() => props.artifactsContext.prefix)
+const isReleaseContext = computed(() => props.artifactsContext.apiBase.startsWith('/api/releases/'))
 
 // Package state (self-fetched)
 const artifactsPackages = ref<import('../types/api').Package[]>([])
@@ -92,7 +68,7 @@ const pendingFetches = ref(0)
 
 // Version derived from fetched packages
 const availableVersions = computed<string[]>(() => {
-  const depth = selectedContext.value.prefix.split(':').length
+  const depth = props.artifactsContext.prefix.split(':').length
   const versions = new Set<string>()
   for (const pkg of artifactsPackages.value) {
     const parts = pkg.project.split(':')
@@ -104,16 +80,11 @@ const availableVersions = computed<string[]>(() => {
   return [...versions].sort((a, b) => parseInt(b) - parseInt(a))
 })
 
-const localVersion = ref('17')
-const artifactsTab = ref<'packages' | 'containers'>('packages')
 const artRepoObs = ref<string>('')
 const artArch = ref<'x86_64' | 'aarch64'>('x86_64')
 const copiedKey = ref<string | null>(null)
 const repos = ref<RepoInfo[]>([])
 const releaseArtifacts = ref<ReleaseArtifactsResponse | null>(null)
-
-const contextPrefix = computed(() => selectedContext.value.prefix)
-const isReleaseContext = computed(() => selectedContext.value.apiBase.startsWith('/api/releases/'))
 
 const selectedRepo = computed<RepoInfo | null>(
   () => repos.value.find(r => r.obs === artRepoObs.value) ?? null,
@@ -137,7 +108,7 @@ async function fetchPackages(ctx: Context) {
 }
 
 async function fetchRepos(version: string) {
-  const ctx = selectedContext.value
+  const ctx = props.artifactsContext
   let url: string
   if (ctx.apiBase.startsWith('/api/products/')) {
     url = `/api/products/ppg/${version}/repos`
@@ -182,16 +153,15 @@ async function fetchReleaseArtifacts(version: string) {
   }
 }
 
-// When available versions change, snap localVersion to the first one
+// When available versions change, snap to first if current version is absent
 watch(availableVersions, (versions) => {
-  if (versions.length > 0) {
-    localVersion.value = versions[0]
+  if (versions.length > 0 && (props.artifactsVersion === '' || !versions.includes(props.artifactsVersion))) {
+    emit('update:artifactsVersion', versions[0])
   }
 })
 
 // Re-fetch repos when version changes; immediate so repos load on mount
-// even when localVersion default ('17') matches the first available version
-watch(localVersion, (v) => {
+watch(() => props.artifactsVersion, (v) => {
   if (isReleaseContext.value) {
     fetchReleaseArtifacts(v)
   } else {
@@ -200,29 +170,28 @@ watch(localVersion, (v) => {
 }, { immediate: true })
 
 onMounted(() => {
-  fetchPackages(selectedContext.value)
+  fetchPackages(props.artifactsContext)
 })
 
 async function onContextChange(ctx: Context) {
-  selectedContext.value = ctx
+  emit('update:artifactsContext', ctx)
   artRepoObs.value = ''  // clear stale repo so new context auto-selects its first repo
   releaseArtifacts.value = null
   await fetchPackages(ctx)
-  // availableVersions watcher only fires fetchRepos when localVersion actually changes.
-  // If the version stays the same (e.g. PPG and Releases both have '17'), the watcher
-  // is silent and repos for the new context are never fetched — so we call explicitly.
+  // availableVersions watcher only fires when version changes.
+  // If the version stays the same, we call explicitly.
   const versions = availableVersions.value
-  if (versions.length > 0 && localVersion.value !== versions[0]) {
-    localVersion.value = versions[0]  // watcher fires fetchRepos/fetchReleaseArtifacts
-  } else if (isReleaseContext.value) {
-    await fetchReleaseArtifacts(localVersion.value)
+  if (versions.length > 0 && props.artifactsVersion !== versions[0]) {
+    emit('update:artifactsVersion', versions[0])
+  } else if (ctx.apiBase.startsWith('/api/releases/')) {
+    await fetchReleaseArtifacts(props.artifactsVersion)
   } else {
-    await fetchRepos(localVersion.value)
+    await fetchRepos(props.artifactsVersion)
   }
 }
 
 function onVersionChange(v: string) {
-  localVersion.value = v
+  emit('update:artifactsVersion', v)
 }
 
 const { packageRows: livePackageRows, containerImages: liveContainerImages } = useArtifacts(

@@ -6,11 +6,12 @@ import HealthHeader from './components/HealthHeader.vue'
 import MainGrid from './components/MainGrid.vue'
 import ArtifactsPanel from './components/ArtifactsPanel.vue'
 import type { Context } from './types/api'
-import { PPG_CONTEXT } from './lib/contexts'
+import { PPG_CONTEXT, RELEASES_CONTEXT } from './lib/contexts'
 import { usePackages } from './composables/usePackages'
 import { useEvents } from './composables/useEvents'
 import { usePRPackages } from './composables/usePRPackages'
 import { useRealtimeStream } from './composables/useRealtimeStream'
+import { useUrlState } from './composables/useUrlState'
 
 // Main tab
 const mainTab = ref<'board' | 'artifacts'>('board')
@@ -105,6 +106,57 @@ const contexts = computed<Context[]>(() => {
   return [PPG_CONTEXT, ...prContexts]
 })
 
+// Artifacts panel state (lifted for URL sync)
+const artifactsVersion = ref('')
+const artifactsTab = ref<'packages' | 'containers'>('packages')
+const artifactsContext = ref<Context>(PPG_CONTEXT)
+
+// Artifacts contexts: PPG + Releases + PR contexts
+const artifactsContexts = computed<Context[]>(() => {
+  const seen = new Set<string>()
+  const prContexts: Context[] = []
+
+  for (const group of prGroups.value) {
+    for (const pkg of group.packages) {
+      const parts = pkg.project.split(':')
+      const prIdx = parts.findIndex(p => p.toLowerCase() === 'pr')
+      if (prIdx < 0 || prIdx + 2 >= parts.length) continue
+      const prSegment = parts[prIdx + 1]
+      const subproject = parts[prIdx + 2]
+      if (subproject.toLowerCase() === 'common') continue
+      const key = `${prSegment}:${subproject}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      const prNum = prSegment.replace(/^pr-/i, '')
+      prContexts.push({
+        label: `PR #${prNum} · ${subproject}`,
+        apiBase: `/api/pr/${prSegment}/${subproject}`,
+        prefix: `isv:percona:PR:${prSegment}:${subproject}`,
+      })
+    }
+  }
+
+  prContexts.sort((a, b) => {
+    const na = parseInt(a.prefix.split(':')[3]?.replace(/^pr-/i, '') ?? '0')
+    const nb = parseInt(b.prefix.split(':')[3]?.replace(/^pr-/i, '') ?? '0')
+    return nb - na
+  })
+
+  return [PPG_CONTEXT, RELEASES_CONTEXT, ...prContexts]
+})
+
+useUrlState({
+  mainTab,
+  boardCtx: selectedContext,
+  version,
+  activeTags,
+  artifactsCtx: artifactsContext,
+  artifactsVersion,
+  artifactsTab,
+  boardContexts: contexts,
+  artifactsContexts,
+})
+
 const filteredPackages = computed(() => filterByTags(activeTags.value))
 const filteredEvents = computed(() => filterEvents(activeTags.value, version.value, prefixDepth.value, selectedContext.value.prefix))
 const updatedAt = ref<string | null>(null)
@@ -164,7 +216,13 @@ watch([windowMin, customFrom, customTo], () => refresh())
       </template>
       <ArtifactsPanel
         v-else
-        :pr-groups="prGroups"
+        :artifacts-contexts="artifactsContexts"
+        :artifacts-version="artifactsVersion"
+        :artifacts-context="artifactsContext"
+        :artifacts-tab="artifactsTab"
+        @update:artifacts-version="artifactsVersion = $event"
+        @update:artifacts-context="artifactsContext = $event"
+        @update:artifacts-tab="artifactsTab = $event"
       />
     </div>
   </div>
