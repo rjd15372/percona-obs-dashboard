@@ -160,8 +160,11 @@ watch(availableVersions, (versions) => {
   }
 })
 
-// Re-fetch repos when version changes; immediate so repos load on mount
+// Re-fetch repos when version changes; immediate so repos load on mount.
+// Guard against empty string — artifactsVersion starts as '' until URL is
+// hydrated or availableVersions snaps to the latest version.
 watch(() => props.artifactsVersion, (v) => {
+  if (!v) return
   if (isReleaseContext.value) {
     fetchReleaseArtifacts(v)
   } else {
