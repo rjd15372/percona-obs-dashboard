@@ -1,4 +1,4 @@
-import { watch, watchEffect, onMounted, type Ref } from 'vue'
+import { watch, watchEffect, onMounted, ref, type Ref } from 'vue'
 import type { Context } from '../types/api'
 import { PPG_CONTEXT } from '../lib/contexts'
 
@@ -37,7 +37,8 @@ export function useUrlState(state: UrlStateOptions): void {
   // Pending raw URL keys awaiting context list population (PR contexts load async)
   let pendingBoardKey: string | null = null
   let pendingArtifactsKey: string | null = null
-  let hydrated = false
+  // Reactive so watchEffect re-runs when onMounted sets it true
+  const hydrated = ref(false)
 
   onMounted(() => {
     const params = new URLSearchParams(window.location.search)
@@ -77,7 +78,7 @@ export function useUrlState(state: UrlStateOptions): void {
       }
     }
 
-    hydrated = true
+    hydrated.value = true
   })
 
   // Resolve board ctx once context list loads (PR contexts come from prGroups async)
@@ -98,7 +99,7 @@ export function useUrlState(state: UrlStateOptions): void {
 
   // Write URL whenever any state ref changes; omit default-value params
   watchEffect(() => {
-    if (!hydrated) return
+    if (!hydrated.value) return
     const params = new URLSearchParams()
 
     if (mainTab.value !== 'board') params.set('tab', mainTab.value)

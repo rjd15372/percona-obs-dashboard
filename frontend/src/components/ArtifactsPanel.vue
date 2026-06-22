@@ -35,7 +35,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import type { Context } from '../types/api'
 import type { ArtifactBinary, ContainerImage, PackageRow, RepoInfo } from '../composables/useArtifacts'
 import { useArtifacts } from '../composables/useArtifacts'
@@ -181,8 +181,10 @@ async function onContextChange(ctx: Context) {
   artRepoObs.value = ''  // clear stale repo so new context auto-selects its first repo
   releaseArtifacts.value = null
   await fetchPackages(ctx)
-  // availableVersions watcher only fires when version changes.
-  // If the version stays the same, we call explicitly.
+  // Wait for Vue to flush the context prop so that availableVersions (which uses
+  // props.artifactsContext.prefix depth) and fetchRepos (which reads
+  // props.artifactsContext) both see the newly-selected context, not the old one.
+  await nextTick()
   const versions = availableVersions.value
   if (versions.length > 0 && props.artifactsVersion !== versions[0]) {
     emit('update:artifactsVersion', versions[0])
