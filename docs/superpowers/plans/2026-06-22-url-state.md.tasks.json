@@ -1,0 +1,26 @@
+{
+  "planPath": "docs/superpowers/plans/2026-06-22-url-state.md",
+  "tasks": [
+    {
+      "id": 9,
+      "subject": "Task 1: Extract shared context constants",
+      "status": "pending",
+      "description": "**Goal:** Consolidate `PPG_CONTEXT` and `RELEASES_CONTEXT` into `frontend/src/lib/contexts.ts` so both `App.vue` and `ArtifactsPanel.vue` import from one place.\n\n**Files:**\n- Create: `frontend/src/lib/contexts.ts`\n- Modify: `frontend/src/App.vue`\n- Modify: `frontend/src/components/ArtifactsPanel.vue`\n\n**Acceptance Criteria:**\n- [ ] `frontend/src/lib/contexts.ts` exports `PPG_CONTEXT` and `RELEASES_CONTEXT`\n- [ ] `App.vue` imports `PPG_CONTEXT` from `../lib/contexts` and uses it as the default context\n- [ ] `ArtifactsPanel.vue` imports both from `../../lib/contexts`; inline constant blocks removed\n- [ ] `vue-tsc` passes with no type errors\n\n**Verify:** `cd /home/rdias/Work/percona-obs-dashboard/frontend && npx vue-tsc --noEmit` → exits 0 with no errors\n\n```json:metadata\n{\"files\": [\"frontend/src/lib/contexts.ts\", \"frontend/src/App.vue\", \"frontend/src/components/ArtifactsPanel.vue\"], \"verifyCommand\": \"cd /home/rdias/Work/percona-obs-dashboard/frontend && npx vue-tsc --noEmit\", \"acceptanceCriteria\": [\"frontend/src/lib/contexts.ts exports PPG_CONTEXT and RELEASES_CONTEXT\", \"App.vue imports PPG_CONTEXT from lib/contexts\", \"ArtifactsPanel.vue imports both from lib/contexts\", \"vue-tsc passes with no errors\"], \"modelTier\": \"mechanical\"}\n```"
+    },
+    {
+      "id": 10,
+      "subject": "Task 2: Implement useUrlState composable",
+      "status": "pending",
+      "blockedBy": [9],
+      "description": "**Goal:** Create `frontend/src/composables/useUrlState.ts` with pure helpers `contextToKey`/`keyToContext` and the `useUrlState` composable that syncs Vue refs to URL query params via `history.replaceState`.\n\n**Files:**\n- Create: `frontend/src/composables/useUrlState.ts`\n\n**Acceptance Criteria:**\n- [ ] `contextToKey` maps `isv:percona:ppg` → `ppg`, `isv:percona:ppg:releases` → `releases`, `isv:percona:PR:pr-106:ppg` → `pr-106`\n- [ ] `keyToContext` finds a context by its derived key; returns `undefined` when not found\n- [ ] `useUrlState` reads all 7 params on mount and hydrates provided refs\n- [ ] `useUrlState` calls `history.replaceState` on any ref change; default-value params omitted\n- [ ] PR context keys not yet in the context list are deferred and resolved once the list populates\n- [ ] `vue-tsc` passes with no type errors\n\n**Verify:** `cd /home/rdias/Work/percona-obs-dashboard/frontend && npx vue-tsc --noEmit` → exits 0\n\n```json:metadata\n{\"files\": [\"frontend/src/composables/useUrlState.ts\"], \"verifyCommand\": \"cd /home/rdias/Work/percona-obs-dashboard/frontend && npx vue-tsc --noEmit\", \"acceptanceCriteria\": [\"contextToKey maps ppg/releases/pr-NNN prefixes correctly\", \"keyToContext finds context by derived key\", \"useUrlState hydrates refs from URL on mount\", \"useUrlState writes URL via replaceState on any change with defaults omitted\", \"Pending PR keys resolve once context list populates\"], \"modelTier\": \"standard\"}\n```"
+    },
+    {
+      "id": 11,
+      "subject": "Task 3: Lift artifacts state to App.vue and wire URL sync",
+      "status": "pending",
+      "blockedBy": [9, 10],
+      "description": "**Goal:** Move `artifactsVersion`, `artifactsContext`, `artifactsTab`, and `artifactsContexts` from `ArtifactsPanel.vue` to `App.vue`; update props/emits contract; call `useUrlState` so URL sync is live end-to-end.\n\n**Files:**\n- Modify: `frontend/src/components/ArtifactsPanel.vue`\n- Modify: `frontend/src/App.vue`\n\n**Acceptance Criteria:**\n- [ ] Loading `/?tab=artifacts&actx=releases&aversion=17&sub=containers` shows Releases context, version 17, containers tab\n- [ ] Loading `/?tab=board&ctx=pr-106` selects PR #106 board context once prGroups loads\n- [ ] UI navigation updates URL in-place without adding browser history entries\n- [ ] `aversion` absent from URL on fresh load; written to URL when user explicitly selects a version\n- [ ] `vue-tsc` passes with no type errors\n\n**Verify:** `cd /home/rdias/Work/percona-obs-dashboard/frontend && npx vue-tsc --noEmit` → exits 0; then `task dev` and manually test the shareable URLs.\n\n```json:metadata\n{\"files\": [\"frontend/src/App.vue\", \"frontend/src/components/ArtifactsPanel.vue\"], \"verifyCommand\": \"cd /home/rdias/Work/percona-obs-dashboard/frontend && npx vue-tsc --noEmit\", \"acceptanceCriteria\": [\"/?tab=artifacts&actx=releases&aversion=17&sub=containers loads correctly\", \"/?tab=board&ctx=pr-106 selects PR context after prGroups loads\", \"UI changes update URL in-place via replaceState\", \"aversion absent on fresh load; present when user selects explicitly\", \"vue-tsc passes with no errors\"], \"modelTier\": \"standard\"}\n```"
+    }
+  ],
+  "lastUpdated": "2026-06-22T00:00:00Z"
+}
