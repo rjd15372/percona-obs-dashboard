@@ -37,6 +37,7 @@ export function useUrlState(state: UrlStateOptions): void {
   // Pending raw URL keys awaiting context list population (PR contexts load async)
   let pendingBoardKey: string | null = null
   let pendingArtifactsKey: string | null = null
+  let hydrated = false
 
   onMounted(() => {
     const params = new URLSearchParams(window.location.search)
@@ -75,6 +76,8 @@ export function useUrlState(state: UrlStateOptions): void {
         pendingArtifactsKey = actxKey
       }
     }
+
+    hydrated = true
   })
 
   // Resolve board ctx once context list loads (PR contexts come from prGroups async)
@@ -83,7 +86,7 @@ export function useUrlState(state: UrlStateOptions): void {
     const resolved = keyToContext(pendingBoardKey, contexts)
     boardCtx.value = resolved ?? PPG_CONTEXT
     pendingBoardKey = null
-  })
+  }, { immediate: true })
 
   // Resolve artifacts ctx once context list loads
   watch(artifactsContexts, (contexts) => {
@@ -91,10 +94,11 @@ export function useUrlState(state: UrlStateOptions): void {
     const resolved = keyToContext(pendingArtifactsKey, contexts)
     artifactsCtx.value = resolved ?? PPG_CONTEXT
     pendingArtifactsKey = null
-  })
+  }, { immediate: true })
 
   // Write URL whenever any state ref changes; omit default-value params
   watchEffect(() => {
+    if (!hydrated) return
     const params = new URLSearchParams()
 
     if (mainTab.value !== 'board') params.set('tab', mainTab.value)
