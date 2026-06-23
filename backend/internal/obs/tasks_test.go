@@ -149,6 +149,42 @@ func TestBuildReasonTask(t *testing.T) {
 	}
 }
 
+func TestBuildReasonTaskRetriesOnTransientError(t *testing.T) {
+	attempts := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts < 3 {
+			// Simulate a transient server error on the first two attempts.
+			http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		fmt.Fprint(w, `<reason><explain>source change</explain></reason>`)
+	}))
+	defer ts.Close()
+
+	c := obs.NewClient(ts.URL, "u", "p")
+	pkg := &model.Package{
+		Project:     "isv:percona",
+		Name:        "mypkg",
+		RollupState: model.RollupBuilding,
+		Targets: []model.Target{
+			{Repo: "repo", Arch: "x86_64", State: "building"},
+		},
+		UpdatedAt: time.Now().UTC(),
+	}
+
+	task := obs.BuildReasonTask{}
+	if err := task.Run(context.Background(), c, pkg); err != nil {
+		t.Fatal(err)
+	}
+	if pkg.Targets[0].BuildReason != "source change" {
+		t.Errorf("expected 'source change', got %q", pkg.Targets[0].BuildReason)
+	}
+	if attempts != 3 {
+		t.Errorf("expected 3 server attempts (2 retries), got %d", attempts)
+	}
+}
+
 func boolPtr(b bool) *bool { return &b }
 
 func TestPackageTypeTask(t *testing.T) {

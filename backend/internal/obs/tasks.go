@@ -3,9 +3,35 @@ package obs
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"github.com/percona/obs-dashboard/internal/model"
 )
+
+// withRetry calls fn up to maxAttempts times, sleeping an exponentially growing
+// delay between failures. It stops immediately if the context is cancelled.
+func withRetry(ctx context.Context, maxAttempts int, base time.Duration, fn func() error) error {
+	delay := base
+	var err error
+	for attempt := range maxAttempts {
+		err = fn()
+		if err == nil {
+			return nil
+		}
+		if ctx.Err() != nil {
+			return err
+		}
+		if attempt < maxAttempts-1 {
+			select {
+			case <-time.After(delay):
+			case <-ctx.Done():
+				return err
+			}
+			delay *= 2
+		}
+	}
+	return err
+}
 
 // BuildStateTask refreshes the package's targets, rollup state, and counts
 // by fetching current build results from OBS for the specific package.
@@ -157,7 +183,12 @@ func (t BuildReasonTask) Run(ctx context.Context, client *Client, pkg *model.Pac
 		if target.State == "succeeded" {
 			continue
 		}
-		result, err := client.PackageBuildReason(ctx, pkg.Project, target.Repo, target.Arch, pkg.Name)
+		var result BuildReasonResult
+		err := withRetry(ctx, 3, time.Second, func() error {
+			var e error
+			result, e = client.PackageBuildReason(ctx, pkg.Project, target.Repo, target.Arch, pkg.Name)
+			return e
+		})
 		if err != nil {
 			slog.Warn("obs: build reason",
 				"pkg", pkg.Name,
