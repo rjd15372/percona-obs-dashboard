@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -521,5 +522,67 @@ func TestRepoBinaryVersionsEmpty(t *testing.T) {
 	}
 	if len(versions) != 0 {
 		t.Errorf("expected empty map, got %v", versions)
+	}
+}
+
+func TestRebuild_Success(t *testing.T) {
+	var gotMethod, gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.String()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "user", "pass")
+	err := c.Rebuild(context.Background(), "isv:percona:ppg:17", "RockyLinux_9", "x86_64", "percona-pg_tde")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotMethod != http.MethodPost {
+		t.Errorf("expected POST, got %s", gotMethod)
+	}
+	if !strings.Contains(gotPath, "cmd=rebuild") {
+		t.Errorf("expected cmd=rebuild in URL, got %s", gotPath)
+	}
+}
+
+func TestRebuild_NonSuccessResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "permission denied", http.StatusForbidden)
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "user", "pass")
+	err := c.Rebuild(context.Background(), "isv:percona:ppg:17", "RockyLinux_9", "x86_64", "percona-pg_tde")
+	if err == nil {
+		t.Fatal("expected error on 403, got nil")
+	}
+	if !strings.Contains(err.Error(), "403") {
+		t.Errorf("expected 403 in error, got: %v", err)
+	}
+}
+
+func TestRebuild_URLEncoding(t *testing.T) {
+	var capturedURL string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedURL = r.URL.String()
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "user", "pass")
+	_ = c.Rebuild(context.Background(), "isv:percona:ppg:17", "RockyLinux_9", "x86_64", "percona-pg_tde")
+
+	// url.PathEscape does not encode colons (valid in URL path segments per RFC 3986),
+	// so the project name appears unescaped in the path.
+	if !strings.Contains(capturedURL, "/build/isv:percona:ppg:17") {
+		t.Errorf("project not in URL path: %s", capturedURL)
+	}
+	if !strings.Contains(capturedURL, "repository=RockyLinux_9") {
+		t.Errorf("repo missing from URL: %s", capturedURL)
+	}
+	if !strings.Contains(capturedURL, "package=percona-pg_tde") {
+		t.Errorf("package missing from URL: %s", capturedURL)
 	}
 }

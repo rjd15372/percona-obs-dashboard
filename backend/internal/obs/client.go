@@ -68,6 +68,38 @@ func (c *Client) getFile(ctx context.Context, path string) (*http.Response, erro
 	return resp, nil
 }
 
+// post issues an authenticated POST request to path with no request body.
+// Returns nil on 2xx; returns an error with up to 512 bytes of the response body on non-2xx.
+func (c *Client) post(ctx context.Context, path string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+path, nil)
+	if err != nil {
+		return err
+	}
+	req.SetBasicAuth(c.username, c.password)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return fmt.Errorf("OBS %s: %s — %s", path, resp.Status, strings.TrimSpace(string(body)))
+	}
+	return nil
+}
+
+// Rebuild triggers a rebuild of a specific package target on OBS.
+// project is path-escaped; repo, arch, and pkg are query-escaped.
+func (c *Client) Rebuild(ctx context.Context, project, repo, arch, pkg string) error {
+	path := fmt.Sprintf("/build/%s?cmd=rebuild&repository=%s&arch=%s&package=%s",
+		url.PathEscape(project),
+		url.QueryEscape(repo),
+		url.QueryEscape(arch),
+		url.QueryEscape(pkg),
+	)
+	return c.post(ctx, path)
+}
+
 // --- XML response types ---
 
 type directoryListing struct {
