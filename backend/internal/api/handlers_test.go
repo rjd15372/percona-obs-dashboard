@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/percona/obs-dashboard/internal/hub"
@@ -256,5 +257,71 @@ func TestPRReposHandler_EmptyDB(t *testing.T) {
 	}
 	if resp.RPM == nil || resp.DEB == nil {
 		t.Fatal("expected non-nil rpm and deb slices")
+	}
+}
+
+func TestRebuildHandler_Success(t *testing.T) {
+	obsSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer obsSrv.Close()
+
+	obsClient := obs.NewClient(obsSrv.URL, "user", "pass")
+	handler := rebuildHandler(obsClient)
+
+	body := `{"project":"isv:percona:ppg:17","repo":"RockyLinux_9","arch":"x86_64","package":"percona-pg_tde"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/rebuild", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp map[string]string
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp["status"] != "ok" {
+		t.Errorf("expected status=ok, got %v", resp)
+	}
+}
+
+func TestRebuildHandler_MissingField(t *testing.T) {
+	obsClient := obs.NewClient("http://example.com", "user", "pass")
+	handler := rebuildHandler(obsClient)
+
+	// missing arch and package
+	body := `{"project":"isv:percona:ppg:17","repo":"RockyLinux_9"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/rebuild", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+}
+
+func TestRebuildHandler_OBSError(t *testing.T) {
+	obsSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "permission denied", http.StatusForbidden)
+	}))
+	defer obsSrv.Close()
+
+	obsClient := obs.NewClient(obsSrv.URL, "user", "pass")
+	handler := rebuildHandler(obsClient)
+
+	body := `{"project":"isv:percona:ppg:17","repo":"RockyLinux_9","arch":"x86_64","package":"percona-pg_tde"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/rebuild", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("expected 502, got %d: %s", rec.Code, rec.Body.String())
 	}
 }

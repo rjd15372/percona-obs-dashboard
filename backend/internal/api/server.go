@@ -42,6 +42,7 @@ func NewRouter(db *sql.DB, h *hub.Hub, obsClient *obs.Client, root string) http.
 
 	r.Get("/api/stream", streamHandler(h))
 	r.Get("/api/binaries", binariesHandler(obsClient))
+	r.Post("/api/rebuild", rebuildHandler(obsClient))
 	r.Post("/api/artifacts/metadata", artifactMetadataHandler(obsClient, metadataCache))
 
 	return r

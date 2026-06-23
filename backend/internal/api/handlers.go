@@ -403,3 +403,30 @@ func worstRollup(pkgs []*model.Package) model.RollupState {
 	}
 	return worst
 }
+
+// rebuildHandler returns a handler for POST /api/rebuild.
+// Decodes {"project","repo","arch","package"} JSON body and triggers an OBS rebuild.
+func rebuildHandler(obsClient *obs.Client) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Project string `json:"project"`
+			Repo    string `json:"repo"`
+			Arch    string `json:"arch"`
+			Package string `json:"package"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		if body.Project == "" || body.Repo == "" || body.Arch == "" || body.Package == "" {
+			http.Error(w, "project, repo, arch, package are required", http.StatusBadRequest)
+			return
+		}
+		if err := obsClient.Rebuild(r.Context(), body.Project, body.Repo, body.Arch, body.Package); err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	}
+}
