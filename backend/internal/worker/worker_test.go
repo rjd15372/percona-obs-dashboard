@@ -225,6 +225,18 @@ func (t setReasonTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package)
 	return nil
 }
 
+// setTargetReasonTask sets BuildReason on a specific target unconditionally.
+type setTargetReasonTask struct{ repo, arch, reason string }
+
+func (t setTargetReasonTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package) error {
+	for i, target := range pkg.Targets {
+		if target.Repo == t.repo && target.Arch == t.arch {
+			pkg.Targets[i].BuildReason = t.reason
+		}
+	}
+	return nil
+}
+
 // setStateTask transitions a specific target to a new state.
 type setStateTask struct{ repo, arch, state, details string }
 
@@ -295,49 +307,7 @@ func TestProcessOnceEmitsBuildStarted(t *testing.T) {
 	}
 }
 
-func TestProcessOnceEmitsFailedStates(t *testing.T) {
-	for _, tc := range []struct{ state, details, wantWhy string }{
-		{"failed", "", ""},
-		{"unresolvable", "nothing provides libpq", "unresolvable: nothing provides libpq"},
-		{"broken", "no source", "broken: no source"},
-	} {
-		t.Run(tc.state, func(t *testing.T) {
-			db := setupDB(t)
-			h := hubpkg.New()
-			ws := workingset.New(10)
-
-			pkg := &model.Package{
-				Project:     "isv:percona:ppg:17",
-				Name:        "mypkg",
-				RollupState: model.RollupBuilding,
-				Targets:     []model.Target{{Repo: "Ubuntu_24.04", Arch: "x86_64", State: "building"}},
-				UpdatedAt:   time.Now().UTC(),
-			}
-			if err := store.UpsertPackageState(db, pkg, pkg.UpdatedAt); err != nil {
-				t.Fatalf("seed: %v", err)
-			}
-
-			pool := worker.NewPool(0, []worker.Task{
-				setStateTask{"Ubuntu_24.04", "x86_64", tc.state, tc.details},
-			}, nil, nil, db, h, ws)
-			pool.ProcessOnce(context.Background(), pkg)
-
-			now := time.Now().UTC()
-			evts, _ := store.QueryEvents(db, "isv:percona:ppg:17", now.Add(-time.Minute), now.Add(time.Minute))
-			if len(evts) != 1 {
-				t.Fatalf("expected 1 event, got %d: %v", len(evts), evts)
-			}
-			if evts[0].Type != model.EventFailed {
-				t.Errorf("expected failed, got %q", evts[0].Type)
-			}
-			if evts[0].Why != tc.wantWhy {
-				t.Errorf("expected why=%q, got %q", tc.wantWhy, evts[0].Why)
-			}
-		})
-	}
-}
-
-func TestProcessOnceNoEventForBlocked(t *testing.T) {
+func TestProcessOnceEmitsFailedTerminal(t *testing.T) {
 	db := setupDB(t)
 	h := hubpkg.New()
 	ws := workingset.New(10)
@@ -354,18 +324,93 @@ func TestProcessOnceNoEventForBlocked(t *testing.T) {
 	}
 
 	pool := worker.NewPool(0, []worker.Task{
-		setStateTask{"Ubuntu_24.04", "x86_64", "blocked", ""},
+		setStateTask{"Ubuntu_24.04", "x86_64", "failed", ""},
 	}, nil, nil, db, h, ws)
 	pool.ProcessOnce(context.Background(), pkg)
 
 	now := time.Now().UTC()
 	evts, _ := store.QueryEvents(db, "isv:percona:ppg:17", now.Add(-time.Minute), now.Add(time.Minute))
-	if len(evts) != 0 {
-		t.Errorf("expected no events for blocked, got %d", len(evts))
+	if len(evts) != 1 {
+		t.Fatalf("expected 1 event, got %d: %v", len(evts), evts)
+	}
+	if evts[0].Type != model.EventFailed {
+		t.Errorf("expected failed, got %q", evts[0].Type)
+	}
+	if evts[0].Why != "" {
+		t.Errorf("expected empty why, got %q", evts[0].Why)
 	}
 }
 
-func TestProcessOnceEmitsPublished(t *testing.T) {
+func TestProcessOnceNoEventForBlocked(t *testing.T) {
+	t.Run("no build reason → 0 events", func(t *testing.T) {
+		db := setupDB(t)
+		h := hubpkg.New()
+		ws := workingset.New(10)
+
+		pkg := &model.Package{
+			Project:     "isv:percona:ppg:17",
+			Name:        "mypkg",
+			RollupState: model.RollupBuilding,
+			Targets:     []model.Target{{Repo: "Ubuntu_24.04", Arch: "x86_64", State: "building"}},
+			UpdatedAt:   time.Now().UTC(),
+		}
+		if err := store.UpsertPackageState(db, pkg, pkg.UpdatedAt); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+		pool := worker.NewPool(0, []worker.Task{
+			setStateTask{"Ubuntu_24.04", "x86_64", "blocked", ""},
+		}, nil, nil, db, h, ws)
+		pool.ProcessOnce(context.Background(), pkg)
+
+		now := time.Now().UTC()
+		evts, _ := store.QueryEvents(db, "isv:percona:ppg:17", now.Add(-time.Minute), now.Add(time.Minute))
+		if len(evts) != 0 {
+			t.Errorf("expected 0 events, got %d", len(evts))
+		}
+	})
+
+	t.Run("with build reason → build_started then blocked", func(t *testing.T) {
+		db := setupDB(t)
+		h := hubpkg.New()
+		ws := workingset.New(10)
+
+		pkg := &model.Package{
+			Project:     "isv:percona:ppg:17",
+			Name:        "mypkg",
+			RollupState: model.RollupBuilding,
+			Targets:     []model.Target{{Repo: "Ubuntu_24.04", Arch: "x86_64", State: "building"}},
+			UpdatedAt:   time.Now().UTC(),
+		}
+		if err := store.UpsertPackageState(db, pkg, pkg.UpdatedAt); err != nil {
+			t.Fatalf("seed: %v", err)
+		}
+		pool := worker.NewPool(0, []worker.Task{
+			setStateTask{"Ubuntu_24.04", "x86_64", "blocked", ""},
+			setTargetReasonTask{"Ubuntu_24.04", "x86_64", "source change"},
+		}, nil, nil, db, h, ws)
+		pool.ProcessOnce(context.Background(), pkg)
+
+		now := time.Now().UTC()
+		evts, _ := store.QueryEvents(db, "isv:percona:ppg:17", now.Add(-time.Minute), now.Add(time.Minute))
+		if len(evts) != 2 {
+			t.Fatalf("expected 2 events, got %d", len(evts))
+		}
+		// QueryEvents returns newest-first; within the same timestamp events are
+		// returned in reverse insertion order (blocked inserted after build_started).
+		types := map[model.EventType]bool{}
+		for _, e := range evts {
+			types[e.Type] = true
+		}
+		if !types[model.EventBuildStarted] {
+			t.Errorf("expected build_started event, got %v", evts)
+		}
+		if !types[model.EventBlocked] {
+			t.Errorf("expected blocked event, got %v", evts)
+		}
+	})
+}
+
+func TestProcessOnceEmitsSucceededOnPublish(t *testing.T) {
 	db := setupDB(t)
 	h := hubpkg.New()
 	ws := workingset.New(10)
@@ -391,8 +436,210 @@ func TestProcessOnceEmitsPublished(t *testing.T) {
 	if len(evts) != 1 {
 		t.Fatalf("expected 1 event, got %d", len(evts))
 	}
-	if evts[0].Type != model.EventPublished {
-		t.Errorf("expected published, got %q", evts[0].Type)
+	if evts[0].Type != model.EventSucceeded {
+		t.Errorf("expected succeeded, got %q", evts[0].Type)
+	}
+	if evts[0].Repo != "Ubuntu_24.04" || evts[0].Arch != "x86_64" {
+		t.Errorf("expected repo/arch on event, got %q/%q", evts[0].Repo, evts[0].Arch)
+	}
+}
+
+func TestBuildStartedFiresOnBlockedState(t *testing.T) {
+	db := setupDB(t)
+	h := hubpkg.New()
+	ws := workingset.New(10)
+
+	// Seed: target already blocked, no BuildReason yet.
+	pkg := &model.Package{
+		Project:     "isv:percona:ppg:17",
+		Name:        "mypkg",
+		RollupState: model.RollupBuilding,
+		Targets:     []model.Target{{Repo: "Ubuntu_24.04", Arch: "x86_64", State: "blocked"}},
+		UpdatedAt:   time.Now().UTC(),
+	}
+	if err := store.UpsertPackageState(db, pkg, pkg.UpdatedAt); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// Task: set BuildReason while still blocked. The blocked event does NOT re-fire
+	// because there is no state transition (old.State == "blocked" == t.State).
+	// Only build_started fires.
+	pool := worker.NewPool(0, []worker.Task{
+		setTargetReasonTask{"Ubuntu_24.04", "x86_64", "dep changed"},
+	}, nil, nil, db, h, ws)
+	pool.ProcessOnce(context.Background(), pkg)
+
+	now := time.Now().UTC()
+	evts, _ := store.QueryEvents(db, "isv:percona:ppg:17", now.Add(-time.Minute), now.Add(time.Minute))
+	if len(evts) != 1 {
+		t.Fatalf("expected 1 event, got %d: %v", len(evts), evts)
+	}
+	if evts[0].Type != model.EventBuildStarted {
+		t.Errorf("expected build_started, got %q", evts[0].Type)
+	}
+}
+
+func TestIntermediateStateRequiresBuildReason(t *testing.T) {
+	db := setupDB(t)
+	h := hubpkg.New()
+	ws := workingset.New(10)
+
+	pkg := &model.Package{
+		Project:     "isv:percona:ppg:17",
+		Name:        "mypkg",
+		RollupState: model.RollupBuilding,
+		Targets:     []model.Target{{Repo: "Ubuntu_24.04", Arch: "x86_64", State: "building"}},
+		UpdatedAt:   time.Now().UTC(),
+	}
+	if err := store.UpsertPackageState(db, pkg, pkg.UpdatedAt); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// Transition to unresolvable with no BuildReason: must not emit any event.
+	pool := worker.NewPool(0, []worker.Task{
+		setStateTask{"Ubuntu_24.04", "x86_64", "unresolvable", "nothing provides libpq"},
+	}, nil, nil, db, h, ws)
+	pool.ProcessOnce(context.Background(), pkg)
+
+	now := time.Now().UTC()
+	evts, _ := store.QueryEvents(db, "isv:percona:ppg:17", now.Add(-time.Minute), now.Add(time.Minute))
+	if len(evts) != 0 {
+		t.Errorf("expected 0 events without BuildReason, got %d", len(evts))
+	}
+}
+
+func TestIntermediateStatesFireInSequence(t *testing.T) {
+	db := setupDB(t)
+	h := hubpkg.New()
+	ws := workingset.New(10)
+
+	// Cycle 1: target transitions to blocked with BuildReason.
+	pkg := &model.Package{
+		Project:     "isv:percona:ppg:17",
+		Name:        "mypkg",
+		RollupState: model.RollupBuilding,
+		Targets:     []model.Target{{Repo: "Ubuntu_24.04", Arch: "x86_64", State: "building"}},
+		UpdatedAt:   time.Now().UTC(),
+	}
+	if err := store.UpsertPackageState(db, pkg, pkg.UpdatedAt); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	pool1 := worker.NewPool(0, []worker.Task{
+		setStateTask{"Ubuntu_24.04", "x86_64", "blocked", ""},
+		setTargetReasonTask{"Ubuntu_24.04", "x86_64", "source change"},
+	}, nil, nil, db, h, ws)
+	pool1.ProcessOnce(context.Background(), pkg)
+
+	// Cycle 2: unresolvable (BuildReason carried over in pkg after cycle 1).
+	pool2 := worker.NewPool(0, []worker.Task{
+		setStateTask{"Ubuntu_24.04", "x86_64", "unresolvable", "nothing provides libpq"},
+	}, nil, nil, db, h, ws)
+	pool2.ProcessOnce(context.Background(), pkg)
+
+	// Cycle 3: broken.
+	pool3 := worker.NewPool(0, []worker.Task{
+		setStateTask{"Ubuntu_24.04", "x86_64", "broken", "patch failed"},
+	}, nil, nil, db, h, ws)
+	pool3.ProcessOnce(context.Background(), pkg)
+
+	now := time.Now().UTC()
+	evts, _ := store.QueryEvents(db, "isv:percona:ppg:17", now.Add(-time.Minute), now.Add(time.Minute))
+
+	// Expect exactly 4 events: build_started, blocked, unresolvable, broken.
+	// QueryEvents returns newest-first; within the same timestamp the order may be
+	// reverse-insertion. Check by building a type→event map.
+	if len(evts) != 4 {
+		t.Fatalf("expected 4 events, got %d: %v", len(evts), evts)
+	}
+	byType := map[model.EventType]*model.Event{}
+	for _, e := range evts {
+		byType[e.Type] = e
+	}
+	for _, want := range []model.EventType{
+		model.EventBuildStarted, model.EventBlocked,
+		model.EventUnresolvable, model.EventBroken,
+	} {
+		if _, ok := byType[want]; !ok {
+			t.Errorf("missing event type %q", want)
+		}
+	}
+	if e := byType[model.EventUnresolvable]; e != nil && e.Why != "nothing provides libpq" {
+		t.Errorf("unresolvable why: want %q, got %q", "nothing provides libpq", e.Why)
+	}
+	if e := byType[model.EventBroken]; e != nil && e.Why != "patch failed" {
+		t.Errorf("broken why: want %q, got %q", "patch failed", e.Why)
+	}
+}
+
+func TestSucceededOnPublishNotOnState(t *testing.T) {
+	db := setupDB(t)
+	h := hubpkg.New()
+	ws := workingset.New(10)
+
+	// Seed: building state.
+	pkg := &model.Package{
+		Project:     "isv:percona:ppg:17",
+		Name:        "mypkg",
+		RollupState: model.RollupBuilding,
+		Targets:     []model.Target{{Repo: "Ubuntu_24.04", Arch: "x86_64", State: "building", Published: false}},
+		UpdatedAt:   time.Now().UTC(),
+	}
+	if err := store.UpsertPackageState(db, pkg, pkg.UpdatedAt); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// Transition State to "succeeded" but leave Published false.
+	pool := worker.NewPool(0, []worker.Task{
+		setStateTask{"Ubuntu_24.04", "x86_64", "succeeded", ""},
+	}, nil, nil, db, h, ws)
+	pool.ProcessOnce(context.Background(), pkg)
+
+	now := time.Now().UTC()
+	evts, _ := store.QueryEvents(db, "isv:percona:ppg:17", now.Add(-time.Minute), now.Add(time.Minute))
+	if len(evts) != 0 {
+		t.Errorf("expected 0 events when State==succeeded but Published==false, got %d", len(evts))
+	}
+}
+
+func TestSucceededOnPublishFlip(t *testing.T) {
+	db := setupDB(t)
+	h := hubpkg.New()
+	ws := workingset.New(10)
+
+	pkg := &model.Package{
+		Project:     "isv:percona:ppg:17",
+		Name:        "mypkg",
+		Version:     "17.5-1",
+		RollupState: model.RollupSucceeded,
+		Targets:     []model.Target{{Repo: "Ubuntu_24.04", Arch: "x86_64", State: "succeeded", Published: false}},
+		UpdatedAt:   time.Now().UTC(),
+	}
+	if err := store.UpsertPackageState(db, pkg, pkg.UpdatedAt); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	pool := worker.NewPool(0, []worker.Task{
+		setPublishedTask{"Ubuntu_24.04", "x86_64"},
+	}, nil, nil, db, h, ws)
+	pool.ProcessOnce(context.Background(), pkg)
+
+	now := time.Now().UTC()
+	evts, _ := store.QueryEvents(db, "isv:percona:ppg:17", now.Add(-time.Minute), now.Add(time.Minute))
+	if len(evts) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(evts))
+	}
+	if evts[0].Type != model.EventSucceeded {
+		t.Errorf("expected succeeded, got %q", evts[0].Type)
+	}
+	if evts[0].Repo != "Ubuntu_24.04" {
+		t.Errorf("expected Repo=Ubuntu_24.04, got %q", evts[0].Repo)
+	}
+	if evts[0].Arch != "x86_64" {
+		t.Errorf("expected Arch=x86_64, got %q", evts[0].Arch)
+	}
+	if evts[0].Version != "17.5-1" {
+		t.Errorf("expected Version=17.5-1, got %q", evts[0].Version)
 	}
 }
 
