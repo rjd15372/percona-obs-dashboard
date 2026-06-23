@@ -66,9 +66,8 @@ func (p *Pool) ProcessOnce(ctx context.Context, pkg *model.Package) {
 	// was observed, not when the (potentially slow) task chain finished.
 	now := time.Now().UTC()
 
-	// Snapshot target state and rollup before task chain.
+	// Snapshot target state before task chain.
 	// BuildReasonPackages is a slice field — deep copy to avoid aliasing.
-	prevRollup := pkg.RollupState
 	oldTargets := make([]model.Target, len(pkg.Targets))
 	for i, t := range pkg.Targets {
 		c := t
@@ -97,7 +96,7 @@ func (p *Pool) ProcessOnce(ctx context.Context, pkg *model.Package) {
 
 	if !pkg.IsRelease {
 		p.hub.Notify(hubpkg.PackageUpdate(pkg))
-		p.emitBuildEvents(pkg, oldTargets, prevRollup)
+		p.emitBuildEvents(pkg, oldTargets)
 	}
 
 	if pkg.RollupState == model.RollupPublished && pkg.IsContainer != nil {
@@ -105,15 +104,12 @@ func (p *Pool) ProcessOnce(ctx context.Context, pkg *model.Package) {
 	}
 }
 
-var failStates = map[string]bool{"failed": true, "unresolvable": true, "broken": true}
-
 const obsBase = "https://build.opensuse.org"
 
 // emitBuildEvents compares oldTargets with pkg.Targets and appends one event
-// per target for each meaningful state transition. prevRollup is the package's
-// rollup state before the task chain ran; published events are suppressed when
-// the package was already published to avoid duplicates on re-processing.
-func (p *Pool) emitBuildEvents(pkg *model.Package, oldTargets []model.Target, prevRollup model.RollupState) {
+// per target for each meaningful state transition, implementing a per-target
+// build event state machine.
+func (p *Pool) emitBuildEvents(pkg *model.Package, oldTargets []model.Target) {
 	oldByKey := make(map[string]model.Target, len(oldTargets))
 	for _, t := range oldTargets {
 		oldByKey[t.Repo+"/"+t.Arch] = t
@@ -125,10 +121,8 @@ func (p *Pool) emitBuildEvents(pkg *model.Package, oldTargets []model.Target, pr
 		key := t.Repo + "/" + t.Arch
 		old := oldByKey[key]
 
-		// build_started: reason newly appeared and target is actively building.
-		// Guard on State == "building" to avoid firing alongside a failed event
-		// when a fast build cycle transitions building→failed in a single poll.
-		if old.BuildReason == "" && t.BuildReason != "" && t.State == "building" {
+		// build_started: BuildReason newly appeared, regardless of target state.
+		if old.BuildReason == "" && t.BuildReason != "" {
 			why := t.BuildReason
 			if len(t.BuildReasonPackages) > 0 {
 				why += ": " + strings.Join(t.BuildReasonPackages, ", ")
@@ -148,31 +142,57 @@ func (p *Pool) emitBuildEvents(pkg *model.Package, oldTargets []model.Target, pr
 			})
 		}
 
-		// failed (includes unresolvable, broken).
-		if !failStates[old.State] && failStates[t.State] {
-			why := ""
-			if t.State == "unresolvable" && t.Details != "" {
-				why = "unresolvable: " + t.Details
-			} else if t.State == "broken" && t.Details != "" {
-				why = "broken: " + t.Details
+		// Intermediate states — only after build_started (guard: BuildReason present).
+		if t.BuildReason != "" {
+			if old.State != "blocked" && t.State == "blocked" {
+				p.appendEvent(&model.Event{
+					ID:      "evt_" + ulid.Make().String(),
+					Type:    model.EventBlocked,
+					Tags:    pkg.Tags,
+					Project: pkg.Project,
+					Package: pkg.Name,
+					Repo:    t.Repo,
+					Arch:    t.Arch,
+					What:    fmt.Sprintf("%s blocked", pkg.Name),
+					Why:     t.BlockedBy,
+					URL:     fmt.Sprintf("%s/package/show/%s/%s", obsBase, pkg.Project, pkg.Name),
+					At:      now,
+				})
 			}
-			p.appendEvent(&model.Event{
-				ID:      "evt_" + ulid.Make().String(),
-				Type:    model.EventFailed,
-				Tags:    pkg.Tags,
-				Project: pkg.Project,
-				Package: pkg.Name,
-				Repo:    t.Repo,
-				Arch:    t.Arch,
-				What:    fmt.Sprintf("%s failed", pkg.Name),
-				Why:     why,
-				URL:     fmt.Sprintf("%s/package/show/%s/%s", obsBase, pkg.Project, pkg.Name),
-				At:      now,
-			})
+			if old.State != "unresolvable" && t.State == "unresolvable" {
+				p.appendEvent(&model.Event{
+					ID:      "evt_" + ulid.Make().String(),
+					Type:    model.EventUnresolvable,
+					Tags:    pkg.Tags,
+					Project: pkg.Project,
+					Package: pkg.Name,
+					Repo:    t.Repo,
+					Arch:    t.Arch,
+					What:    fmt.Sprintf("%s unresolvable", pkg.Name),
+					Why:     t.Details,
+					URL:     fmt.Sprintf("%s/package/show/%s/%s", obsBase, pkg.Project, pkg.Name),
+					At:      now,
+				})
+			}
+			if old.State != "broken" && t.State == "broken" {
+				p.appendEvent(&model.Event{
+					ID:      "evt_" + ulid.Make().String(),
+					Type:    model.EventBroken,
+					Tags:    pkg.Tags,
+					Project: pkg.Project,
+					Package: pkg.Name,
+					Repo:    t.Repo,
+					Arch:    t.Arch,
+					What:    fmt.Sprintf("%s broken", pkg.Name),
+					Why:     t.Details,
+					URL:     fmt.Sprintf("%s/package/show/%s/%s", obsBase, pkg.Project, pkg.Name),
+					At:      now,
+				})
+			}
 		}
 
-		// succeeded.
-		if old.State != "succeeded" && t.State == "succeeded" {
+		// succeeded: publication is the real terminal success signal.
+		if !old.Published && t.Published {
 			p.appendEvent(&model.Event{
 				ID:      "evt_" + ulid.Make().String(),
 				Type:    model.EventSucceeded,
@@ -189,19 +209,18 @@ func (p *Pool) emitBuildEvents(pkg *model.Package, oldTargets []model.Target, pr
 			})
 		}
 
-		// published.
-		if !old.Published && t.Published && prevRollup != model.RollupPublished {
+		// failed: only the terminal "failed" state; why is scaffolded for future use.
+		if old.State != "failed" && t.State == "failed" {
 			p.appendEvent(&model.Event{
 				ID:      "evt_" + ulid.Make().String(),
-				Type:    model.EventPublished,
+				Type:    model.EventFailed,
 				Tags:    pkg.Tags,
 				Project: pkg.Project,
 				Package: pkg.Name,
 				Repo:    t.Repo,
 				Arch:    t.Arch,
-				What:    fmt.Sprintf("%s published", pkg.Name),
+				What:    fmt.Sprintf("%s failed", pkg.Name),
 				Why:     "",
-				Version: pkg.Version,
 				URL:     fmt.Sprintf("%s/package/show/%s/%s", obsBase, pkg.Project, pkg.Name),
 				At:      now,
 			})
