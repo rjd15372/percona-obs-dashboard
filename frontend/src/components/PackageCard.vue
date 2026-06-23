@@ -16,7 +16,7 @@ const STATE_COLOR: Record<string, string> = {
   succeeded: 'var(--ok)',
   published: 'var(--ok)',
   failed: 'var(--fail)',
-  unresolvable: 'var(--brand-purple)',
+  unresolvable: 'var(--broken)',
   broken: 'var(--broken)',
   blocked: 'var(--blocked)',
   building: 'var(--info)',
@@ -28,7 +28,7 @@ const STATE_BG: Record<string, string> = {
   succeeded: 'var(--ok-tint)',
   published: 'var(--ok-tint)',
   failed: 'var(--fail-tint)',
-  unresolvable: 'var(--brand-purple-tint)',
+  unresolvable: 'var(--broken-tint)',
   broken: 'var(--broken-tint)',
   blocked: 'var(--blocked-tint)',
   building: 'var(--info-tint)',
@@ -131,7 +131,7 @@ function stateDetailColor(t: Target): string {
     if (o === 'ok') return 'var(--ok)'
     if (o === 'fail') return 'var(--fail)'
   }
-  if (t.state === 'unresolvable') return 'var(--brand-purple)'
+  if (t.state === 'unresolvable') return 'var(--broken)'
   if (t.state === 'broken') return 'var(--broken)'
   return 'var(--text-muted)'
 }
