@@ -1,0 +1,33 @@
+{
+  "planPath": "docs/superpowers/plans/2026-06-23-retrigger-build.md",
+  "tasks": [
+    {
+      "id": 38,
+      "subject": "Task 1: OBS client Rebuild() method",
+      "status": "pending",
+      "description": "**Goal:** Add `post()` and `Rebuild()` to `backend/internal/obs/client.go`, tested against a stub HTTP server.\n\n**Files:**\n- Modify: `backend/internal/obs/client.go`\n- Modify: `backend/internal/obs/client_test.go`\n\n**Acceptance Criteria:**\n- [ ] `Rebuild()` issues POST with Basic Auth and path-escaped project\n- [ ] Returns nil on 2xx\n- [ ] Returns error with body on non-2xx\n- [ ] 3 tests pass\n\n**Verify:** `cd backend && go test ./internal/obs/ -run TestRebuild -v`\n\n```json:metadata\n{\"files\": [\"backend/internal/obs/client.go\", \"backend/internal/obs/client_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/obs/ -run TestRebuild -v\", \"acceptanceCriteria\": [\"Rebuild() issues POST with Basic Auth and path-escaped project\", \"Returns nil on 2xx\", \"Returns error with body on non-2xx\", \"3 tests pass\"], \"modelTier\": \"mechanical\"}\n```"
+    },
+    {
+      "id": 39,
+      "subject": "Task 2: rebuildHandler and route",
+      "status": "pending",
+      "blockedBy": [38],
+      "description": "**Goal:** Add `POST /api/rebuild` to the backend API, tested for success, missing fields, and OBS errors.\n\n**Files:**\n- Modify: `backend/internal/api/handlers.go`\n- Modify: `backend/internal/api/handlers_test.go`\n- Modify: `backend/internal/api/server.go`\n\n**Acceptance Criteria:**\n- [ ] POST /api/rebuild returns 200 + {\"status\":\"ok\"} on success\n- [ ] Returns 400 when any field is missing\n- [ ] Returns 502 when OBS returns an error\n- [ ] Route registered in NewRouter\n\n**Verify:** `cd backend && go test ./internal/api/ -run TestRebuild -v`\n\n```json:metadata\n{\"files\": [\"backend/internal/api/handlers.go\", \"backend/internal/api/handlers_test.go\", \"backend/internal/api/server.go\"], \"verifyCommand\": \"cd backend && go test ./internal/api/ -run TestRebuild -v\", \"acceptanceCriteria\": [\"POST /api/rebuild returns 200 + status:ok on success\", \"Returns 400 when any field is missing\", \"Returns 502 when OBS returns an error\", \"Route registered in NewRouter\"], \"modelTier\": \"mechanical\"}\n```"
+    },
+    {
+      "id": 40,
+      "subject": "Task 3: useRebuild composable",
+      "status": "pending",
+      "blockedBy": [39],
+      "description": "**Goal:** Create `frontend/src/composables/useRebuild.ts` with `trigger()`, `isLoading()`, and `errorFor()`.\n\n**Files:**\n- Create: `frontend/src/composables/useRebuild.ts`\n\n**Acceptance Criteria:**\n- [ ] trigger() POSTs to /api/rebuild\n- [ ] isLoading() returns true while in-flight\n- [ ] errorFor() returns error message, null on success\n- [ ] Error clears after 4 seconds\n- [ ] No TypeScript errors\n\n**Verify:** `cd frontend && npx tsc --noEmit`\n\n```json:metadata\n{\"files\": [\"frontend/src/composables/useRebuild.ts\"], \"verifyCommand\": \"cd frontend && npx tsc --noEmit\", \"acceptanceCriteria\": [\"trigger() POSTs to /api/rebuild\", \"isLoading() returns true while in-flight\", \"errorFor() returns error message, null on success\", \"Error clears after 4 seconds\", \"No TypeScript errors\"], \"modelTier\": \"mechanical\"}\n```"
+    },
+    {
+      "id": 41,
+      "subject": "Task 4: PackageCard.vue rebuild UI",
+      "status": "pending",
+      "blockedBy": [40],
+      "description": "**Goal:** Wire `useRebuild` into `PackageCard.vue` — restart icon on qualifying target rows, spinner during in-flight requests, inline error below the row.\n\n**Files:**\n- Modify: `frontend/src/components/PackageCard.vue`\n\n**Acceptance Criteria:**\n- [ ] Restart icon appears for failed/broken/unresolvable/blocked targets\n- [ ] Clicking icon calls triggerRebuild() without toggling expand\n- [ ] Spinner animation while loading\n- [ ] Error message shown in red below target row, auto-clears after 4s\n- [ ] No TypeScript or build errors\n\n**Verify:** `cd frontend && npx tsc --noEmit && npm run build 2>&1 | tail -5`\n\n```json:metadata\n{\"files\": [\"frontend/src/components/PackageCard.vue\"], \"verifyCommand\": \"cd frontend && npx tsc --noEmit && npm run build 2>&1 | tail -5\", \"acceptanceCriteria\": [\"Restart icon appears for failed/broken/unresolvable/blocked targets\", \"Clicking icon calls triggerRebuild() without toggling expand\", \"Spinner animation while loading\", \"Error message shown in red below target row, auto-clears after 4s\", \"No TypeScript or build errors\"], \"modelTier\": \"mechanical\"}\n```"
+    }
+  ],
+  "lastUpdated": "2026-06-23T00:00:00Z"
+}
