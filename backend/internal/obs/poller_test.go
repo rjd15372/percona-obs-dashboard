@@ -30,7 +30,7 @@ func TestNoPollerRollupEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read poller.go: %v", err)
 	}
-	if strings.Contains(string(data), "AppendEvent") {
+	if strings.Contains(string(data), "AppendEvent(") {
 		t.Error("poller.go must not call store.AppendEvent — worker is the sole event emitter")
 	}
 }

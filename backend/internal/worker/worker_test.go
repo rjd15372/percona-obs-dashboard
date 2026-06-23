@@ -508,7 +508,7 @@ func TestIntermediateStateRequiresBuildReason(t *testing.T) {
 	}
 }
 
-func TestIntermediateStatesFireInSequence(t *testing.T) {
+func TestIntermediateStatesAllFire(t *testing.T) {
 	db := setupDB(t)
 	h := hubpkg.New()
 	ws := workingset.New(10)
@@ -546,29 +546,40 @@ func TestIntermediateStatesFireInSequence(t *testing.T) {
 	now := time.Now().UTC()
 	evts, _ := store.QueryEvents(db, "isv:percona:ppg:17", now.Add(-time.Minute), now.Add(time.Minute))
 
-	// Expect exactly 4 events: build_started, blocked, unresolvable, broken.
-	// QueryEvents returns newest-first; within the same timestamp the order may be
-	// reverse-insertion. Check by building a type→event map.
+	// Verify all four event types are present.
 	if len(evts) != 4 {
 		t.Fatalf("expected 4 events, got %d: %v", len(evts), evts)
 	}
-	byType := map[model.EventType]*model.Event{}
+	wantTypes := map[model.EventType]bool{
+		model.EventBuildStarted: true,
+		model.EventBlocked:      true,
+		model.EventUnresolvable: true,
+		model.EventBroken:       true,
+	}
+	for _, e := range evts {
+		if !wantTypes[e.Type] {
+			t.Errorf("unexpected event type %q", e.Type)
+		}
+	}
+
+	// Verify Why values by looking up events by type.
+	byType := make(map[model.EventType]*model.Event, len(evts))
 	for _, e := range evts {
 		byType[e.Type] = e
 	}
-	for _, want := range []model.EventType{
-		model.EventBuildStarted, model.EventBlocked,
-		model.EventUnresolvable, model.EventBroken,
-	} {
-		if _, ok := byType[want]; !ok {
-			t.Errorf("missing event type %q", want)
+	if e := byType[model.EventUnresolvable]; e == nil || e.Why != "nothing provides libpq" {
+		why := ""
+		if e != nil {
+			why = e.Why
 		}
+		t.Errorf("unresolvable why: want %q, got %q", "nothing provides libpq", why)
 	}
-	if e := byType[model.EventUnresolvable]; e != nil && e.Why != "nothing provides libpq" {
-		t.Errorf("unresolvable why: want %q, got %q", "nothing provides libpq", e.Why)
-	}
-	if e := byType[model.EventBroken]; e != nil && e.Why != "patch failed" {
-		t.Errorf("broken why: want %q, got %q", "patch failed", e.Why)
+	if e := byType[model.EventBroken]; e == nil || e.Why != "patch failed" {
+		why := ""
+		if e != nil {
+			why = e.Why
+		}
+		t.Errorf("broken why: want %q, got %q", "patch failed", why)
 	}
 }
 
