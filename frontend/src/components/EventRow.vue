@@ -24,7 +24,7 @@ const showReason = computed(() => _showReason(props.event))
       </div>
       <span
         v-if="showReason"
-        style="font-size:11px;color:var(--text-secondary);background:var(--bg-muted,var(--blocked-tint));border:1px solid var(--border);border-radius:5px;padding:3px 7px;font-family:var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+        style="font-size:11px;color:var(--text-secondary);background:var(--bg-muted,var(--blocked-tint));border:1px solid var(--border);border-radius:5px;padding:3px 7px;font-family:var(--font-mono);word-break:break-word;"
       >{{ props.event.why }}</span>
       <code v-if="props.event.repo" style="font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--text-secondary);">{{ props.event.repo }}/{{ props.event.arch }}</code>
       <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 2px;">
