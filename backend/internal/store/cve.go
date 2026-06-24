@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/percona/obs-dashboard/internal/model"
@@ -45,6 +46,8 @@ func AttachCveScans(db *sql.DB, packages []*model.Package) error {
 	if len(packages) == 0 {
 		return nil
 	}
+	// Callers must not pass duplicate (project, name) pairs; if they do, only
+	// the first pointer in the slice receives CVE data.
 	keys := make([]interface{}, 0, len(packages))
 	index := make(map[string]*model.Package, len(packages))
 	for _, p := range packages {
@@ -80,7 +83,11 @@ func AttachCveScans(db *sql.DB, packages []*model.Package) error {
 			&scannedAtStr, &scan.CriticalCount, &scan.HighCount, &findingsJSON); err != nil {
 			return err
 		}
-		scan.ScannedAt, _ = time.Parse(time.RFC3339, scannedAtStr)
+		var parseErr error
+		scan.ScannedAt, parseErr = time.Parse(time.RFC3339, scannedAtStr)
+		if parseErr != nil {
+			return fmt.Errorf("cve_scans: invalid scanned_at %q: %w", scannedAtStr, parseErr)
+		}
 		if findingsJSON != "" && findingsJSON != "[]" {
 			_ = json.Unmarshal([]byte(findingsJSON), &scan.Findings)
 		}
@@ -127,7 +134,11 @@ func scanCveRows(rows *sql.Rows) ([]model.CveScan, error) {
 			&scan.CriticalCount, &scan.HighCount, &findingsJSON); err != nil {
 			return nil, err
 		}
-		scan.ScannedAt, _ = time.Parse(time.RFC3339, scannedAtStr)
+		var parseErr error
+		scan.ScannedAt, parseErr = time.Parse(time.RFC3339, scannedAtStr)
+		if parseErr != nil {
+			return nil, fmt.Errorf("cve_scans: invalid scanned_at %q: %w", scannedAtStr, parseErr)
+		}
 		if findingsJSON != "" && findingsJSON != "[]" {
 			_ = json.Unmarshal([]byte(findingsJSON), &scan.Findings)
 		}

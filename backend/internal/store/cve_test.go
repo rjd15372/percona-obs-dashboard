@@ -55,8 +55,12 @@ func TestCveUpsertReplaces(t *testing.T) {
 	s1 := model.CveScan{Arch: "x86_64", ImageRef: "reg/img:1.0", ScannedAt: time.Now().UTC(), CriticalCount: 3}
 	s2 := model.CveScan{Arch: "x86_64", ImageRef: "reg/img:1.1", ScannedAt: time.Now().UTC(), CriticalCount: 0}
 
-	_ = store.UpsertCveScan(db, "proj", "mypkg", s1)
-	_ = store.UpsertCveScan(db, "proj", "mypkg", s2)
+	if err := store.UpsertCveScan(db, "proj", "mypkg", s1); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.UpsertCveScan(db, "proj", "mypkg", s2); err != nil {
+		t.Fatal(err)
+	}
 
 	scans, _ := store.QueryCveScans(db, "proj", "mypkg")
 	if len(scans) != 1 {
