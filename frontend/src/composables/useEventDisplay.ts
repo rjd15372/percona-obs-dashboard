@@ -38,10 +38,25 @@ export const TAG_LABEL: Record<string, string> = {
 }
 
 export function eventTitle(event: Event): string {
-  if (event.repo && event.arch) {
-    return event.what.replace(` on ${event.repo}/${event.arch}`, '')
+  if (event.type === 'created' || event.type === 'deleted') {
+    const subject = event.what.startsWith('project ') ? 'Project' : 'Package'
+    return `${subject} ${event.type === 'created' ? 'created' : 'deleted'}`
   }
-  return event.what
+
+  const titles: Partial<Record<EventType, string>> = {
+    blocked: 'Build blocked',
+    broken: 'Build broken',
+    build_started: 'Build started',
+    failed: 'Build failed',
+    published: 'Build published',
+    succeeded: 'Build succeeded',
+    unresolvable: 'Build unresolvable',
+    cve_scan_failed: 'CVE scan failed',
+    cve_scan_finished: 'CVE scan finished',
+    cve_scan_started: 'CVE scan started',
+  }
+
+  return titles[event.type] ?? event.what
 }
 
 export function timeStr(iso: string): string {

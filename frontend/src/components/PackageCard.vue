@@ -191,19 +191,21 @@ function targetAge(t: Target): string | null {
     flexDirection: 'column',
     gap: '11px',
   }">
-    <!-- Row 1: state pill + name + duration + OBS link -->
+    <!-- Row 1: state pill + duration + OBS link -->
     <div style="display: flex; align-items: center; gap: 9px;">
       <span :style="{
         fontSize: '10.5px', fontWeight: '700', textTransform: 'uppercase',
         letterSpacing: '0.04em', padding: '3px 9px', borderRadius: '6px',
         color: rollupColor, background: rollupBg,
       }">{{ STATE_LABEL[pkg.rollup_state] ?? pkg.rollup_state }}</span>
-      <code style="font-family: var(--font-mono); font-size: 13.5px; font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ pkg.name }}</code>
       <span v-if="stateAge" style="margin-left: auto; font-size: 10.5px; color: var(--text-muted); font-family: var(--font-mono); white-space: nowrap; flex-shrink: 0;">{{ stateAge }}</span>
       <a :href="obsUrl" target="_blank" rel="noopener" :style="{ marginLeft: stateAge ? '0' : 'auto', fontSize: '11.5px', fontWeight: '700', color: 'var(--brand-purple)', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: '0' }">OBS ↗</a>
     </div>
 
-    <!-- Row 2: scope tags + version badge -->
+    <!-- Row 2: package name -->
+    <code style="font-family: var(--font-mono); font-size: 13.5px; font-weight: 600; color: var(--text-primary); overflow-wrap: anywhere; line-height: 1.35;">{{ pkg.name }}</code>
+
+    <!-- Row 3: scope tags + version badge -->
     <div style="display: flex; align-items: center; gap: 7px;">
       <span
         v-for="tag in (pkg.tags ?? [])" :key="tag"
@@ -226,12 +228,12 @@ function targetAge(t: Target): string | null {
       >{{ versionLabel }}</span>
     </div>
 
-    <!-- Row 3: project path -->
+    <!-- Row 4: project path -->
     <div style="display: flex;">
       <code style="font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ pkg.project }}</code>
     </div>
 
-    <!-- Row 4: failing targets -->
+    <!-- Row 5: failing targets -->
     <div v-if="failingTargets.length > 0" style="display: flex; flex-direction: column; gap: 6px;">
       <span style="font-size: 10.5px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">
         {{ failingTargets.length }} active target{{ failingTargets.length !== 1 ? 's' : '' }}

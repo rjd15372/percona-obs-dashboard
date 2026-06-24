@@ -1,15 +1,19 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { Event } from '../types/api'
 import { GLYPH, GLYPH_COLOR, GLYPH_BG, TAG_STYLE, TAG_LABEL, eventTitle, timeStr, showReason as _showReason, displayVersion } from '../composables/useEventDisplay'
 
 const props = defineProps<{ event: Event }>()
 
+const REASON_PREVIEW_CHAR_LIMIT = 180
+
 const showReason = computed(() => _showReason(props.event))
+const reasonExpanded = ref(false)
+const reasonCanExpand = computed(() => (props.event.why?.length ?? 0) > REASON_PREVIEW_CHAR_LIMIT)
 </script>
 
 <template>
-  <a :href="props.event.url" target="_blank" rel="noopener" style="display: flex; gap: 11px; padding: 9px 14px; text-decoration: none; border-radius: 9px;">
+  <div class="event-row">
     <div style="display: flex; flex-direction: column; align-items: center; gap: 0; flex-shrink: 0;">
       <span
         style="width: 24px; height: 24px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800;"
@@ -17,15 +21,18 @@ const showReason = computed(() => _showReason(props.event))
       >{{ GLYPH[props.event.type] }}</span>
       <span style="flex: 1; width: 2px; background: var(--border); margin-top: 3px; border-radius: 2px;"></span>
     </div>
-    <div style="display: flex; flex-direction: column; gap: 3px; min-width: 0; padding-bottom: 6px;">
+    <div class="event-content">
       <div style="display: flex; align-items: center; gap: 8px;">
-        <span style="font-size: 12.5px; font-weight: 700; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ eventTitle(props.event) }}</span>
+        <span class="package-name">{{ props.event.package }}</span>
         <span :title="props.event.at" style="margin-left: auto; font-size: 10.5px; color: var(--text-muted); font-family: var(--font-mono); white-space: nowrap; flex-shrink: 0;">{{ timeStr(props.event.at) }}</span>
       </div>
-      <span
-        v-if="showReason"
-        style="font-size:11px;color:var(--text-secondary);background:var(--bg-muted,var(--blocked-tint));border:1px solid var(--border);border-radius:5px;padding:3px 7px;font-family:var(--font-mono);word-break:break-word;"
-      >{{ props.event.why }}</span>
+      <span class="event-title">{{ eventTitle(props.event) }}</span>
+      <div v-if="showReason" class="reason-box">
+        <div class="reason-text" :class="{ expanded: reasonExpanded }">{{ props.event.why }}</div>
+        <button v-if="reasonCanExpand" class="reason-toggle" type="button" @click="reasonExpanded = !reasonExpanded">
+          {{ reasonExpanded ? 'Show less' : 'Show more' }}
+        </button>
+      </div>
       <code v-if="props.event.repo" style="font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--text-secondary);">{{ props.event.repo }}/{{ props.event.arch }}</code>
       <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 2px;">
         <span
@@ -50,5 +57,75 @@ const showReason = computed(() => _showReason(props.event))
         <code style="font-family:var(--font-mono);font-size:10px;color:var(--text-muted);">{{ props.event.project }}</code>
       </div>
     </div>
-  </a>
+  </div>
 </template>
+
+<style scoped>
+.event-row {
+  display: flex;
+  gap: 11px;
+  width: 100%;
+  padding: 9px 14px;
+  border-radius: 9px;
+  box-sizing: border-box;
+}
+
+.event-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding-bottom: 6px;
+}
+
+.package-name {
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.event-title {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.reason-box {
+  color: var(--text-secondary);
+  background: var(--bg-muted, var(--blocked-tint));
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 5px 7px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  word-break: break-word;
+}
+
+.reason-text {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  line-height: 1.4;
+}
+
+.reason-text.expanded {
+  display: block;
+  overflow: visible;
+}
+
+.reason-toggle {
+  margin-top: 4px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--brand-purple);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+</style>

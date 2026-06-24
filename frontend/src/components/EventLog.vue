@@ -140,12 +140,6 @@ const grouped = computed(() => {
 const groupedMode = ref(false)
 const expandedGroups = ref<Map<string, boolean>>(new Map())
 
-// Watch fires only when props.events is replaced by a new fetch (new array reference).
-// SSE mutations (unshift on the same reference) never trigger this watch.
-watch(() => props.events, () => {
-  expandedGroups.value = new Map()
-}, { flush: 'sync' })
-
 function toggleGroup(key: string) {
   const m = new Map(expandedGroups.value)
   m.set(key, !m.get(key))
