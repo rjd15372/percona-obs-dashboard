@@ -130,6 +130,7 @@ func (s *Scanner) scanPackage(ctx context.Context, req ScanRequest) {
 			continue
 		}
 
+		obsURL := fmt.Sprintf("%s/package/show/%s/%s", obsBase, req.Project, req.Package)
 		s.appendEvent(&model.Event{
 			ID:      "evt_" + ulid.Make().String(),
 			Type:    model.EventCVEScanStarted,
@@ -140,7 +141,8 @@ func (s *Scanner) scanPackage(ctx context.Context, req ScanRequest) {
 			Arch:    target.Arch,
 			What:    "CVE scan started",
 			Why:     "",
-			URL:     fmt.Sprintf("%s/package/show/%s/%s", obsBase, req.Project, req.Package),
+			Version: req.PrimaryTag,
+			URL:     obsURL,
 			At:      time.Now().UTC(),
 		})
 
@@ -158,7 +160,8 @@ func (s *Scanner) scanPackage(ctx context.Context, req ScanRequest) {
 				Arch:    target.Arch,
 				What:    "CVE scan failed",
 				Why:     err.Error(),
-				URL:     fmt.Sprintf("%s/package/show/%s/%s", obsBase, req.Project, req.Package),
+				Version: req.PrimaryTag,
+				URL:     obsURL,
 				At:      time.Now().UTC(),
 			})
 			continue
@@ -184,7 +187,8 @@ func (s *Scanner) scanPackage(ctx context.Context, req ScanRequest) {
 			Arch:    target.Arch,
 			What:    "CVE scan finished",
 			Why:     why,
-			URL:     fmt.Sprintf("%s/package/show/%s/%s", obsBase, req.Project, req.Package),
+			Version: req.PrimaryTag,
+			URL:     obsURL,
 			At:      time.Now().UTC(),
 		})
 	}
