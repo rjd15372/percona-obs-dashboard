@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { ContainerImage } from '../composables/useArtifacts'
 import type { CveScan } from '../types/api'
 
@@ -65,21 +65,14 @@ function cveTotals(scans: CveScan[]): { critical: number; high: number } {
   )
 }
 
-function cveBadgeText(scans: CveScan[]): string | null {
-  if (scans.length === 0) return null
+function cveBadgeInfo(scans: CveScan[]): { text: string | null; cls: string } {
+  if (scans.length === 0) return { text: null, cls: '' }
   const { critical, high } = cveTotals(scans)
-  if (critical === 0 && high === 0) return 'No CVEs'
+  if (critical === 0 && high === 0) return { text: 'No CVEs', cls: 'cve-clean' }
   const parts: string[] = []
   if (critical > 0) parts.push(`${critical} CRITICAL`)
   if (high > 0) parts.push(`${high} HIGH`)
-  return parts.join(' · ')
-}
-
-function cveBadgeClass(scans: CveScan[]): string {
-  if (scans.length === 0) return ''
-  const { critical, high } = cveTotals(scans)
-  if (critical === 0 && high === 0) return 'cve-clean'
-  return 'cve-vuln'
+  return { text: parts.join(' · '), cls: 'cve-vuln' }
 }
 
 function latestScanTime(scans: CveScan[]): string {
@@ -89,6 +82,10 @@ function latestScanTime(scans: CveScan[]): string {
 }
 
 const openCvePanels = ref(new Set<string>())
+
+watch(() => props.containerImages, () => {
+  openCvePanels.value = new Set()
+})
 
 function toggleCvePanel(imageId: string) {
   const next = new Set(openCvePanels.value)
@@ -129,11 +126,9 @@ function toggleCvePanel(imageId: string) {
               <span class="status-badge" :class="stateClass(image)">
                 {{ stateLabel(image) }}
               </span>
-              <span
-                v-if="cveBadgeText(image.cveScans)"
-                class="status-badge"
-                :class="cveBadgeClass(image.cveScans)"
-              >{{ cveBadgeText(image.cveScans) }}</span>
+              <template v-for="badge in [cveBadgeInfo(image.cveScans)]" :key="'cve-badge'">
+                <span v-if="badge.text" class="status-badge" :class="badge.cls">{{ badge.text }}</span>
+              </template>
             </div>
 
             <!-- Registry -->
@@ -178,7 +173,7 @@ function toggleCvePanel(imageId: string) {
             </div>
 
             <!-- Security / CVE -->
-            <div v-if="image.cveScans.length > 0" class="card-section cve-section">
+            <div v-if="image.cveScans.length > 0" class="cve-section">
               <div class="cve-header" @click="toggleCvePanel(image.id)">
                 <span class="section-label">SECURITY</span>
                 <span class="cve-scan-time">Scanned {{ latestScanTime(image.cveScans) }}</span>
@@ -201,7 +196,7 @@ function toggleCvePanel(imageId: string) {
                       </thead>
                       <tbody>
                         <tr v-for="f in scan.findings" :key="f.id">
-                          <td :class="f.severity === 'CRITICAL' ? 'sev-critical' : 'sev-high'">{{ f.severity }}</td>
+                          <td :class="{ 'sev-critical': f.severity === 'CRITICAL', 'sev-high': f.severity === 'HIGH' }">{{ f.severity }}</td>
                           <td class="mono">{{ f.id }}</td>
                           <td class="mono">{{ f.pkg }}</td>
                           <td class="mono">{{ f.installed }} → {{ f.fixed }}</td>
@@ -297,8 +292,8 @@ function toggleCvePanel(imageId: string) {
 }
 
 .status-badge.published {
-  background: var(--success-tint, #d1fae5);
-  color: var(--success, #16a34a);
+  background: var(--ok-tint, #d1fae5);
+  color: var(--ok, #16a34a);
 }
 
 .status-badge.built {
@@ -312,8 +307,8 @@ function toggleCvePanel(imageId: string) {
 }
 
 .status-badge.failed {
-  background: #fee2e2;
-  color: var(--danger, #dc2626);
+  background: var(--fail-tint, #fee2e2);
+  color: var(--fail, #dc2626);
 }
 
 .status-badge.other {
@@ -416,8 +411,8 @@ function toggleCvePanel(imageId: string) {
 }
 
 .copy-btn.copied {
-  color: var(--success, #16a34a);
-  border-color: var(--success, #16a34a);
+  color: var(--ok, #16a34a);
+  border-color: var(--ok, #16a34a);
 }
 
 .pull-code {
@@ -480,7 +475,7 @@ function toggleCvePanel(imageId: string) {
 }
 .cve-clean-line {
   font-size: 12px;
-  color: var(--success, #16a34a);
+  color: var(--ok, #16a34a);
   padding: 4px 0;
 }
 .cve-table-wrap {
@@ -506,7 +501,7 @@ function toggleCvePanel(imageId: string) {
   color: var(--text-secondary);
 }
 .sev-critical {
-  color: var(--danger, #dc2626);
+  color: var(--fail, #dc2626);
   font-weight: 700;
 }
 .sev-high {
@@ -517,11 +512,11 @@ function toggleCvePanel(imageId: string) {
   font-family: var(--font-mono);
 }
 .status-badge.cve-clean {
-  background: var(--success-tint, #d1fae5);
-  color: var(--success, #16a34a);
+  background: var(--ok-tint, #d1fae5);
+  color: var(--ok, #16a34a);
 }
 .status-badge.cve-vuln {
-  background: #fee2e2;
-  color: var(--danger, #dc2626);
+  background: var(--fail-tint, #fee2e2);
+  color: var(--fail, #dc2626);
 }
 </style>
