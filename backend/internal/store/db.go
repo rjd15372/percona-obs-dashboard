@@ -61,6 +61,18 @@ CREATE TABLE IF NOT EXISTS target_state_durations (
 );
 
 CREATE INDEX IF NOT EXISTS idx_tsd_pkg ON target_state_durations (project, package);
+
+CREATE TABLE IF NOT EXISTS cve_scans (
+    project        TEXT     NOT NULL,
+    package        TEXT     NOT NULL,
+    arch           TEXT     NOT NULL,
+    image_ref      TEXT     NOT NULL,
+    scanned_at     DATETIME NOT NULL,
+    critical_count INTEGER  NOT NULL DEFAULT 0,
+    high_count     INTEGER  NOT NULL DEFAULT 0,
+    findings_json  TEXT     NOT NULL DEFAULT '[]',
+    PRIMARY KEY (project, package, arch)
+);
 `
 
 // columnExists reports whether table has a column named col.
