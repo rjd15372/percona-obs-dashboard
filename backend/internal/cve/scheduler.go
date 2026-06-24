@@ -21,13 +21,17 @@ func NewNightlyScheduler(db *sql.DB, scanner *Scanner) *NightlyScheduler {
 
 func (n *NightlyScheduler) Run(ctx context.Context) {
 	n.enqueueUnscanned(ctx)
+
+	timer := time.NewTimer(time.Until(nextNightlyRun()))
+	defer timer.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(time.Until(nextNightlyRun())):
+		case <-timer.C:
+			n.enqueueAll(ctx)
+			timer.Reset(time.Until(nextNightlyRun()))
 		}
-		n.enqueueAll(ctx)
 	}
 }
 
@@ -42,7 +46,11 @@ func (n *NightlyScheduler) enqueueUnscanned(ctx context.Context) {
 			return
 		}
 		scans, err := store.QueryCveScans(n.db, pkg.Project, pkg.Name)
-		if err != nil || len(scans) > 0 {
+		if err != nil {
+			slog.Warn("cve scheduler: query scans for package", "pkg", pkg.Name, "err", err)
+			continue
+		}
+		if len(scans) > 0 {
 			continue
 		}
 		n.scanner.Enqueue(packageToRequest(pkg))
