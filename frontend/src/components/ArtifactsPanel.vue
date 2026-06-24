@@ -29,6 +29,7 @@
       v-else
       :container-images="containerImages"
       :copied-key="copiedKey"
+      :loading="isLoading"
       @copy="onCopy"
     />
   </div>

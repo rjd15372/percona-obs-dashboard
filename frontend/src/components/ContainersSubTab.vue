@@ -6,6 +6,7 @@ import type { CveScan } from '../types/api'
 const props = defineProps<{
   containerImages: ContainerImage[]
   copiedKey: string | null
+  loading?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -24,28 +25,18 @@ const groups = computed(() => {
 })
 
 const STATE_LABELS: Record<string, string> = {
-  succeeded:    'Built',
-  building:     'Building',
-  scheduled:    'Scheduled',
-  blocked:      'Blocked',
-  failed:       'Failed',
-  disabled:     'Disabled',
-  excluded:     'Excluded',
-  broken:       'Broken',
-  unresolvable: 'Unresolvable',
+  building: 'Rebuilding',
+  finished: 'Rebuilding',
+  scheduled: 'Waiting to rebuild',
 }
 
-function stateLabel(img: ContainerImage): string {
-  if (img.published) return 'Published'
-  return STATE_LABELS[img.rollupState] ?? img.rollupState
-}
-
-function stateClass(img: ContainerImage): string {
-  if (img.published) return 'published'
-  if (img.rollupState === 'succeeded') return 'built'
-  if (img.rollupState === 'building' || img.rollupState === 'scheduled') return 'building'
-  if (['failed', 'broken', 'unresolvable'].includes(img.rollupState)) return 'failed'
-  return 'other'
+function rebuildBadge(img: ContainerImage): { label: string; cls: string } | null {
+  const label = STATE_LABELS[img.rollupState]
+  if (!label) return null
+  return {
+    label,
+    cls: img.rollupState === 'scheduled' ? 'waiting' : 'building',
+  }
 }
 
 function formatArtifactTime(value?: string): string {
@@ -100,6 +91,15 @@ function toggleCvePanel(imageId: string) {
 
 <template>
   <div class="containers-subtab">
+    <div
+      v-if="loading"
+      class="containers-loading"
+      :class="{ compact: groups.length > 0 }"
+    >
+      <div class="spinner"></div>
+      <span class="loading-label">Fetching container metadata…</span>
+    </div>
+
     <template v-if="groups.length > 0">
       <div v-for="group in groups" :key="group.baseOs" class="os-group">
         <div class="os-group-header">{{ group.baseOs }}</div>
@@ -108,6 +108,7 @@ function toggleCvePanel(imageId: string) {
             v-for="image in group.images"
             :key="image.id"
             class="image-card"
+            :class="{ loading: loading }"
           >
             <!-- Card header -->
             <div class="card-header">
@@ -123,9 +124,9 @@ function toggleCvePanel(imageId: string) {
                 </div>
                 <span class="image-name">{{ image.imageName }}</span>
               </div>
-              <span class="status-badge" :class="stateClass(image)">
-                {{ stateLabel(image) }}
-              </span>
+              <template v-for="badge in [rebuildBadge(image)]" :key="'rebuild-badge'">
+                <span v-if="badge" class="status-badge" :class="badge.cls">{{ badge.label }}</span>
+              </template>
               <template v-for="badge in [cveBadgeInfo(image.cveScans)]" :key="'cve-badge'">
                 <span v-if="badge.text" class="status-badge" :class="badge.cls">{{ badge.text }}</span>
               </template>
@@ -140,7 +141,6 @@ function toggleCvePanel(imageId: string) {
             <div v-if="image.builtAt" class="built-section">
               <div class="section-label">BUILT</div>
               <span class="built-time">{{ formatArtifactTime(image.builtAt) }}</span>
-              <span v-if="image.isRebuilding" class="status-badge building">Rebuilding</span>
             </div>
 
             <!-- Tags -->
@@ -213,7 +213,7 @@ function toggleCvePanel(imageId: string) {
       </div>
     </template>
 
-    <div v-else class="empty-state">
+    <div v-else-if="!loading" class="empty-state">
       No container images for this version.
     </div>
   </div>
@@ -225,6 +225,50 @@ function toggleCvePanel(imageId: string) {
   display: flex;
   flex-direction: column;
   gap: 24px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.containers-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 0;
+  gap: 12px;
+  color: var(--text-muted);
+}
+
+.containers-loading.compact {
+  flex-direction: row;
+  justify-content: flex-start;
+  padding: 12px 16px;
+  gap: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--border);
+  border-top-color: var(--brand-purple);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.containers-loading.compact .spinner {
+  width: 18px;
+  height: 18px;
+  border-width: 2px;
+}
+
+.loading-label {
+  font-size: 13px;
+  color: var(--text-muted);
 }
 
 /* OS group */
@@ -250,6 +294,12 @@ function toggleCvePanel(imageId: string) {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  transition: opacity 0.15s ease, filter 0.15s ease;
+}
+
+.image-card.loading {
+  opacity: 0.48;
+  filter: grayscale(0.85);
 }
 
 .card-header {
@@ -291,29 +341,14 @@ function toggleCvePanel(imageId: string) {
   white-space: nowrap;
 }
 
-.status-badge.published {
-  background: var(--ok-tint, #d1fae5);
-  color: var(--ok, #16a34a);
-}
-
-.status-badge.built {
-  background: #dcfce7;
-  color: #15803d;
-}
-
 .status-badge.building {
   background: #fef9c3;
   color: #a16207;
 }
 
-.status-badge.failed {
-  background: var(--fail-tint, #fee2e2);
-  color: var(--fail, #dc2626);
-}
-
-.status-badge.other {
-  background: var(--bg-muted);
-  color: var(--text-muted);
+.status-badge.waiting {
+  background: var(--info-tint);
+  color: var(--info);
 }
 
 /* Registry */
