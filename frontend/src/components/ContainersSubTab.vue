@@ -182,7 +182,7 @@ function toggleCvePanel(imageId: string) {
               <div v-if="openCvePanels.has(image.id)" class="cve-body">
                 <div v-for="scan in image.cveScans" :key="scan.arch" class="cve-arch-block">
                   <div class="cve-arch-label">{{ scan.arch }}</div>
-                  <div v-if="scan.findings.length === 0" class="cve-clean-line">No fixable CVEs found</div>
+                  <div v-if="(scan.findings ?? []).length === 0" class="cve-clean-line">No fixable CVEs found</div>
                   <div v-else class="cve-table-wrap">
                     <table class="cve-table">
                       <thead>
@@ -195,7 +195,7 @@ function toggleCvePanel(imageId: string) {
                         </tr>
                       </thead>
                       <tbody>
-                        <tr v-for="f in scan.findings" :key="f.id">
+                        <tr v-for="f in (scan.findings ?? [])" :key="f.id">
                           <td :class="{ 'sev-critical': f.severity === 'CRITICAL', 'sev-high': f.severity === 'HIGH' }">{{ f.severity }}</td>
                           <td class="mono">{{ f.id }}</td>
                           <td class="mono">{{ f.pkg }}</td>

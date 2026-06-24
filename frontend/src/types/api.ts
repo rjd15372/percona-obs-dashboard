@@ -39,7 +39,7 @@ export interface CveScan {
   scanned_at: string
   critical_count: number
   high_count: number
-  findings: CveFinding[]
+  findings?: CveFinding[]
 }
 
 export interface Package {
