@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -49,6 +50,9 @@ type Scanner struct {
 	workers   int
 	execFn    ExecFn
 	enqueueFn func(ScanRequest)
+	// trivyMu serializes trivy invocations: trivy uses a shared FS cache that
+	// cannot be accessed by more than one process at a time.
+	trivyMu sync.Mutex
 }
 
 // Option is a functional option for Scanner.
@@ -202,6 +206,7 @@ func (s *Scanner) scanPackage(ctx context.Context, req ScanRequest) {
 }
 
 func (s *Scanner) runTrivy(ctx context.Context, imageRef, platform, arch string) (model.CveScan, error) {
+	s.trivyMu.Lock()
 	out, err := s.execFn(ctx, "trivy",
 		"image",
 		"--platform", "linux/"+platform,
@@ -211,6 +216,7 @@ func (s *Scanner) runTrivy(ctx context.Context, imageRef, platform, arch string)
 		"-q",
 		imageRef,
 	)
+	s.trivyMu.Unlock()
 	if err != nil {
 		// Exit code 2 means trivy found vulnerabilities — treat as success.
 		var exitErr *exec.ExitError
