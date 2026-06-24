@@ -25,7 +25,7 @@ const breakdown = computed(() => {
   const items = []
   if (brokenCount.value > 0) items.push({ count: brokenCount.value, label: 'broken', color: 'var(--broken)', bg: 'var(--broken-tint)' })
   if (failCount.value > 0) items.push({ count: failCount.value, label: 'failed', color: 'var(--fail)', bg: 'var(--fail-tint)' })
-  if (unresolvedCount.value > 0) items.push({ count: unresolvedCount.value, label: 'unresolvable', color: 'var(--brand-purple)', bg: 'var(--brand-purple-tint)' })
+  if (unresolvedCount.value > 0) items.push({ count: unresolvedCount.value, label: 'unresolvable', color: 'var(--fail)', bg: 'var(--fail-tint)' })
   if (blockedCount.value > 0) items.push({ count: blockedCount.value, label: 'blocked', color: 'var(--blocked)', bg: 'var(--blocked-tint)' })
   if (buildingCount.value > 0) items.push({ count: buildingCount.value, label: 'building/finishing', color: 'var(--info)', bg: 'var(--info-tint)' })
   return items
