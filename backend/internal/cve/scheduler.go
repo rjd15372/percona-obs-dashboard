@@ -78,7 +78,7 @@ func (n *NightlyScheduler) enqueueAll(ctx context.Context) {
 func packageToRequest(pkg *model.Package) ScanRequest {
 	primaryTag := ""
 	if len(pkg.ContainerTags) > 0 {
-		primaryTag = pkg.ContainerTags[0]
+		primaryTag = pkg.ContainerTags[len(pkg.ContainerTags)-1]
 	}
 	return ScanRequest{
 		Project:    pkg.Project,
