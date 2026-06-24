@@ -9,6 +9,7 @@ defineProps<{
   windowMin: number
   customFrom: string | null
   customTo: string | null
+  spotlightStates: string[]
 }>()
 
 const emit = defineEmits<{
@@ -20,7 +21,7 @@ const emit = defineEmits<{
 
 <template>
   <div style="display: grid; grid-template-columns: minmax(0,1fr) 440px; gap: 18px; align-items: start;">
-    <FailureBoard :packages="packages" />
+    <FailureBoard :packages="packages" :spotlight-states="spotlightStates" />
     <EventLog
       :events="events"
       :window-min="windowMin"

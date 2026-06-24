@@ -4,7 +4,7 @@ import PackageCard from './PackageCard.vue'
 import GreenStrip from './GreenStrip.vue'
 import type { Package } from '../types/api'
 
-const props = defineProps<{ packages: Package[] }>()
+const props = defineProps<{ packages: Package[]; spotlightStates: string[] }>()
 
 const failingPackages = computed(() => props.packages.filter(p => p.rollup_state !== 'succeeded' && p.rollup_state !== 'published'))
 const okPackages = computed(() => props.packages.filter(p => p.rollup_state === 'succeeded' || p.rollup_state === 'published'))
@@ -25,6 +25,7 @@ const attentionCount = computed(() => failingPackages.value.length)
         v-for="pkg in failingPackages"
         :key="`${pkg.project}/${pkg.name}`"
         :pkg="pkg"
+        :spotlight-states="spotlightStates"
       />
     </div>
 
@@ -40,6 +41,10 @@ const attentionCount = computed(() => failingPackages.value.length)
     </div>
 
     <!-- Green strip -->
-    <GreenStrip v-if="okPackages.length > 0" :packages="okPackages" />
+    <GreenStrip
+      v-if="okPackages.length > 0"
+      :packages="okPackages"
+      :style="spotlightStates.length > 0 ? 'opacity: 0.2; transition: opacity 0.2s' : 'transition: opacity 0.2s'"
+    />
   </div>
 </template>

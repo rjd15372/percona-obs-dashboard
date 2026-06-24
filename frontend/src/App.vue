@@ -34,6 +34,13 @@ const prefixDepth = computed(() => selectedContext.value.prefix.split(':').lengt
 // Navigation state
 const version = ref('')
 const activeTags = ref<string[]>([])
+const spotlightStates = ref<string[]>([])
+
+function toggleSpotlight(states: string[]) {
+  const key = states.slice().sort().join(',')
+  const cur = spotlightStates.value.slice().sort().join(',')
+  spotlightStates.value = cur === key ? [] : states
+}
 
 function toggleTag(tag: string) {
   const idx = activeTags.value.indexOf(tag)
@@ -202,13 +209,14 @@ watch([windowMin, customFrom, customTo], () => refresh())
           @toggle-tag="toggleTag"
           @update:context="selectContext"
         />
-        <HealthHeader :packages="allPackages" />
+        <HealthHeader :packages="allPackages" :spotlight="spotlightStates" @toggle-spotlight="toggleSpotlight" />
         <MainGrid
           :packages="filteredPackages"
           :events="filteredEvents"
           :window-min="windowMin"
           :custom-from="customFrom"
           :custom-to="customTo"
+          :spotlight-states="spotlightStates"
           @update:window-min="windowMin = $event"
           @update:custom-from="customFrom = $event"
           @update:custom-to="customTo = $event"

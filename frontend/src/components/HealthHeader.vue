@@ -2,7 +2,8 @@
 import { computed } from 'vue'
 import type { Package } from '../types/api'
 
-const props = defineProps<{ packages: Package[] }>()
+const props = defineProps<{ packages: Package[]; spotlight: string[] }>()
+const emit = defineEmits<{ 'toggle-spotlight': [states: string[]] }>()
 
 const total = computed(() => props.packages.length)
 const okCount = computed(() => props.packages.filter(p => p.rollup_state === 'succeeded' || p.rollup_state === 'published').length)
@@ -23,15 +24,20 @@ const hasFailures = computed(() => props.packages.some(p =>
 const activeColor = computed(() => hasFailures.value ? 'var(--fail)' : 'var(--warn)')
 
 const breakdown = computed(() => {
-  const items = []
-  if (brokenCount.value > 0) items.push({ count: brokenCount.value, label: 'broken', color: 'var(--broken)', bg: 'var(--broken-tint)' })
-  if (failCount.value > 0) items.push({ count: failCount.value, label: 'failed', color: 'var(--fail)', bg: 'var(--fail-tint)' })
-  if (unresolvedCount.value > 0) items.push({ count: unresolvedCount.value, label: 'unresolvable', color: 'var(--fail)', bg: 'var(--fail-tint)' })
-  if (blockedCount.value > 0) items.push({ count: blockedCount.value, label: 'blocked', color: 'var(--blocked)', bg: 'var(--blocked-tint)' })
-  if (buildingCount.value > 0) items.push({ count: buildingCount.value, label: 'building', color: 'var(--info)', bg: 'var(--info-tint)' })
-  if (finishingCount.value > 0) items.push({ count: finishingCount.value, label: 'finishing', color: 'var(--warn)', bg: 'var(--warn-tint)' })
+  const items: Array<{ count: number; label: string; states: string[]; color: string; bg: string }> = []
+  if (brokenCount.value > 0) items.push({ count: brokenCount.value, label: 'broken', states: ['broken'], color: 'var(--broken)', bg: 'var(--broken-tint)' })
+  if (failCount.value > 0) items.push({ count: failCount.value, label: 'failed', states: ['failed'], color: 'var(--fail)', bg: 'var(--fail-tint)' })
+  if (unresolvedCount.value > 0) items.push({ count: unresolvedCount.value, label: 'unresolvable', states: ['unresolvable'], color: 'var(--fail)', bg: 'var(--fail-tint)' })
+  if (blockedCount.value > 0) items.push({ count: blockedCount.value, label: 'blocked', states: ['blocked'], color: 'var(--blocked)', bg: 'var(--blocked-tint)' })
+  if (buildingCount.value > 0) items.push({ count: buildingCount.value, label: 'building', states: ['building'], color: 'var(--info)', bg: 'var(--info-tint)' })
+  if (finishingCount.value > 0) items.push({ count: finishingCount.value, label: 'finishing', states: ['finished'], color: 'var(--warn)', bg: 'var(--warn-tint)' })
   return items
 })
+
+function isPillActive(states: string[]): boolean {
+  if (props.spotlight.length !== states.length) return false
+  return states.every(s => props.spotlight.includes(s))
+}
 </script>
 
 <template>
@@ -58,7 +64,16 @@ const breakdown = computed(() => {
         <span
           v-for="b in breakdown"
           :key="b.label"
-          :style="{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', fontWeight: '700', padding: '4px 10px', borderRadius: '8px', background: b.bg, color: b.color }"
+          @click="emit('toggle-spotlight', b.states)"
+          :style="{
+            display: 'inline-flex', alignItems: 'center', gap: '6px',
+            fontSize: '11.5px', fontWeight: '700', padding: '4px 10px', borderRadius: '8px',
+            background: b.bg, color: b.color,
+            cursor: 'pointer',
+            outline: isPillActive(b.states) ? `2px solid ${b.color}` : '2px solid transparent',
+            outlineOffset: '1px',
+            transition: 'outline 0.12s',
+          }"
         >
           <span :style="{ width: '8px', height: '8px', borderRadius: '2px', background: b.color, flexShrink: '0' }"></span>
           {{ b.count }} {{ b.label }}
