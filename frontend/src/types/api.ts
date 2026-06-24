@@ -17,6 +17,7 @@ export interface Target {
   repo: string
   arch: string
   state: BuildState
+  started_at?: string
   details?: string
   blocked_by?: string
   build_reason?: string

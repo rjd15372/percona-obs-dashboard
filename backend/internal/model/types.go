@@ -37,14 +37,15 @@ func (s RollupState) Severity() int {
 }
 
 type Target struct {
-	Repo                string   `json:"repo"`
-	Arch                string   `json:"arch"`
-	State               string   `json:"state"`
-	Details             string   `json:"details,omitempty"`
-	BlockedBy           string   `json:"blocked_by,omitempty"`
-	BuildReason         string   `json:"build_reason,omitempty"`
-	BuildReasonPackages []string `json:"build_reason_packages,omitempty"`
-	Published           bool     `json:"published,omitempty"`
+	Repo                string     `json:"repo"`
+	Arch                string     `json:"arch"`
+	State               string     `json:"state"`
+	StartedAt           *time.Time `json:"started_at,omitempty"`
+	Details             string     `json:"details,omitempty"`
+	BlockedBy           string     `json:"blocked_by,omitempty"`
+	BuildReason         string     `json:"build_reason,omitempty"`
+	BuildReasonPackages []string   `json:"build_reason_packages,omitempty"`
+	Published           bool       `json:"published,omitempty"`
 }
 
 type CveFinding struct {

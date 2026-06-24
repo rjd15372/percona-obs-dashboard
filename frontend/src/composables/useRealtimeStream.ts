@@ -48,6 +48,7 @@ function mergeTarget(prev: Target | undefined, next: Target): Target {
   return {
     ...next,
     details: next.details || prev.details,
+    started_at: next.started_at || prev.started_at,
     blocked_by: next.blocked_by || prev.blocked_by,
     build_reason: next.build_reason || prev.build_reason,
     build_reason_packages: next.build_reason_packages?.length

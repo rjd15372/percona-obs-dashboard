@@ -9,7 +9,6 @@ const props = defineProps<{ pkg: Package }>()
 const { trigger: triggerRebuild, isLoading: isRebuildLoading, errorFor: rebuildErrorFor } = useRebuild()
 
 const SKIP_STATES = new Set(['disabled', 'excluded', 'locked'])
-const IN_PROGRESS_STATES = new Set(['scheduled', 'building', 'finished'])
 const REBUILD_STATES = new Set(['failed', 'broken', 'unresolvable', 'blocked'])
 
 const STATE_COLOR: Record<string, string> = {
@@ -151,19 +150,33 @@ const rollupBg = computed(() => STATE_BG[props.pkg.rollup_state] ?? 'var(--block
 const versionLabel = computed(() => displayVersion(props.pkg.version, props.pkg.is_container ?? false))
 const obsUrl = computed(() => `https://build.opensuse.org/package/show/${props.pkg.project}/${props.pkg.name}`)
 
-const stateAge = computed((): string | null => {
-  if (!IN_PROGRESS_STATES.has(props.pkg.rollup_state)) return null
-  if (!props.pkg.state_changed_at) return null
-  const ms = Date.now() - new Date(props.pkg.state_changed_at).getTime()
+function elapsedTime(iso: string | undefined): string | null {
+  if (!iso) return null
+  const ms = Date.now() - new Date(iso).getTime()
   if (!Number.isFinite(ms) || ms < 0) return null
   const m = Math.floor(ms / 60000)
-  if (m < 1) return 'for <1m'
-  if (m < 60) return `for ${m}m`
-  return `for ${Math.floor(m / 60)}h ${m % 60}m`
+  if (m < 1) return '<1m'
+  if (m < 60) return `${m}m`
+  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`
+}
+
+const stateAge = computed((): string | null => {
+  const startedTimes = props.pkg.targets
+    .filter(t => t.state === props.pkg.rollup_state && t.started_at)
+    .map(t => new Date(t.started_at!).getTime())
+    .filter(n => Number.isFinite(n))
+  if (startedTimes.length === 0) return null
+  const oldest = new Date(Math.min(...startedTimes)).toISOString()
+  const elapsed = elapsedTime(oldest)
+  return elapsed ? `for ${elapsed}` : null
 })
 
 function logUrl(repo: string, arch: string): string {
   return `https://build.opensuse.org/package/live_build_log/${props.pkg.project}/${props.pkg.name}/${repo}/${arch}`
+}
+
+function targetAge(t: Target): string | null {
+  return elapsedTime(t.started_at)
 }
 </script>
 
@@ -245,7 +258,9 @@ function logUrl(repo: string, arch: string): string {
           >
             <span :style="{ width: '8px', height: '8px', borderRadius: '2px', background: targetDotColor(t), flexShrink: '0' }"></span>
             <code style="font-family: var(--font-mono); font-size: 11.5px; color: var(--text-primary); flex-shrink: 0;">{{ t.repo }}/{{ t.arch }}</code>
-            <span :style="{ fontSize: '11px', color: targetDotColor(t), marginLeft: 'auto', fontWeight: '600', flexShrink: '0' }">{{ STATE_LABEL[t.state] ?? t.state }}</span>
+            <span :style="{ fontSize: '11px', color: targetDotColor(t), marginLeft: 'auto', fontWeight: '600', flexShrink: '0' }">
+              {{ STATE_LABEL[t.state] ?? t.state }}<template v-if="targetAge(t)"> · {{ targetAge(t) }}</template>
+            </span>
             <a
               :href="logUrl(t.repo, t.arch)"
               target="_blank"

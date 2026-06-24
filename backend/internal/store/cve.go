@@ -107,7 +107,7 @@ func QueryPublishedContainers(db *sql.DB) ([]*model.Package, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	return scanPackages(rows)
+	return scanPackages(db, rows)
 }
 
 // GetPackage returns a single package by primary key, or nil if not found.
@@ -118,7 +118,7 @@ func GetPackage(db *sql.DB, project, name string) (*model.Package, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	pkgs, err := scanPackages(rows)
+	pkgs, err := scanPackages(db, rows)
 	if err != nil || len(pkgs) == 0 {
 		return nil, err
 	}

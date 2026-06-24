@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/percona/obs-dashboard/internal/model"
@@ -20,7 +21,7 @@ func UpsertPackageState(db *sql.DB, p *model.Package, now time.Time) error {
 		p.Project, p.Name).Scan(&prevTargetsJSON, &prevIsContainer)
 	_ = json.Unmarshal([]byte(prevTargetsJSON), &prevTargets)
 
-	targetsJSON, err := json.Marshal(p.Targets)
+	targetsJSON, err := json.Marshal(targetsForStorage(p.Targets))
 	if err != nil {
 		return err
 	}
@@ -112,7 +113,17 @@ func UpsertPackageState(db *sql.DB, p *model.Package, now time.Time) error {
 
 	// Record state duration transitions (errors are non-fatal).
 	recordStateTransitions(db, p.Project, p.Name, prevTargets, p.Targets, now)
+	_ = attachTargetStartedAt(db, []*model.Package{p})
 	return nil
+}
+
+func targetsForStorage(targets []model.Target) []model.Target {
+	out := make([]model.Target, len(targets))
+	for i, t := range targets {
+		t.StartedAt = nil
+		out[i] = t
+	}
+	return out
 }
 
 // recordStateTransitions updates target_state_durations when a target's state
@@ -211,7 +222,7 @@ const packageSelectCols = ` project, name, rollup_state, ok_targets, total_targe
 // in packageSelectCols: project, name, rollup_state, ok_targets, total_targets,
 // trigger_what, trigger_kind, trigger_at, targets_json, updated_at, state_changed_at,
 // is_container, version, container_tags, tags, is_release.
-func scanPackages(rows *sql.Rows) ([]*model.Package, error) {
+func scanPackages(db *sql.DB, rows *sql.Rows) ([]*model.Package, error) {
 	pkgs := make([]*model.Package, 0)
 	for rows.Next() {
 		p := &model.Package{}
@@ -264,7 +275,112 @@ func scanPackages(rows *sql.Rows) ([]*model.Package, error) {
 		p.IsRelease = isRelease != 0
 		pkgs = append(pkgs, p)
 	}
-	return pkgs, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := attachTargetStartedAt(db, pkgs); err != nil {
+		return nil, err
+	}
+	return pkgs, nil
+}
+
+func attachTargetStartedAt(db *sql.DB, pkgs []*model.Package) error {
+	if len(pkgs) == 0 {
+		return nil
+	}
+
+	type targetKey struct {
+		project string
+		pkg     string
+		repo    string
+		arch    string
+		state   string
+	}
+
+	type packageKey struct {
+		project string
+		pkg     string
+	}
+
+	seenPackages := make(map[packageKey]bool, len(pkgs))
+	packageKeys := make([]packageKey, 0, len(pkgs))
+	for _, pkg := range pkgs {
+		if len(pkg.Targets) == 0 {
+			continue
+		}
+		k := packageKey{project: pkg.Project, pkg: pkg.Name}
+		if seenPackages[k] {
+			continue
+		}
+		seenPackages[k] = true
+		packageKeys = append(packageKeys, k)
+	}
+	if len(packageKeys) == 0 {
+		return nil
+	}
+
+	startedAt := make(map[targetKey]time.Time)
+	const chunkSize = 400
+	for start := 0; start < len(packageKeys); start += chunkSize {
+		end := start + chunkSize
+		if end > len(packageKeys) {
+			end = len(packageKeys)
+		}
+		chunk := packageKeys[start:end]
+		values := make([]string, len(chunk))
+		args := make([]any, 0, len(chunk)*2)
+		for i, k := range chunk {
+			values[i] = "(?, ?)"
+			args = append(args, k.project, k.pkg)
+		}
+
+		rows, err := db.Query(`
+			WITH wanted(project, pkg_name) AS (VALUES `+strings.Join(values, ", ")+`)
+			SELECT d.project, d.package, d.repo, d.arch, d.state, d.entered_at
+			FROM target_state_durations d
+			JOIN wanted w ON w.project = d.project AND w.pkg_name = d.package
+			WHERE d.exited_at IS NULL`, args...)
+		if err != nil {
+			return err
+		}
+
+		for rows.Next() {
+			var k targetKey
+			var enteredAt string
+			if err := rows.Scan(&k.project, &k.pkg, &k.repo, &k.arch, &k.state, &enteredAt); err != nil {
+				rows.Close()
+				return err
+			}
+			t, err := time.Parse(time.RFC3339Nano, enteredAt)
+			if err != nil {
+				rows.Close()
+				return err
+			}
+			startedAt[k] = t
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return err
+		}
+		rows.Close()
+	}
+
+	for _, pkg := range pkgs {
+		for i, target := range pkg.Targets {
+			k := targetKey{
+				project: pkg.Project,
+				pkg:     pkg.Name,
+				repo:    target.Repo,
+				arch:    target.Arch,
+				state:   target.State,
+			}
+			if t, ok := startedAt[k]; ok {
+				start := t
+				pkg.Targets[i].StartedAt = &start
+			}
+		}
+	}
+	return nil
 }
 
 // QueryDistinctRepos returns the sorted list of distinct OBS repository names
@@ -357,7 +473,7 @@ func QueryPackages(db *sql.DB, projectPrefix string) ([]*model.Package, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	return scanPackages(rows)
+	return scanPackages(db, rows)
 }
 
 // QueryPRBuildPackages returns packages for a PR context: the selected
@@ -377,7 +493,7 @@ func QueryPRBuildPackages(db *sql.DB, root, pr, subproject string) ([]*model.Pac
 		return nil, err
 	}
 	defer rows.Close()
-	return scanPackages(rows)
+	return scanPackages(db, rows)
 }
 
 // QueryBuildPackages returns packages for the builds tab: version-specific project
@@ -415,7 +531,7 @@ func QueryBuildPackages(db *sql.DB, root, product, version string) ([]*model.Pac
 		return nil, err
 	}
 	defer rows.Close()
-	return scanPackages(rows)
+	return scanPackages(db, rows)
 }
 
 // QueryPRDistinctRepos returns package repos for a PR version subtree plus the
@@ -450,7 +566,7 @@ func QueryReleasePackages(db *sql.DB, prefix string) ([]*model.Package, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	return scanPackages(rows)
+	return scanPackages(db, rows)
 }
 
 // GetActivePackages returns packages that need worker attention:
@@ -467,7 +583,7 @@ func GetActivePackages(db *sql.DB) ([]*model.Package, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	return scanPackages(rows)
+	return scanPackages(db, rows)
 }
 
 // GetFinishedPackagesByProject returns succeeded packages for a project.
@@ -482,5 +598,5 @@ func GetFinishedPackagesByProject(db *sql.DB, project string) ([]*model.Package,
 		return nil, err
 	}
 	defer rows.Close()
-	return scanPackages(rows)
+	return scanPackages(db, rows)
 }

@@ -427,6 +427,82 @@ func TestStateTransitionsRecorded(t *testing.T) {
 	}
 }
 
+func TestQueryPackagesIncludesTargetStartedAt(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	startedAt := time.Now().UTC().Truncate(time.Second)
+	pkg := &model.Package{
+		Project:     "isv:percona:ppg:17",
+		Name:        "pg_tde",
+		RollupState: model.RollupBuilding,
+		Targets: []model.Target{
+			{Repo: "RockyLinux_9", Arch: "x86_64", State: "building"},
+			{Repo: "Ubuntu_24.04", Arch: "aarch64", State: "scheduled"},
+		},
+		UpdatedAt: startedAt,
+	}
+	if err := UpsertPackageState(db, pkg, startedAt); err != nil {
+		t.Fatal(err)
+	}
+
+	pkgs, err := QueryPackages(db, "isv:percona:ppg:17")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pkgs) != 1 {
+		t.Fatalf("expected 1 package, got %d", len(pkgs))
+	}
+	for _, target := range pkgs[0].Targets {
+		if target.StartedAt == nil {
+			t.Fatalf("target %s/%s missing started_at", target.Repo, target.Arch)
+		}
+		if !target.StartedAt.Equal(startedAt) {
+			t.Errorf("target %s/%s started_at: want %v, got %v",
+				target.Repo, target.Arch, startedAt, *target.StartedAt)
+		}
+	}
+}
+
+func TestQueryPackagesIgnoresUnrelatedTargetDurations(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	startedAt := time.Now().UTC().Truncate(time.Second)
+	pkg := &model.Package{
+		Project:     "isv:percona:ppg:17",
+		Name:        "pg_tde",
+		RollupState: model.RollupBuilding,
+		Targets:     []model.Target{{Repo: "RockyLinux_9", Arch: "x86_64", State: "building"}},
+		UpdatedAt:   startedAt,
+	}
+	if err := UpsertPackageState(db, pkg, startedAt); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.Exec(`
+		INSERT INTO target_state_durations (project, package, repo, arch, state, entered_at)
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		"isv:percona:ppg:18", "unrelated", "Ubuntu_24.04", "aarch64", "building", "not-a-time",
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	pkgs, err := QueryPackages(db, "isv:percona:ppg:17")
+	if err != nil {
+		t.Fatalf("query should ignore unrelated duration rows: %v", err)
+	}
+	if len(pkgs) != 1 || len(pkgs[0].Targets) != 1 || pkgs[0].Targets[0].StartedAt == nil {
+		t.Fatalf("expected queried target to keep started_at, got %#v", pkgs)
+	}
+}
+
 func TestUpsertPreservesTagsAndIsRelease(t *testing.T) {
 	db, err := Open(":memory:")
 	if err != nil {

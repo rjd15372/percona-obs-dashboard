@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS target_state_durations (
 );
 
 CREATE INDEX IF NOT EXISTS idx_tsd_pkg ON target_state_durations (project, package);
+CREATE INDEX IF NOT EXISTS idx_tsd_open_pkg ON target_state_durations (project, package, exited_at, repo, arch, state);
 
 CREATE TABLE IF NOT EXISTS cve_scans (
     project        TEXT     NOT NULL,
