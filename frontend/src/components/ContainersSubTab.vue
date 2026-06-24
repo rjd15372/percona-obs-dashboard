@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { ContainerImage } from '../composables/useArtifacts'
+import type { CveScan } from '../types/api'
 
 const props = defineProps<{
   containerImages: ContainerImage[]
@@ -56,6 +57,48 @@ function formatArtifactTime(value?: string): string {
     timeStyle: 'short',
   }).format(date)
 }
+
+function cveTotals(scans: CveScan[]): { critical: number; high: number } {
+  return scans.reduce(
+    (acc, s) => ({ critical: acc.critical + s.critical_count, high: acc.high + s.high_count }),
+    { critical: 0, high: 0 }
+  )
+}
+
+function cveBadgeText(scans: CveScan[]): string | null {
+  if (scans.length === 0) return null
+  const { critical, high } = cveTotals(scans)
+  if (critical === 0 && high === 0) return 'No CVEs'
+  const parts: string[] = []
+  if (critical > 0) parts.push(`${critical} CRITICAL`)
+  if (high > 0) parts.push(`${high} HIGH`)
+  return parts.join(' · ')
+}
+
+function cveBadgeClass(scans: CveScan[]): string {
+  if (scans.length === 0) return ''
+  const { critical, high } = cveTotals(scans)
+  if (critical === 0 && high === 0) return 'cve-clean'
+  return 'cve-vuln'
+}
+
+function latestScanTime(scans: CveScan[]): string {
+  if (scans.length === 0) return ''
+  const latest = scans.reduce((a, b) => (a.scanned_at > b.scanned_at ? a : b))
+  return formatArtifactTime(latest.scanned_at)
+}
+
+const openCvePanels = ref(new Set<string>())
+
+function toggleCvePanel(imageId: string) {
+  const next = new Set(openCvePanels.value)
+  if (next.has(imageId)) {
+    next.delete(imageId)
+  } else {
+    next.add(imageId)
+  }
+  openCvePanels.value = next
+}
 </script>
 
 <template>
@@ -86,6 +129,11 @@ function formatArtifactTime(value?: string): string {
               <span class="status-badge" :class="stateClass(image)">
                 {{ stateLabel(image) }}
               </span>
+              <span
+                v-if="cveBadgeText(image.cveScans)"
+                class="status-badge"
+                :class="cveBadgeClass(image.cveScans)"
+              >{{ cveBadgeText(image.cveScans) }}</span>
             </div>
 
             <!-- Registry -->
@@ -127,6 +175,43 @@ function formatArtifactTime(value?: string): string {
                 </button>
               </div>
               <pre class="pull-code"><code>{{ image.pullCmd }}</code></pre>
+            </div>
+
+            <!-- Security / CVE -->
+            <div v-if="image.cveScans.length > 0" class="card-section cve-section">
+              <div class="cve-header" @click="toggleCvePanel(image.id)">
+                <span class="section-label">SECURITY</span>
+                <span class="cve-scan-time">Scanned {{ latestScanTime(image.cveScans) }}</span>
+                <span class="cve-chevron" :class="{ open: openCvePanels.has(image.id) }">›</span>
+              </div>
+              <div v-if="openCvePanels.has(image.id)" class="cve-body">
+                <div v-for="scan in image.cveScans" :key="scan.arch" class="cve-arch-block">
+                  <div class="cve-arch-label">{{ scan.arch }}</div>
+                  <div v-if="scan.findings.length === 0" class="cve-clean-line">No fixable CVEs found</div>
+                  <div v-else class="cve-table-wrap">
+                    <table class="cve-table">
+                      <thead>
+                        <tr>
+                          <th>Severity</th>
+                          <th>CVE ID</th>
+                          <th>Package</th>
+                          <th>Installed → Fixed</th>
+                          <th>Title</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="f in scan.findings" :key="f.id">
+                          <td :class="f.severity === 'CRITICAL' ? 'sev-critical' : 'sev-high'">{{ f.severity }}</td>
+                          <td class="mono">{{ f.id }}</td>
+                          <td class="mono">{{ f.pkg }}</td>
+                          <td class="mono">{{ f.installed }} → {{ f.fixed }}</td>
+                          <td>{{ f.title }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -351,5 +436,92 @@ function formatArtifactTime(value?: string): string {
   padding: 48px;
   color: var(--text-muted);
   font-size: 14px;
+}
+
+/* CVE section */
+.cve-section {
+  border-top: 1px solid var(--border);
+}
+.cve-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  cursor: pointer;
+  user-select: none;
+}
+.cve-scan-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+.cve-chevron {
+  font-size: 16px;
+  color: var(--text-muted);
+  transition: transform 0.15s;
+  transform: rotate(0deg);
+}
+.cve-chevron.open {
+  transform: rotate(90deg);
+}
+.cve-body {
+  padding: 0 18px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.cve-arch-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+}
+.cve-clean-line {
+  font-size: 12px;
+  color: var(--success, #16a34a);
+  padding: 4px 0;
+}
+.cve-table-wrap {
+  overflow-x: auto;
+}
+.cve-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.cve-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 4px 6px 4px 0;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.cve-table td {
+  padding: 4px 6px 4px 0;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+.sev-critical {
+  color: var(--danger, #dc2626);
+  font-weight: 700;
+}
+.sev-high {
+  color: var(--warn, #d97706);
+  font-weight: 700;
+}
+.mono {
+  font-family: var(--font-mono);
+}
+.status-badge.cve-clean {
+  background: var(--success-tint, #d1fae5);
+  color: var(--success, #16a34a);
+}
+.status-badge.cve-vuln {
+  background: #fee2e2;
+  color: var(--danger, #dc2626);
 }
 </style>
