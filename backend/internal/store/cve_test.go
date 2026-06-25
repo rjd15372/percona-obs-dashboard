@@ -204,6 +204,7 @@ func TestUpsertCveScanStateMachine(t *testing.T) {
 		// Episode 1: vuln → clean
 		_ = store.UpsertCveScan(db, "p", "pkg", withVulns("x86_64"))
 		_ = store.UpsertCveScan(db, "p", "pkg", clean("x86_64"))
+		time.Sleep(time.Millisecond)
 		// Episode 2: vuln → clean
 		_ = store.UpsertCveScan(db, "p", "pkg", withVulns("x86_64"))
 		_ = store.UpsertCveScan(db, "p", "pkg", clean("x86_64"))
@@ -212,8 +213,8 @@ func TestUpsertCveScanStateMachine(t *testing.T) {
 		if len(periods) != 2 {
 			t.Fatalf("expected 2 periods, got %d", len(periods))
 		}
-		if !periods[0].CveSince.After(periods[1].CveSince) && !periods[0].CveSince.Equal(periods[1].CveSince) {
-			t.Error("periods not ordered newest-first")
+		if !periods[0].CveSince.After(periods[1].CveSince) {
+			t.Errorf("periods not ordered newest-first: %v >= %v", periods[0].CveSince, periods[1].CveSince)
 		}
 	})
 }

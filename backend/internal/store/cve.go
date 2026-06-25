@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -19,10 +20,12 @@ func UpsertCveScan(db *sql.DB, project, pkg string, scan model.CveScan) error {
 	defer tx.Rollback()
 
 	var prevCveSince, prevCleanSince sql.NullString
-	tx.QueryRow(
+	if err := tx.QueryRow(
 		`SELECT cve_since, clean_since FROM cve_scans WHERE project=? AND package=? AND arch=?`,
 		project, pkg, scan.Arch,
-	).Scan(&prevCveSince, &prevCleanSince)
+	).Scan(&prevCveSince, &prevCleanSince); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
 
 	hasVulns := scan.CriticalCount > 0 || scan.HighCount > 0
 	now := time.Now().UTC().Format(time.RFC3339Nano)
@@ -138,16 +141,7 @@ func AttachCveScans(db *sql.DB, packages []*model.Package) error {
 		if parseErr != nil {
 			return fmt.Errorf("cve_scans: invalid scanned_at %q: %w", scannedAtStr, parseErr)
 		}
-		if cveSinceStr.Valid {
-			if t, err := parseRFC3339(cveSinceStr.String); err == nil {
-				scan.CveSince = &t
-			}
-		}
-		if cleanSinceStr.Valid {
-			if t, err := parseRFC3339(cleanSinceStr.String); err == nil {
-				scan.CleanSince = &t
-			}
-		}
+		applyNullableTimestamps(&scan, cveSinceStr, cleanSinceStr)
 		if findingsJSON != "" && findingsJSON != "[]" {
 			_ = json.Unmarshal([]byte(findingsJSON), &scan.Findings)
 		}
@@ -214,12 +208,25 @@ func GetPackage(db *sql.DB, project, name string) (*model.Package, error) {
 	return pkgs[0], nil
 }
 
-// parseRFC3339 parses a time string in RFC3339 or RFC3339Nano format.
-func parseRFC3339(s string) (time.Time, error) {
-	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
-		return t, nil
+// applyNullableTimestamps parses cve_since and clean_since from sql.NullString
+// into the corresponding *time.Time fields on a CveScan.
+func applyNullableTimestamps(scan *model.CveScan, cveSinceStr, cleanSinceStr sql.NullString) {
+	if cveSinceStr.Valid {
+		if t, err := parseRFC3339(cveSinceStr.String); err == nil {
+			scan.CveSince = &t
+		}
 	}
-	return time.Parse(time.RFC3339, s)
+	if cleanSinceStr.Valid {
+		if t, err := parseRFC3339(cleanSinceStr.String); err == nil {
+			scan.CleanSince = &t
+		}
+	}
+}
+
+// parseRFC3339 parses a time string in RFC3339Nano format.
+// time.RFC3339Nano also matches plain RFC3339 (fractional seconds are optional).
+func parseRFC3339(s string) (time.Time, error) {
+	return time.Parse(time.RFC3339Nano, s)
 }
 
 func scanCveRows(rows *sql.Rows) ([]model.CveScan, error) {
@@ -238,16 +245,7 @@ func scanCveRows(rows *sql.Rows) ([]model.CveScan, error) {
 		if parseErr != nil {
 			return nil, fmt.Errorf("cve_scans: invalid scanned_at %q: %w", scannedAtStr, parseErr)
 		}
-		if cveSinceStr.Valid {
-			if t, err := parseRFC3339(cveSinceStr.String); err == nil {
-				scan.CveSince = &t
-			}
-		}
-		if cleanSinceStr.Valid {
-			if t, err := parseRFC3339(cleanSinceStr.String); err == nil {
-				scan.CleanSince = &t
-			}
-		}
+		applyNullableTimestamps(&scan, cveSinceStr, cleanSinceStr)
 		if findingsJSON != "" && findingsJSON != "[]" {
 			_ = json.Unmarshal([]byte(findingsJSON), &scan.Findings)
 		}
