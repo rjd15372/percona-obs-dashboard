@@ -5,6 +5,10 @@ export default {
   darkMode: ['selector', '[data-theme="dark"]'],
   theme: {
     extend: {
+      fontFamily: {
+        mono: ['var(--font-mono)'],
+        code: ['Consolas', 'ui-monospace', 'monospace'],
+      },
       colors: {
         'bg-app': 'var(--bg-app)',
         'bg-card': 'var(--bg-card)',

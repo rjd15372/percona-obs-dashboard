@@ -174,8 +174,10 @@ function canExpand(row: PackageRow): boolean {
         <button
           v-for="repo in rhelRepos"
           :key="repo.obs"
-          class="w-full py-[9px] px-4 text-left border-none bg-transparent text-text-secondary font-medium text-[13.5px] cursor-pointer"
-          :class="{ 'bg-brand-purple-tint text-brand-purple font-bold': selectedRepo?.obs === repo.obs }"
+          class="w-full py-[9px] px-4 text-left border-none text-[13.5px] cursor-pointer"
+          :class="selectedRepo?.obs === repo.obs
+            ? 'bg-brand-purple-tint text-brand-purple font-bold'
+            : 'bg-transparent text-text-secondary font-medium'"
           @click="emit('update:art-repo', repo.obs)"
         >{{ repo.name }}</button>
       </template>
@@ -185,8 +187,10 @@ function canExpand(row: PackageRow): boolean {
         <button
           v-for="repo in opensuseRepos"
           :key="repo.obs"
-          class="w-full py-[9px] px-4 text-left border-none bg-transparent text-text-secondary font-medium text-[13.5px] cursor-pointer"
-          :class="{ 'bg-brand-purple-tint text-brand-purple font-bold': selectedRepo?.obs === repo.obs }"
+          class="w-full py-[9px] px-4 text-left border-none text-[13.5px] cursor-pointer"
+          :class="selectedRepo?.obs === repo.obs
+            ? 'bg-brand-purple-tint text-brand-purple font-bold'
+            : 'bg-transparent text-text-secondary font-medium'"
           @click="emit('update:art-repo', repo.obs)"
         >{{ repo.name }}</button>
       </template>
@@ -196,8 +200,10 @@ function canExpand(row: PackageRow): boolean {
         <button
           v-for="repo in ubuntuRepos"
           :key="repo.obs"
-          class="w-full py-[9px] px-4 text-left border-none bg-transparent text-text-secondary font-medium text-[13.5px] cursor-pointer"
-          :class="{ 'bg-brand-purple-tint text-brand-purple font-bold': selectedRepo?.obs === repo.obs }"
+          class="w-full py-[9px] px-4 text-left border-none text-[13.5px] cursor-pointer"
+          :class="selectedRepo?.obs === repo.obs
+            ? 'bg-brand-purple-tint text-brand-purple font-bold'
+            : 'bg-transparent text-text-secondary font-medium'"
           @click="emit('update:art-repo', repo.obs)"
         >{{ repo.name }}</button>
       </template>
@@ -207,8 +213,10 @@ function canExpand(row: PackageRow): boolean {
         <button
           v-for="repo in debianRepos"
           :key="repo.obs"
-          class="w-full py-[9px] px-4 text-left border-none bg-transparent text-text-secondary font-medium text-[13.5px] cursor-pointer"
-          :class="{ 'bg-brand-purple-tint text-brand-purple font-bold': selectedRepo?.obs === repo.obs }"
+          class="w-full py-[9px] px-4 text-left border-none text-[13.5px] cursor-pointer"
+          :class="selectedRepo?.obs === repo.obs
+            ? 'bg-brand-purple-tint text-brand-purple font-bold'
+            : 'bg-transparent text-text-secondary font-medium'"
           @click="emit('update:art-repo', repo.obs)"
         >{{ repo.name }}</button>
       </template>
@@ -218,8 +226,10 @@ function canExpand(row: PackageRow): boolean {
         <button
           v-for="repo in otherRepos"
           :key="repo.obs"
-          class="w-full py-[9px] px-4 text-left border-none bg-transparent text-text-secondary font-medium text-[13.5px] cursor-pointer"
-          :class="{ 'bg-brand-purple-tint text-brand-purple font-bold': selectedRepo?.obs === repo.obs }"
+          class="w-full py-[9px] px-4 text-left border-none text-[13.5px] cursor-pointer"
+          :class="selectedRepo?.obs === repo.obs
+            ? 'bg-brand-purple-tint text-brand-purple font-bold'
+            : 'bg-transparent text-text-secondary font-medium'"
           @click="emit('update:art-repo', repo.obs)"
         >{{ repo.name }}</button>
       </template>
@@ -241,13 +251,17 @@ function canExpand(row: PackageRow): boolean {
           <!-- arch-selector: segmented control -->
           <div class="flex gap-0.5 bg-bg-muted [padding:3px] rounded-[9px] border border-border">
             <button
-              class="px-3 py-1 rounded-[7px] text-[12px] font-medium cursor-pointer border border-transparent bg-transparent text-text-muted"
-              :class="{ 'bg-bg-card text-brand-purple border-border-strong shadow-[0_1px_2px_rgba(0,0,0,0.10)]': artArch === 'x86_64' }"
+              class="px-3 py-1 rounded-[7px] text-[12px] font-medium cursor-pointer border"
+              :class="artArch === 'x86_64'
+                ? 'bg-bg-card text-brand-purple border-border-strong shadow-[0_1px_2px_rgba(0,0,0,0.10)]'
+                : 'bg-transparent text-text-muted border-transparent'"
               @click="emit('update:art-arch', 'x86_64')"
             >x86_64</button>
             <button
-              class="px-3 py-1 rounded-[7px] text-[12px] font-medium cursor-pointer border border-transparent bg-transparent text-text-muted"
-              :class="{ 'bg-bg-card text-brand-purple border-border-strong shadow-[0_1px_2px_rgba(0,0,0,0.10)]': artArch === 'aarch64' }"
+              class="px-3 py-1 rounded-[7px] text-[12px] font-medium cursor-pointer border"
+              :class="artArch === 'aarch64'
+                ? 'bg-bg-card text-brand-purple border-border-strong shadow-[0_1px_2px_rgba(0,0,0,0.10)]'
+                : 'bg-transparent text-text-muted border-transparent'"
               @click="emit('update:art-arch', 'aarch64')"
             >aarch64</button>
           </div>
@@ -263,7 +277,7 @@ function canExpand(row: PackageRow): boolean {
               {{ copiedKey === 'repo-config' ? '✓ Copied' : 'Copy' }}
             </button>
           </div>
-          <pre class="bg-bg-card-2 py-[14px] px-4 rounded-lg [font-family:var(--font-mono)] text-[12px] whitespace-pre overflow-x-auto m-0"><code>{{ snippet }}</code></pre>
+          <pre class="bg-bg-card-2 py-[14px] px-4 rounded-lg font-code text-[12px] whitespace-pre overflow-x-auto m-0"><code class="font-code">{{ snippet }}</code></pre>
         </div>
       </div>
 
@@ -288,8 +302,8 @@ function canExpand(row: PackageRow): boolean {
           >
             <!-- Package header row (click to expand) -->
             <button
-              class="pkg-row flex items-center gap-[10px] py-[10px] px-[18px] w-full text-left bg-transparent border-none cursor-pointer"
-              :class="{ 'bg-bg-muted': expanded[rowKey(row)] }"
+              class="pkg-row flex items-center gap-[10px] py-[10px] px-[18px] w-full text-left border-none cursor-pointer"
+              :class="expanded[rowKey(row)] ? 'bg-bg-muted' : 'bg-transparent'"
               @click="canExpand(row) ? toggleRow(row) : undefined"
               :disabled="!canExpand(row)"
               :title="canExpand(row) ? 'Click to show binaries' : 'Package is not in succeeded state'"

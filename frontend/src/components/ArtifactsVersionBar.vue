@@ -46,8 +46,10 @@ const emit = defineEmits<{
           <button
             v-for="v in availableVersions"
             :key="v"
-            class="bg-transparent text-text-muted font-medium px-3 py-1 rounded-[7px] border border-transparent text-[13px] cursor-pointer [font-family:inherit]"
-            :class="{ 'bg-bg-card text-text-primary font-bold border-border-strong shadow-[0_1px_2px_rgba(0,0,0,0.12)]': v === version }"
+            class="px-3 py-1 rounded-[7px] border text-[13px] cursor-pointer [font-family:inherit]"
+            :class="v === version
+              ? 'bg-bg-card text-text-primary font-bold border-border-strong shadow-[0_1px_2px_rgba(0,0,0,0.12)]'
+              : 'bg-transparent text-text-muted font-medium border-transparent'"
             @click="emit('update:version', v)"
           >{{ v }}</button>
         </div>
@@ -57,13 +59,17 @@ const emit = defineEmits<{
       <div class="flex items-center gap-[6px] ml-auto">
         <div class="flex gap-[3px] bg-bg-muted p-[3px] rounded-[9px] border border-border">
           <button
-            class="bg-transparent text-text-muted font-medium px-3 py-1 rounded-[7px] border border-transparent text-[13px] cursor-pointer [font-family:inherit]"
-            :class="{ 'bg-bg-card text-text-primary font-bold border-border-strong shadow-[0_1px_2px_rgba(0,0,0,0.12)]': activeTab === 'packages' }"
+            class="px-3 py-1 rounded-[7px] border text-[13px] cursor-pointer [font-family:inherit]"
+            :class="activeTab === 'packages'
+              ? 'bg-bg-card text-text-primary font-bold border-border-strong shadow-[0_1px_2px_rgba(0,0,0,0.12)]'
+              : 'bg-transparent text-text-muted font-medium border-transparent'"
             @click="emit('update:tab', 'packages')"
           >Packages</button>
           <button
-            class="bg-transparent text-text-muted font-medium px-3 py-1 rounded-[7px] border border-transparent text-[13px] cursor-pointer [font-family:inherit]"
-            :class="{ 'bg-bg-card text-text-primary font-bold border-border-strong shadow-[0_1px_2px_rgba(0,0,0,0.12)]': activeTab === 'containers' }"
+            class="px-3 py-1 rounded-[7px] border text-[13px] cursor-pointer [font-family:inherit]"
+            :class="activeTab === 'containers'
+              ? 'bg-bg-card text-text-primary font-bold border-border-strong shadow-[0_1px_2px_rgba(0,0,0,0.12)]'
+              : 'bg-transparent text-text-muted font-medium border-transparent'"
             @click="emit('update:tab', 'containers')"
           >Container Images</button>
         </div>

@@ -174,7 +174,7 @@ function toggleCvePanel(imageId: string) {
             <!-- Registry -->
             <div class="bg-bg-card-2 px-[18px] py-[10px] border-b border-border">
               <div class="section-label">REGISTRY</div>
-              <code class="block font-[var(--font-mono)] text-[12px] text-text-secondary break-all mt-1">{{ image.registry }}</code>
+              <code class="block font-mono text-[12px] text-text-secondary break-all mt-1">{{ image.registry }}</code>
             </div>
 
             <div v-if="image.builtAt" class="px-[18px] py-[10px] border-b border-border">
@@ -189,8 +189,10 @@ function toggleCvePanel(imageId: string) {
                 <code
                   v-for="(tag, i) in image.tags"
                   :key="tag"
-                  class="font-[var(--font-mono)] text-[11px] px-2 py-[3px] rounded-[6px] bg-bg-muted text-text-secondary"
-                  :class="{ 'bg-brand-purple-tint text-brand-purple font-bold': i === 0 }"
+                  class="inline-flex items-center font-mono text-[11px] px-2 py-[3px] rounded-[6px]"
+                  :class="i === 0
+                    ? 'bg-brand-purple-tint text-brand-purple font-bold'
+                    : 'bg-bg-muted text-text-secondary font-semibold'"
                 >{{ tag }}</code>
               </div>
               <span v-else class="block mt-[6px] text-[12px] text-text-muted">No tags yet</span>
@@ -208,7 +210,7 @@ function toggleCvePanel(imageId: string) {
                   {{ copiedKey === image.id ? '✓ Copied' : 'Copy' }}
                 </button>
               </div>
-              <pre class="bg-bg-card-2 px-[14px] py-[10px] rounded-lg font-[var(--font-mono)] text-[12px] whitespace-pre-wrap break-all m-0"><code>{{ image.pullCmd }}</code></pre>
+              <pre class="bg-bg-card-2 px-[14px] py-[10px] rounded-lg font-code text-[12px] whitespace-pre-wrap break-all m-0"><code class="font-code">{{ image.pullCmd }}</code></pre>
             </div>
 
             <!-- Security / CVE -->
