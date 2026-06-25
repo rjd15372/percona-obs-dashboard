@@ -4,6 +4,7 @@ import type { Context } from '../types/api'
 defineProps<{
   version: string
   updatedAt: string | null
+  refreshing: boolean
   activeTags: string[]
   contexts: Context[]
   selectedContext: Context
@@ -14,6 +15,7 @@ const emit = defineEmits<{
   'update:version': [version: string]
   'toggle-tag': [tag: string]
   'update:context': [ctx: Context]
+  'refresh': []
 }>()
 
 const TAGS = [
@@ -82,7 +84,11 @@ function tagStyle(_id: string, active: boolean): string {
       </div>
 
       <div style="margin-left: auto; display: flex; align-items: center; gap: 16px; font-size: 12px; color: var(--text-muted);">
-        <span>Updated <strong style="color: var(--text-secondary); font-weight: 600;">{{ formatTime(updatedAt) }}</strong></span>
+        <span
+          title="Click to refresh"
+          style="cursor: pointer; user-select: none;"
+          @click="emit('refresh')"
+        >Updated <strong :style="`color: ${refreshing ? 'var(--text-muted)' : 'var(--text-secondary)'}; font-weight: 600;`">{{ refreshing ? 'Refreshing…' : formatTime(updatedAt) }}</strong></span>
         <span style="display: inline-flex; align-items: center; gap: 6px;">
           <span style="width: 7px; height: 7px; border-radius: 99px; background: var(--ok);"></span>Live
         </span>

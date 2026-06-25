@@ -167,20 +167,27 @@ useUrlState({
 const filteredPackages = computed(() => filterByTags(activeTags.value))
 const filteredEvents = computed(() => filterEvents(activeTags.value, version.value, prefixDepth.value, selectedContext.value.prefix))
 const updatedAt = ref<string | null>(null)
+const refreshing = ref(false)
 
 async function refresh() {
-  const isCustom = windowMin.value === -1
-  const hasCustomRange = customFrom.value != null && customTo.value != null
-  // Skip fetch when Custom is active but dates aren't set yet — window=-1 returns 400.
-  const eventsOpts = isCustom
-    ? (hasCustomRange ? { from: customFrom.value!, to: customTo.value! } : null)
-    : { window: windowMin.value }
-  await Promise.all([
-    refreshPackages(),
-    eventsOpts ? refreshEvents(eventsOpts) : Promise.resolve(),
-    refreshPR(),
-  ])
-  updatedAt.value = new Date().toISOString()
+  if (refreshing.value) return
+  refreshing.value = true
+  try {
+    const isCustom = windowMin.value === -1
+    const hasCustomRange = customFrom.value != null && customTo.value != null
+    // Skip fetch when Custom is active but dates aren't set yet — window=-1 returns 400.
+    const eventsOpts = isCustom
+      ? (hasCustomRange ? { from: customFrom.value!, to: customTo.value! } : null)
+      : { window: windowMin.value }
+    await Promise.all([
+      refreshPackages(),
+      eventsOpts ? refreshEvents(eventsOpts) : Promise.resolve(),
+      refreshPR(),
+    ])
+    updatedAt.value = new Date().toISOString()
+  } finally {
+    refreshing.value = false
+  }
 }
 
 // Initial fetch + SSE real-time stream
@@ -201,6 +208,7 @@ watch([windowMin, customFrom, customTo], () => refresh())
         <ContextBar
           :version="version"
           :updated-at="updatedAt"
+          :refreshing="refreshing"
           :active-tags="activeTags"
           :contexts="contexts"
           :selected-context="selectedContext"
@@ -208,6 +216,7 @@ watch([windowMin, customFrom, customTo], () => refresh())
           @update:version="version = $event"
           @toggle-tag="toggleTag"
           @update:context="selectContext"
+          @refresh="refresh"
         />
         <HealthHeader :packages="allPackages" :spotlight="spotlightStates" @toggle-spotlight="toggleSpotlight" />
         <MainGrid
