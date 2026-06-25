@@ -52,7 +52,7 @@ function reasonCanExpand(event: Event): boolean {
       <!-- Glyph -->
       <div class="shrink-0">
         <span
-          class="flex h-6 w-6 items-center justify-center rounded-[7px] text-[12px] font-black"
+          class="flex h-6 w-6 items-center justify-center rounded-[7px] text-[12px] font-extrabold"
           :style="{ color: GLYPH_COLOR[head.type], background: GLYPH_BG[head.type] }"
         >{{ GLYPH[head.type] }}</span>
       </div>
@@ -62,7 +62,7 @@ function reasonCanExpand(event: Event): boolean {
         <!-- Row 1: package name + count badge + timestamp -->
         <div class="flex items-center gap-2">
           <span class="package-name">{{ props.package }}</span>
-          <span class="text-[10.5px] font-600 text-text-muted bg-bg-muted rounded-[5px] px-[6px] py-[1px] whitespace-nowrap shrink-0">{{ events.length }} events</span>
+          <span class="text-[10.5px] font-semibold text-text-muted bg-bg-muted rounded-[5px] px-[6px] py-[1px] whitespace-nowrap shrink-0">{{ events.length }} events</span>
           <span :title="head.at" class="ml-auto text-[10.5px] text-text-muted font-mono whitespace-nowrap shrink-0">{{ timeStr(head.at) }}</span>
         </div>
         <!-- Row 2: subtitle (most recent event's what, repo/arch stripped) -->
@@ -100,7 +100,7 @@ function reasonCanExpand(event: Event): boolean {
           <!-- Glyph + connector -->
           <div class="flex flex-col items-center gap-0 shrink-0 ml-[6px]">
             <span
-              class="flex h-5 w-5 items-center justify-center rounded-[6px] text-[10px] font-black"
+              class="flex h-5 w-5 items-center justify-center rounded-[6px] text-[10px] font-extrabold"
               :style="{ color: GLYPH_COLOR[event.type], background: GLYPH_BG[event.type] }"
             >{{ GLYPH[event.type] }}</span>
             <span
@@ -135,7 +135,7 @@ function reasonCanExpand(event: Event): boolean {
                 alignSelf: 'flex-start',
               }"
             >{{ displayVersion(event.version, tags.includes('container')) }}</span>
-            <code v-if="event.repo" class="font-mono text-[11px] font-600 text-text-secondary">{{ event.repo }}/{{ event.arch }}</code>
+            <code v-if="event.repo" class="font-mono text-[11px] font-semibold text-text-secondary">{{ event.repo }}/{{ event.arch }}</code>
           </div>
         </div>
       </div>
