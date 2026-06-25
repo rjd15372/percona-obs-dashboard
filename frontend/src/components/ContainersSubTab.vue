@@ -118,38 +118,38 @@ function toggleCvePanel(imageId: string) {
 </script>
 
 <template>
-  <div class="containers-subtab">
+  <div class="flex flex-col gap-6 p-4">
     <div
       v-if="loading"
-      class="containers-loading"
+      class="containers-loading flex flex-col items-center justify-center py-12 gap-3 text-text-muted"
       :class="{ compact: groups.length > 0 }"
     >
       <div class="spinner"></div>
-      <span class="loading-label">Fetching container metadata…</span>
+      <span class="text-[13px] text-text-muted">Fetching container metadata…</span>
     </div>
 
     <template v-if="groups.length > 0">
-      <div v-for="group in groups" :key="group.baseOs" class="os-group">
-        <div class="os-group-header">
-          <div class="os-group-title-block">
-            <h3 class="os-group-title">{{ group.baseOs }}</h3>
-            <span class="os-group-subtitle">{{ baseOsSubtitle(group.baseOs) }}</span>
+      <div v-for="group in groups" :key="group.baseOs" class="flex flex-col gap-[14px]">
+        <div class="flex items-center justify-between gap-4 px-[14px] py-[11px] bg-bg-card-2 border border-border border-l-4 border-l-brand-purple rounded-lg">
+          <div class="flex flex-col gap-0.5 min-w-0">
+            <h3 class="m-0 text-[15px] [font-weight:750] leading-[1.2] text-text-primary">{{ group.baseOs }}</h3>
+            <span class="text-[11.5px] text-text-muted">{{ baseOsSubtitle(group.baseOs) }}</span>
           </div>
-          <span class="os-group-count">
+          <span class="shrink-0 px-2 py-[3px] rounded-[6px] bg-bg-card border border-border text-text-secondary text-[11px] font-bold whitespace-nowrap">
             {{ group.images.length }} image{{ group.images.length !== 1 ? 's' : '' }}
           </span>
         </div>
-        <div class="images-grid">
+        <div class="grid grid-cols-[repeat(auto-fill,minmax(340px,1fr))] gap-4">
           <div
             v-for="image in group.images"
             :key="image.id"
-            class="image-card"
-            :class="{ loading: loading }"
+            class="bg-bg-card rounded-[12px] overflow-hidden flex flex-col [transition:opacity_0.15s_ease,filter_0.15s_ease]"
+            :class="{ 'opacity-[0.48] grayscale-[0.85]': loading }"
           >
             <!-- Card header -->
-            <div class="card-header">
-              <div class="card-header-left">
-                <div class="container-icon">
+            <div class="flex items-center justify-between px-[18px] py-[14px] border-b border-border">
+              <div class="flex items-center gap-[10px]">
+                <div class="flex items-center justify-center w-9 h-9 rounded-lg bg-info-tint text-info shrink-0">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
                        stroke="currentColor" stroke-width="1.8"
                        stroke-linecap="round" stroke-linejoin="round">
@@ -158,7 +158,7 @@ function toggleCvePanel(imageId: string) {
                     <path d="M2 13h20"/>
                   </svg>
                 </div>
-                <span class="image-name">{{ image.imageName }}</span>
+                <span class="text-[14px] font-bold">{{ image.imageName }}</span>
               </div>
               <template v-for="badge in [rebuildBadge(image)]" :key="'rebuild-badge'">
                 <span v-if="badge" class="status-badge" :class="badge.cls">{{ badge.label }}</span>
@@ -172,61 +172,64 @@ function toggleCvePanel(imageId: string) {
             </div>
 
             <!-- Registry -->
-            <div class="registry-section">
+            <div class="bg-bg-card-2 px-[18px] py-[10px] border-b border-border">
               <div class="section-label">REGISTRY</div>
-              <code class="registry-path">{{ image.registry }}</code>
+              <code class="block font-[var(--font-mono)] text-[12px] text-text-secondary break-all mt-1">{{ image.registry }}</code>
             </div>
 
-            <div v-if="image.builtAt" class="built-section">
+            <div v-if="image.builtAt" class="px-[18px] py-[10px] border-b border-border">
               <div class="section-label">BUILT</div>
-              <span class="built-time">{{ formatArtifactTime(image.builtAt) }}</span>
+              <span class="block mt-1 text-[12px] text-text-secondary">{{ formatArtifactTime(image.builtAt) }}</span>
             </div>
 
             <!-- Tags -->
-            <div class="tags-section">
+            <div class="px-[18px] py-3 border-b border-border">
               <div class="section-label">AVAILABLE TAGS</div>
-              <div class="tags-list" v-if="image.tags.length > 0">
+              <div class="flex flex-wrap gap-[6px] mt-2" v-if="image.tags.length > 0">
                 <code
                   v-for="(tag, i) in image.tags"
                   :key="tag"
-                  class="tag-chip"
-                  :class="{ 'tag-primary': i === 0 }"
+                  class="font-[var(--font-mono)] text-[11px] px-2 py-[3px] rounded-[6px] bg-bg-muted text-text-secondary"
+                  :class="{ 'bg-brand-purple-tint text-brand-purple font-bold': i === 0 }"
                 >{{ tag }}</code>
               </div>
-              <span v-else class="tags-empty">No tags yet</span>
+              <span v-else class="block mt-[6px] text-[12px] text-text-muted">No tags yet</span>
             </div>
 
             <!-- Docker pull -->
-            <div class="pull-section">
-              <div class="pull-header">
+            <div class="px-[18px] py-3 flex-1">
+              <div class="flex items-center justify-between mb-2">
                 <span class="section-label">DOCKER PULL</span>
                 <button
-                  class="copy-btn"
-                  :class="{ copied: copiedKey === image.id }"
+                  class="text-[12px] px-[10px] py-[3px] rounded-[6px] border border-border bg-bg-card text-text-secondary cursor-pointer"
+                  :class="{ 'text-ok border-ok': copiedKey === image.id }"
                   @click="emit('copy', image.id, image.pullCmd)"
                 >
                   {{ copiedKey === image.id ? '✓ Copied' : 'Copy' }}
                 </button>
               </div>
-              <pre class="pull-code"><code>{{ image.pullCmd }}</code></pre>
+              <pre class="bg-bg-card-2 px-[14px] py-[10px] rounded-lg font-[var(--font-mono)] text-[12px] whitespace-pre-wrap break-all m-0"><code>{{ image.pullCmd }}</code></pre>
             </div>
 
             <!-- Security / CVE -->
-            <div v-if="image.cveScans.length > 0" class="cve-section">
-              <div class="cve-header" @click="toggleCvePanel(image.id)">
+            <div v-if="image.cveScans.length > 0" class="border-t border-border">
+              <div class="flex items-center gap-2 px-[18px] py-[10px] cursor-pointer select-none" @click="toggleCvePanel(image.id)">
                 <span class="section-label">SECURITY</span>
-                <span class="cve-scan-time">Scanned {{ latestScanTime(image.cveScans) }}</span>
-                <span class="cve-chevron" :class="{ open: openCvePanels.has(image.id) }">›</span>
+                <span class="text-[11px] text-text-muted ml-auto">Scanned {{ latestScanTime(image.cveScans) }}</span>
+                <span
+                  class="text-[16px] text-text-muted [transition:transform_0.15s] rotate-0"
+                  :class="{ 'rotate-90': openCvePanels.has(image.id) }"
+                >›</span>
               </div>
-              <div v-if="openCvePanels.has(image.id)" class="cve-body">
+              <div v-if="openCvePanels.has(image.id)" class="px-[18px] pb-3 flex flex-col gap-3">
                 <div v-for="scan in image.cveScans" :key="scan.arch" class="cve-arch-block">
-                  <div class="cve-arch-label">{{ scan.arch }}</div>
-                  <div v-if="scan.cve_since" class="cve-arch-since">
+                  <div class="text-[11px] font-bold text-text-muted uppercase [letter-spacing:0.06em] mb-[6px]">{{ scan.arch }}</div>
+                  <div v-if="scan.cve_since" class="text-[11px] text-warn mb-[6px]">
                     CVEs present for {{ cveDuration(scan.cve_since) }}
                   </div>
-                  <div v-if="(scan.findings ?? []).length === 0" class="cve-clean-line">No fixable CVEs found</div>
-                  <div v-else class="cve-table-wrap">
-                    <table class="cve-table">
+                  <div v-if="(scan.findings ?? []).length === 0" class="text-[12px] text-ok py-1">No fixable CVEs found</div>
+                  <div v-else class="overflow-x-auto">
+                    <table class="cve-table w-full border-collapse text-[11px]">
                       <thead>
                         <tr>
                           <th>Severity</th>
@@ -255,34 +258,18 @@ function toggleCvePanel(imageId: string) {
       </div>
     </template>
 
-    <div v-else-if="!loading" class="empty-state">
+    <div v-else-if="!loading" class="text-center py-12 text-text-muted text-[14px]">
       No container images for this version.
     </div>
   </div>
 </template>
 
 <style scoped>
-.containers-subtab {
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
 
-.containers-loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 48px 0;
-  gap: 12px;
-  color: var(--text-muted);
-}
-
+/* Loading states */
 .containers-loading.compact {
   flex-direction: row;
   justify-content: flex-start;
@@ -308,114 +295,16 @@ function toggleCvePanel(imageId: string) {
   border-width: 2px;
 }
 
-.loading-label {
-  font-size: 13px;
+/* Section label shared utility */
+.section-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
   color: var(--text-muted);
 }
 
-/* OS group */
-.os-group {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.os-group-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 11px 14px;
-  background: var(--bg-card-2);
-  border: 1px solid var(--border);
-  border-left: 4px solid var(--brand-purple);
-  border-radius: 8px;
-}
-
-.os-group-title-block {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.os-group-title {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 750;
-  line-height: 1.2;
-  color: var(--text-primary);
-}
-
-.os-group-subtitle {
-  font-size: 11.5px;
-  color: var(--text-muted);
-}
-
-.os-group-count {
-  flex-shrink: 0;
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.images-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 16px;
-}
-
-/* Card */
-.image-card {
-  background: var(--bg-card);
-  border-radius: 12px;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  transition: opacity 0.15s ease, filter 0.15s ease;
-}
-
-.image-card.loading {
-  opacity: 0.48;
-  filter: grayscale(0.85);
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 18px;
-  border-bottom: 1px solid var(--border);
-}
-
-.card-header-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.container-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  background: var(--info-tint, #dbeafe);
-  color: var(--info, #3b82f6);
-  flex-shrink: 0;
-}
-
-.image-name {
-  font-size: 14px;
-  font-weight: 700;
-}
-
+/* Status badges */
 .status-badge {
   font-size: 11px;
   font-weight: 600;
@@ -434,205 +323,11 @@ function toggleCvePanel(imageId: string) {
   color: var(--info);
 }
 
-/* Registry */
-.registry-section {
-  background: var(--bg-card-2);
-  padding: 10px 18px;
-  border-bottom: 1px solid var(--border);
-}
-
-.built-section {
-  padding: 10px 18px;
-  border-bottom: 1px solid var(--border);
-}
-
-.built-time {
-  display: block;
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-/* Tags */
-.tags-section {
-  padding: 12px 18px;
-  border-bottom: 1px solid var(--border);
-}
-
-.tags-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.tag-chip {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: var(--bg-muted);
-  color: var(--text-secondary);
-}
-
-.tag-chip.tag-primary {
-  background: var(--brand-purple-tint);
-  color: var(--brand-purple);
-  font-weight: 700;
-}
-
-.tags-empty {
-  display: block;
-  margin-top: 6px;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-/* Docker pull */
-.pull-section {
-  padding: 12px 18px;
-  flex: 1;
-}
-
-.pull-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-
-.section-label {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-}
-
-.registry-path {
-  display: block;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text-secondary);
-  word-break: break-all;
-  margin-top: 4px;
-}
-
-.copy-btn {
-  font-size: 12px;
-  padding: 3px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg-card);
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.copy-btn.copied {
-  color: var(--ok, #16a34a);
-  border-color: var(--ok, #16a34a);
-}
-
-.pull-code {
-  background: var(--bg-card-2);
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  white-space: pre-wrap;
-  word-break: break-all;
-  margin: 0;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 48px;
-  color: var(--text-muted);
-  font-size: 14px;
-}
-
-/* CVE section */
-.cve-section {
-  border-top: 1px solid var(--border);
-}
-.cve-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 18px;
-  cursor: pointer;
-  user-select: none;
-}
-.cve-scan-time {
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-left: auto;
-}
-.cve-chevron {
-  font-size: 16px;
-  color: var(--text-muted);
-  transition: transform 0.15s;
-  transform: rotate(0deg);
-}
-.cve-chevron.open {
-  transform: rotate(90deg);
-}
-.cve-body {
-  padding: 0 18px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.cve-arch-label {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  margin-bottom: 6px;
-}
-.cve-clean-line {
-  font-size: 12px;
-  color: var(--ok, #16a34a);
-  padding: 4px 0;
-}
-.cve-table-wrap {
-  overflow-x: auto;
-}
-.cve-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 11px;
-}
-.cve-table th {
-  text-align: left;
-  font-weight: 600;
-  color: var(--text-muted);
-  padding: 4px 6px 4px 0;
-  border-bottom: 1px solid var(--border);
-  white-space: nowrap;
-}
-.cve-table td {
-  padding: 4px 6px 4px 0;
-  vertical-align: top;
-  border-bottom: 1px solid var(--border);
-  color: var(--text-secondary);
-}
-.sev-critical {
-  color: var(--fail, #dc2626);
-  font-weight: 700;
-}
-.sev-high {
-  color: var(--warn, #d97706);
-  font-weight: 700;
-}
-.mono {
-  font-family: var(--font-mono);
-}
 .status-badge.cve-clean {
   background: var(--ok-tint, #d1fae5);
   color: var(--ok, #16a34a);
 }
+
 .status-badge.cve-vuln {
   background: var(--fail-tint, #fee2e2);
   color: var(--fail, #dc2626);
@@ -643,9 +338,34 @@ function toggleCvePanel(imageId: string) {
   color: var(--warn, #e08a00);
 }
 
-.cve-arch-since {
-  font-size: 11px;
-  color: var(--warn, #e08a00);
-  margin-bottom: 6px;
+/* CVE table cell styles */
+.cve-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 4px 6px 4px 0;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.cve-table td {
+  padding: 4px 6px 4px 0;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.sev-critical {
+  color: var(--fail, #dc2626);
+  font-weight: 700;
+}
+
+.sev-high {
+  color: var(--warn, #d97706);
+  font-weight: 700;
+}
+
+.mono {
+  font-family: var(--font-mono);
 }
 </style>
