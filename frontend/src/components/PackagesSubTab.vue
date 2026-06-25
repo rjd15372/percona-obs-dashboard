@@ -181,7 +181,7 @@ function canExpand(row: PackageRow): boolean {
       </template>
 
       <template v-if="opensuseRepos.length > 0">
-        <div class="px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-text-muted border-t border-b border-border">openSUSE</div>
+        <div class="px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-text-muted border-t border-b border-border first:border-t-0">openSUSE</div>
         <button
           v-for="repo in opensuseRepos"
           :key="repo.obs"
@@ -192,7 +192,7 @@ function canExpand(row: PackageRow): boolean {
       </template>
 
       <template v-if="ubuntuRepos.length > 0">
-        <div class="px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-text-muted border-t border-b border-border">Ubuntu</div>
+        <div class="px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-text-muted border-t border-b border-border first:border-t-0">Ubuntu</div>
         <button
           v-for="repo in ubuntuRepos"
           :key="repo.obs"
@@ -203,7 +203,7 @@ function canExpand(row: PackageRow): boolean {
       </template>
 
       <template v-if="debianRepos.length > 0">
-        <div class="px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-text-muted border-t border-b border-border">Debian</div>
+        <div class="px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-text-muted border-t border-b border-border first:border-t-0">Debian</div>
         <button
           v-for="repo in debianRepos"
           :key="repo.obs"
@@ -214,7 +214,7 @@ function canExpand(row: PackageRow): boolean {
       </template>
 
       <template v-if="otherRepos.length > 0">
-        <div class="px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-text-muted border-t border-b border-border">Other</div>
+        <div class="px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-text-muted border-t border-b border-border first:border-t-0">Other</div>
         <button
           v-for="repo in otherRepos"
           :key="repo.obs"
@@ -404,15 +404,5 @@ function canExpand(row: PackageRow): boolean {
   color: var(--text-muted);
 }
 
-/* Scrollbar styling — pseudo-element, kept scoped */
-.overflow-y-auto::-webkit-scrollbar {
-  width: 6px;
-}
-.overflow-y-auto::-webkit-scrollbar-track {
-  background: transparent;
-}
-.overflow-y-auto::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 3px;
-}
+
 </style>
