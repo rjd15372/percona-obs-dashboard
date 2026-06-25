@@ -41,9 +41,9 @@ function isPillActive(states: string[]): boolean {
 </script>
 
 <template>
-  <div class="bg-bg-card border border-border rounded-[16px] px-[22px] py-5 flex items-center gap-[30px] flex-wrap">
+  <div class="bg-bg-card border border-border rounded-[16px] px-[22px] py-5 flex items-center gap-4 sm:gap-[30px] flex-wrap">
     <!-- Left: big count + progress bar -->
-    <div class="flex flex-col gap-2 min-w-[300px] flex-1">
+    <div class="flex flex-col gap-2 min-w-0 sm:min-w-[300px] flex-1">
       <div class="flex items-baseline gap-[10px]">
         <span class="text-[40px] font-extrabold leading-none tracking-[-0.02em] text-text-primary">
           {{ okCount }}<span class="text-text-muted font-semibold">/{{ total }}</span>

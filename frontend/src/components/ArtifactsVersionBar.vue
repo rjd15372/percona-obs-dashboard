@@ -18,7 +18,7 @@ const emit = defineEmits<{
 
 <template>
   <div class="bg-bg-card border border-border rounded-[14px] px-[18px] py-[14px] mt-3 mx-4 flex-shrink-0">
-    <div class="flex items-center gap-4 flex-wrap">
+    <div class="flex items-center gap-2 sm:gap-4 flex-wrap">
       <!-- PostgreSQL badge -->
       <span class="inline-flex items-center gap-[7px] px-3 py-[5px] rounded-[8px] bg-[var(--tint-postgres)] text-[var(--tech-postgres)] text-[12px] font-bold border border-[rgba(0,94,214,0.15)]">PostgreSQL</span>
 

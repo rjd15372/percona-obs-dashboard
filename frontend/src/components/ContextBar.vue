@@ -50,7 +50,7 @@ function tagStyle(_id: string, active: boolean): string {
 <template>
   <div class="bg-bg-card border border-border rounded-[14px] px-[18px] py-[14px] flex flex-col gap-[13px]">
     <!-- Top row: tech badge + context selector + version tabs + updated -->
-    <div class="flex items-center gap-4 flex-wrap">
+    <div class="flex items-center gap-2 sm:gap-4 flex-wrap">
       <span class="inline-flex items-center px-3 py-[5px] rounded-lg bg-[var(--tint-postgres)] text-[var(--tech-postgres)] text-xs font-bold border border-[rgba(0,94,214,0.15)]">
         PostgreSQL
       </span>

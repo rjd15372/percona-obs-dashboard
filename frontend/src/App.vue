@@ -221,7 +221,7 @@ watch([windowMin, customFrom, customTo], () => refresh())
 </script>
 
 <template>
-  <div class="min-h-screen bg-bg-app pt-6 px-7 pb-[60px]">
+  <div class="min-h-screen bg-bg-app pt-6 px-4 sm:px-7 pb-[60px]">
     <div class="max-w-[1360px] mx-auto flex flex-col gap-4">
       <AppHeader :theme="theme" :main-tab="mainTab" @toggle-theme="toggleTheme" @update:main-tab="mainTab = $event" />
       <template v-if="mainTab === 'board'">
