@@ -51,7 +51,7 @@ function isPillActive(states: string[]): boolean {
         <span class="text-[15px] text-text-secondary font-semibold">packages built</span>
       </div>
       <div class="h-[9px] rounded-full bg-bg-muted overflow-hidden">
-        <div class="h-full rounded-full transition-all duration-300" :style="{ background: allGreen ? 'var(--ok)' : activeColor, width: `${progressWidth}%` }"></div>
+        <div class="h-full rounded-full [transition:width_0.3s_ease]" :style="{ background: allGreen ? 'var(--ok)' : activeColor, width: `${progressWidth}%` }"></div>
       </div>
       <span class="text-[12px] text-text-muted">{{ okTargets }}/{{ totalTargets }} build targets green</span>
     </div>
@@ -65,7 +65,7 @@ function isPillActive(states: string[]): boolean {
           v-for="b in breakdown"
           :key="b.label"
           @click="emit('toggle-spotlight', b.states)"
-          class="inline-flex items-center gap-[6px] text-[11.5px] font-bold px-[10px] py-1 rounded-[8px] cursor-pointer transition-all duration-[120ms]"
+          class="inline-flex items-center gap-[6px] text-[11.5px] font-bold px-[10px] py-1 rounded-[8px] cursor-pointer [transition:outline_0.12s]"
           :style="{
             background: b.bg,
             color: b.color,
