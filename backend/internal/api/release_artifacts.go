@@ -2,8 +2,10 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
@@ -11,7 +13,9 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/percona/obs-dashboard/internal/model"
 	"github.com/percona/obs-dashboard/internal/obs"
+	"github.com/percona/obs-dashboard/internal/store"
 )
 
 type ArtifactBinary struct {
@@ -34,14 +38,15 @@ type ReleasePackageArtifact struct {
 }
 
 type ReleaseContainerArtifact struct {
-	Project   string   `json:"project"`
-	ImageName string   `json:"image_name"`
-	BaseOS    string   `json:"base_os"`
-	Registry  string   `json:"registry"`
-	Tags      []string `json:"tags"`
-	PullCmd   string   `json:"pull_cmd"`
-	MTime     int64    `json:"mtime"`
-	BuiltAt   string   `json:"built_at"`
+	Project   string           `json:"project"`
+	ImageName string           `json:"image_name"`
+	BaseOS    string           `json:"base_os"`
+	Registry  string           `json:"registry"`
+	Tags      []string         `json:"tags"`
+	PullCmd   string           `json:"pull_cmd"`
+	MTime     int64            `json:"mtime"`
+	BuiltAt   string           `json:"built_at"`
+	CveScans  []model.CveScan  `json:"cve_scans,omitempty"`
 }
 
 type ReleaseArtifactsResponse struct {
@@ -112,7 +117,7 @@ func (c *releaseArtifactsCache) Get(ctx context.Context, key string, fetch func(
 	return response, err
 }
 
-func releaseArtifactsHandler(obsClient *obs.Client, root string, cache *releaseArtifactsCache) http.HandlerFunc {
+func releaseArtifactsHandler(db *sql.DB, obsClient *obs.Client, root string, cache *releaseArtifactsCache) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if obsClient == nil {
 			http.Error(w, "OBS client not configured", http.StatusServiceUnavailable)
@@ -131,10 +136,26 @@ func releaseArtifactsHandler(obsClient *obs.Client, root string, cache *releaseA
 			http.Error(w, "failed to fetch release artifacts: "+err.Error(), http.StatusBadGateway)
 			return
 		}
+
+		// Attach CVE scans from DB after the cache — scan results update
+		// frequently and must not be served stale from the OBS artifact cache.
+		attachReleaseCveScans(db, response.ContainerImages)
+
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(response); err != nil {
 			return
 		}
+	}
+}
+
+func attachReleaseCveScans(db *sql.DB, images []ReleaseContainerArtifact) {
+	for i := range images {
+		scans, err := store.QueryCveScans(db, images[i].Project, images[i].ImageName)
+		if err != nil {
+			slog.Warn("api: release cve scans", "pkg", images[i].ImageName, "err", err)
+			continue
+		}
+		images[i].CveScans = scans
 	}
 }
 

@@ -37,7 +37,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
-import type { Context } from '../types/api'
+import type { Context, CveScan } from '../types/api'
 import type { ArtifactBinary, ContainerImage, PackageRow, RepoInfo } from '../composables/useArtifacts'
 import { useArtifacts } from '../composables/useArtifacts'
 import { useArtifactMetadata } from '../composables/useArtifactMetadata'
@@ -251,7 +251,7 @@ const containerImages = computed<ContainerImage[]>(() => {
     published: true,
     mtime: img.mtime,
     builtAt: img.built_at,
-    cveScans: [],
+    cveScans: img.cve_scans ?? [],
   }))
 })
 
@@ -293,6 +293,7 @@ interface ReleaseContainerArtifact {
   pull_cmd: string
   mtime: number
   built_at: string
+  cve_scans?: CveScan[]
 }
 
 interface ReleaseArtifactsResponse {

@@ -29,7 +29,7 @@ func NewRouter(db *sql.DB, h *hub.Hub, obsClient *obs.Client, root string) http.
 	r.Route("/api/releases/ppg/{version}", func(r chi.Router) {
 		r.Get("/packages", releasesPackagesHandler(db, root))
 		r.Get("/repos", releasesReposHandler(db, root))
-		r.Get("/artifacts", releaseArtifactsHandler(obsClient, root, releaseArtifacts))
+		r.Get("/artifacts", releaseArtifactsHandler(db, obsClient, root, releaseArtifacts))
 	})
 
 	r.Get("/api/pr/packages", prPackagesHandler(db))
