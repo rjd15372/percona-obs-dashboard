@@ -206,7 +206,7 @@ const isDimmed = computed(() => !!props.spotlightStates?.length && !props.spotli
     </div>
 
     <!-- Row 2: package name -->
-    <code class="font-mono text-[13.5px] font-semibold text-text-primary overflow-wrap leading-[1.35]">{{ pkg.name }}</code>
+    <code class="font-mono text-[13.5px] font-semibold text-text-primary [overflow-wrap:anywhere] leading-[1.35]">{{ pkg.name }}</code>
 
     <!-- Row 3: scope tags + version badge -->
     <div class="flex items-center gap-[7px]">
@@ -262,7 +262,7 @@ const isDimmed = computed(() => !!props.spotlightStates?.length && !props.spotli
             <button
               v-if="REBUILD_STATES.has(t.state)"
               :disabled="isRebuildLoading(t.repo, t.arch)"
-              class="bg-none border-none px-[2px] text-[13px] flex-shrink-0 leading-none"
+              class="[background:none] border-none px-[2px] text-[13px] flex-shrink-0 leading-none"
               :style="{ cursor: isRebuildLoading(t.repo, t.arch) ? 'default' : 'pointer', color: 'var(--text-muted)' }"
               title="Retrigger build"
               aria-label="Retrigger build"
@@ -303,12 +303,12 @@ const isDimmed = computed(() => !!props.spotlightStates?.length && !props.spotli
         <button
           v-if="!showAll && hiddenCount > 0"
           @click="showAll = true"
-          class="text-[11px] text-brand-purple font-semibold py-[4px] px-[9px] border-none bg-transparent cursor-pointer text-left font-inherit"
+          class="text-[11px] text-brand-purple font-semibold py-[4px] px-[9px] border-none bg-transparent cursor-pointer text-left [font-family:inherit]"
         >+ {{ hiddenCount }} more</button>
         <button
           v-if="showAll && hiddenCount > 0"
           @click="showAll = false"
-          class="text-[11px] text-text-muted font-semibold py-[4px] px-[9px] border-none bg-transparent cursor-pointer text-left font-inherit"
+          class="text-[11px] text-text-muted font-semibold py-[4px] px-[9px] border-none bg-transparent cursor-pointer text-left [font-family:inherit]"
         >Show less</button>
       </div>
     </div>
