@@ -72,6 +72,27 @@ function latestScanTime(scans: CveScan[]): string {
   return formatArtifactTime(latest.scanned_at)
 }
 
+function cveDuration(since: string): string {
+  const diffMs = Date.now() - new Date(since).getTime()
+  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+  if (days < 1) return '< 1d'
+  if (days < 7) return `${days}d`
+  const weeks = Math.floor(days / 7)
+  const remainder = days % 7
+  return remainder === 0 ? `${weeks}w` : `${weeks}w ${remainder}d`
+}
+
+function worstCveDuration(scans: CveScan[]): string | null {
+  let oldest: Date | null = null
+  for (const s of scans) {
+    if (!s.cve_since) continue
+    const d = new Date(s.cve_since)
+    if (!oldest || d < oldest) oldest = d
+  }
+  if (!oldest) return null
+  return cveDuration(oldest.toISOString())
+}
+
 function baseOsSubtitle(baseOs: string): string {
   if (baseOs.startsWith('UBI')) return 'Red Hat Universal Base Image'
   if (baseOs.startsWith('Ubuntu')) return 'Ubuntu container base'
@@ -145,6 +166,9 @@ function toggleCvePanel(imageId: string) {
               <template v-for="badge in [cveBadgeInfo(image.cveScans)]" :key="'cve-badge'">
                 <span v-if="badge.text" class="status-badge" :class="badge.cls">{{ badge.text }}</span>
               </template>
+              <template v-for="dur in [worstCveDuration(image.cveScans)]" :key="'cve-age-badge'">
+                <span v-if="dur" class="status-badge cve-age">CVEs for {{ dur }}</span>
+              </template>
             </div>
 
             <!-- Registry -->
@@ -197,6 +221,9 @@ function toggleCvePanel(imageId: string) {
               <div v-if="openCvePanels.has(image.id)" class="cve-body">
                 <div v-for="scan in image.cveScans" :key="scan.arch" class="cve-arch-block">
                   <div class="cve-arch-label">{{ scan.arch }}</div>
+                  <div v-if="scan.cve_since" class="cve-arch-since">
+                    CVEs present for {{ cveDuration(scan.cve_since) }}
+                  </div>
                   <div v-if="(scan.findings ?? []).length === 0" class="cve-clean-line">No fixable CVEs found</div>
                   <div v-else class="cve-table-wrap">
                     <table class="cve-table">
@@ -609,5 +636,16 @@ function toggleCvePanel(imageId: string) {
 .status-badge.cve-vuln {
   background: var(--fail-tint, #fee2e2);
   color: var(--fail, #dc2626);
+}
+
+.status-badge.cve-age {
+  background: var(--warn-tint);
+  color: var(--warn);
+}
+
+.cve-arch-since {
+  font-size: 11px;
+  color: var(--warn);
+  margin-bottom: 6px;
 }
 </style>

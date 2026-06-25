@@ -40,6 +40,8 @@ export interface CveScan {
   scanned_at: string
   critical_count: number
   high_count: number
+  cve_since?: string    // ISO timestamp — present when arch currently has CVEs
+  clean_since?: string  // ISO timestamp — present when arch is currently clean
   findings?: CveFinding[]
 }
 
