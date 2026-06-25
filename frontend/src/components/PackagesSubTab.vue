@@ -165,9 +165,32 @@ function canExpand(row: PackageRow): boolean {
 
 <template>
   <!-- packages-subtab: flex gap-4 p-4 h-full min-h-0 -->
-  <div class="flex gap-4 p-4 h-full min-h-0">
+  <div class="flex flex-col lg:flex-row gap-4 p-4 h-full min-h-0">
+    <!-- Mobile repo dropdown (below lg) -->
+    <select
+      class="lg:hidden w-full font-mono text-[13px] text-text-secondary bg-bg-card border border-border rounded-lg px-3 py-2 cursor-pointer [appearance:auto]"
+      :value="selectedRepo?.obs ?? ''"
+      @change="emit('update:art-repo', ($event.target as HTMLSelectElement).value)"
+    >
+      <option value="" disabled>Select a build repo…</option>
+      <optgroup v-if="rhelRepos.length > 0" label="RHEL">
+        <option v-for="repo in rhelRepos" :key="repo.obs" :value="repo.obs">{{ repo.name }}</option>
+      </optgroup>
+      <optgroup v-if="opensuseRepos.length > 0" label="openSUSE">
+        <option v-for="repo in opensuseRepos" :key="repo.obs" :value="repo.obs">{{ repo.name }}</option>
+      </optgroup>
+      <optgroup v-if="ubuntuRepos.length > 0" label="Ubuntu">
+        <option v-for="repo in ubuntuRepos" :key="repo.obs" :value="repo.obs">{{ repo.name }}</option>
+      </optgroup>
+      <optgroup v-if="debianRepos.length > 0" label="Debian">
+        <option v-for="repo in debianRepos" :key="repo.obs" :value="repo.obs">{{ repo.name }}</option>
+      </optgroup>
+      <optgroup v-if="otherRepos.length > 0" label="Other">
+        <option v-for="repo in otherRepos" :key="repo.obs" :value="repo.obs">{{ repo.name }}</option>
+      </optgroup>
+    </select>
     <!-- Sidebar: w-[220px] shrink-0 -->
-    <div class="w-[220px] shrink-0 self-start bg-bg-card rounded-xl overflow-hidden flex flex-col">
+    <div class="hidden lg:flex w-[220px] shrink-0 self-start bg-bg-card rounded-xl overflow-hidden flex-col">
       <template v-if="rhelRepos.length > 0">
         <!-- group-label -->
         <div class="px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-text-muted border-t border-b border-border first:border-t-0">RHEL</div>
