@@ -192,26 +192,26 @@ const groupedAndBucketed = computed(() => {
 </script>
 
 <template>
-  <div style="position: sticky; top: 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; display: flex; flex-direction: column; max-height: calc(100vh - 40px); overflow: hidden;">
+  <div class="sticky top-4 bg-bg-card border border-border rounded-[14px] flex flex-col max-h-[calc(100vh-40px)] overflow-hidden">
     <!-- Header -->
-    <div style="padding: 15px 16px 13px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 11px;">
+    <div class="pt-[15px] px-4 pb-[13px] border-b border-border flex flex-col gap-[11px]">
       <!-- Title row -->
-      <div style="display: flex; align-items: center; gap: 9px;">
-        <h2 style="margin: 0; font-size: 15px; font-weight: 700; color: var(--text-primary);">Build events</h2>
-        <span style="font-size: 11.5px; color: var(--text-muted); font-family: var(--font-mono);">
+      <div class="flex items-center gap-[9px]">
+        <h2 class="m-0 text-[15px] font-bold text-text-primary">Build events</h2>
+        <span class="text-[11.5px] text-text-muted [font-family:var(--font-mono)]">
           <template v-if="groupedMode">{{ groupedEvents.length }} packages</template>
           <template v-else-if="activeFilterCount > 0">{{ filteredEvents.length }} of {{ events.length }}</template>
           <template v-else>{{ events.length }}</template>
           in window
         </span>
-        <span style="margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted);">
-          <span style="width: 6px; height: 6px; border-radius: 99px; background: var(--ok);"></span>live
+        <span class="ml-auto inline-flex items-center gap-1.5 text-[11px] text-text-muted">
+          <span class="w-1.5 h-1.5 rounded-full bg-ok"></span>live
         </span>
       </div>
       <!-- Time window + filter toggle row -->
-      <div style="display: flex; align-items: center; gap: 8px;">
+      <div class="flex items-center gap-2">
         <TimeWindowPicker
-          style="flex: 1;"
+          class="flex-1"
           :window-min="windowMin"
           :custom-from="customFrom"
           :custom-to="customTo"
@@ -221,12 +221,8 @@ const groupedAndBucketed = computed(() => {
         />
         <button
           @click="filterOpen = !filterOpen"
+          class="flex-shrink-0 text-[11.5px] font-bold py-1 px-[11px] rounded-[7px] border cursor-pointer [font-family:inherit] inline-flex items-center gap-1.5"
           :style="{
-            flexShrink: '0',
-            fontSize: '11.5px', fontWeight: '700', padding: '4px 11px',
-            borderRadius: '7px', border: '1px solid',
-            cursor: 'pointer', fontFamily: 'inherit',
-            display: 'inline-flex', alignItems: 'center', gap: '6px',
             background: (filterOpen || activeFilterCount > 0) ? 'var(--brand-purple-tint)' : 'var(--bg-card)',
             color: (filterOpen || activeFilterCount > 0) ? 'var(--brand-purple)' : 'var(--text-secondary)',
             borderColor: (filterOpen || activeFilterCount > 0) ? 'var(--brand-purple)' : 'var(--border)',
@@ -234,12 +230,8 @@ const groupedAndBucketed = computed(() => {
         >Filter{{ activeFilterCount > 0 ? ` · ${activeFilterCount}` : '' }}</button>
         <button
           @click="groupedMode = !groupedMode"
+          class="flex-shrink-0 text-[11.5px] font-bold py-1 px-[11px] rounded-[7px] border cursor-pointer [font-family:inherit] inline-flex items-center gap-1.5"
           :style="{
-            flexShrink: '0',
-            fontSize: '11.5px', fontWeight: '700', padding: '4px 11px',
-            borderRadius: '7px', border: '1px solid',
-            cursor: 'pointer', fontFamily: 'inherit',
-            display: 'inline-flex', alignItems: 'center', gap: '6px',
             background: groupedMode ? 'var(--brand-purple-tint)' : 'var(--bg-card)',
             color: groupedMode ? 'var(--brand-purple)' : 'var(--text-secondary)',
             borderColor: groupedMode ? 'var(--brand-purple)' : 'var(--border)',
@@ -249,36 +241,32 @@ const groupedAndBucketed = computed(() => {
       <!-- Collapsible filter panel -->
       <div
         v-if="filterOpen"
-        style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: var(--bg-card-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 11px; position: relative;"
+        class="flex items-center gap-2 flex-wrap bg-bg-card-2 border border-border rounded-[10px] py-[10px] px-[11px] relative"
       >
         <!-- Click-away overlay -->
-        <div v-if="openDropdown !== null" @click="openDropdown = null" style="position: fixed; inset: 0; z-index: 10;" />
+        <div v-if="openDropdown !== null" @click="openDropdown = null" class="fixed inset-0 z-10" />
 
         <!-- Event type multi-select dropdown -->
-        <div style="position: relative; z-index: 20;">
+        <div class="relative z-20">
           <button
             @click="toggleDropdown('types')"
+            class="py-[5px] px-[10px] rounded-[7px] [font-family:inherit] text-[11.5px] font-semibold cursor-pointer inline-flex items-center gap-[7px] whitespace-nowrap border"
             :style="{
-              padding: '5px 10px', borderRadius: '7px', fontFamily: 'inherit',
-              fontSize: '11.5px', fontWeight: '600', cursor: 'pointer',
-              display: 'inline-flex', alignItems: 'center', gap: '7px', whiteSpace: 'nowrap',
               background: (activeTypes.length > 0 || openDropdown === 'types') ? 'var(--brand-purple-tint)' : 'var(--bg-card)',
               color: (activeTypes.length > 0 || openDropdown === 'types') ? 'var(--brand-purple)' : 'var(--text-secondary)',
-              border: (activeTypes.length > 0 || openDropdown === 'types') ? '1px solid var(--brand-purple)' : '1px solid var(--border-strong)',
+              borderColor: (activeTypes.length > 0 || openDropdown === 'types') ? 'var(--brand-purple)' : 'var(--border-strong)',
             }"
           >{{ typeDropdownLabel }}</button>
           <div
             v-if="openDropdown === 'types'"
-            style="position: absolute; top: calc(100% + 5px); left: 0; min-width: 200px; background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: 9px; box-shadow: 0 10px 28px rgba(0,0,0,0.20); padding: 4px; display: flex; flex-direction: column; max-height: 260px; overflow-y: auto;"
+            class="absolute top-[calc(100%+5px)] left-0 min-w-[200px] bg-bg-card border border-border-strong rounded-[9px] shadow-[0_10px_28px_rgba(0,0,0,0.20)] p-1 flex flex-col max-h-[260px] overflow-y-auto"
           >
             <div
               v-for="type in availableTypes"
               :key="type"
               @click="toggleType(type)"
+              class="flex items-center gap-2 py-1.5 px-[9px] rounded-[6px] cursor-pointer text-[11.5px] font-semibold text-text-primary"
               :style="{
-                display: 'flex', alignItems: 'center', gap: '8px',
-                padding: '6px 9px', borderRadius: '6px', cursor: 'pointer',
-                fontSize: '11.5px', fontWeight: '600', color: 'var(--text-primary)',
                 background: activeTypes.includes(type) ? 'var(--bg-muted)' : 'transparent',
               }"
             >
@@ -296,30 +284,26 @@ const groupedAndBucketed = computed(() => {
         </div>
 
         <!-- Repo multi-select dropdown -->
-        <div style="position: relative; z-index: 20;">
+        <div class="relative z-20">
           <button
             @click="toggleDropdown('repos')"
+            class="py-[5px] px-[10px] rounded-[7px] [font-family:inherit] text-[11.5px] font-semibold cursor-pointer inline-flex items-center gap-[7px] whitespace-nowrap border"
             :style="{
-              padding: '5px 10px', borderRadius: '7px', fontFamily: 'inherit',
-              fontSize: '11.5px', fontWeight: '600', cursor: 'pointer',
-              display: 'inline-flex', alignItems: 'center', gap: '7px', whiteSpace: 'nowrap',
               background: (activeRepos.length > 0 || openDropdown === 'repos') ? 'var(--brand-purple-tint)' : 'var(--bg-card)',
               color: (activeRepos.length > 0 || openDropdown === 'repos') ? 'var(--brand-purple)' : 'var(--text-secondary)',
-              border: (activeRepos.length > 0 || openDropdown === 'repos') ? '1px solid var(--brand-purple)' : '1px solid var(--border-strong)',
+              borderColor: (activeRepos.length > 0 || openDropdown === 'repos') ? 'var(--brand-purple)' : 'var(--border-strong)',
             }"
           >{{ repoDropdownLabel }}</button>
           <div
             v-if="openDropdown === 'repos'"
-            style="position: absolute; top: calc(100% + 5px); left: 0; min-width: 180px; background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: 9px; box-shadow: 0 10px 28px rgba(0,0,0,0.20); padding: 4px; display: flex; flex-direction: column; max-height: 260px; overflow-y: auto;"
+            class="absolute top-[calc(100%+5px)] left-0 min-w-[180px] bg-bg-card border border-border-strong rounded-[9px] shadow-[0_10px_28px_rgba(0,0,0,0.20)] p-1 flex flex-col max-h-[260px] overflow-y-auto"
           >
             <div
               v-for="repo in availableRepos"
               :key="repo"
               @click="toggleRepo(repo)"
+              class="flex items-center gap-2 py-1.5 px-[9px] rounded-[6px] cursor-pointer text-[11.5px] font-semibold text-text-primary"
               :style="{
-                display: 'flex', alignItems: 'center', gap: '8px',
-                padding: '6px 9px', borderRadius: '6px', cursor: 'pointer',
-                fontSize: '11.5px', fontWeight: '600', color: 'var(--text-primary)',
                 background: activeRepos.includes(repo) ? 'var(--bg-muted)' : 'transparent',
               }"
             >
@@ -354,24 +338,24 @@ const groupedAndBucketed = computed(() => {
         <input
           v-model="filterPackage"
           placeholder="Package name…"
-          style="font-family: var(--font-mono); font-size: 11.5px; color: var(--text-primary); background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: 7px; padding: 5px 9px; flex: 1; min-width: 120px;"
+          class="[font-family:var(--font-mono)] text-[11.5px] text-text-primary bg-bg-card border border-border-strong rounded-[7px] py-[5px] px-[9px] flex-1 min-w-[120px]"
         />
 
         <!-- Clear button -->
         <button
           v-if="activeFilterCount > 0"
           @click="clearFilters"
-          style="background: none; border: none; cursor: pointer; font-family: inherit; font-size: 11px; font-weight: 700; color: var(--fail); padding: 4px 2px; white-space: nowrap;"
+          class="[background:none] border-0 cursor-pointer [font-family:inherit] text-[11px] font-bold text-fail py-1 px-0.5 whitespace-nowrap"
         >clear</button>
       </div>
     </div>
 
     <!-- Scrollable event list -->
-    <div style="overflow-y: auto; padding: 6px 4px 10px;">
+    <div class="overflow-y-auto pt-1.5 px-1 pb-[10px]">
       <!-- Grouped mode -->
       <template v-if="groupedMode">
         <div v-for="bucket in groupedAndBucketed" :key="bucket.bucket">
-          <div style="padding: 11px 14px 5px; font-size: 10.5px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em;">{{ bucket.bucket }}</div>
+          <div class="pt-[11px] px-[14px] pb-[5px] text-[10.5px] font-bold text-text-muted uppercase tracking-[0.06em]">{{ bucket.bucket }}</div>
           <PackageEventGroup
             v-for="group in bucket.groups"
             :key="group.key"
@@ -383,17 +367,17 @@ const groupedAndBucketed = computed(() => {
             @toggle="toggleGroup(group.key)"
           />
         </div>
-        <div v-if="groupedAndBucketed.length === 0" style="padding: 30px 16px; text-align: center; color: var(--text-muted); font-size: 13px;">
+        <div v-if="groupedAndBucketed.length === 0" class="py-[30px] px-4 text-center text-text-muted text-[13px]">
           No events in this time window
         </div>
       </template>
       <!-- Flat mode -->
       <template v-else>
         <div v-for="group in grouped" :key="group.bucket">
-          <div style="padding: 11px 14px 5px; font-size: 10.5px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em;">{{ group.bucket }}</div>
+          <div class="pt-[11px] px-[14px] pb-[5px] text-[10.5px] font-bold text-text-muted uppercase tracking-[0.06em]">{{ group.bucket }}</div>
           <EventRow v-for="event in group.events" :key="event.id" :event="event" />
         </div>
-        <div v-if="grouped.length === 0" style="padding: 30px 16px; text-align: center; color: var(--text-muted); font-size: 13px;">
+        <div v-if="grouped.length === 0" class="py-[30px] px-4 text-center text-text-muted text-[13px]">
           No events in this time window
         </div>
       </template>
