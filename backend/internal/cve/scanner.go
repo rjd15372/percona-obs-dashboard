@@ -297,13 +297,22 @@ func ImageBase(project, name string) string {
 	return "registry.opensuse.org/" + strings.ToLower(strings.ReplaceAll(project, ":", "/")) + "/images/" + name
 }
 
-// SucceededTargets filters targets to those with state "succeeded".
+// SucceededTargets returns targets with state "succeeded". For release containers
+// whose builds are intentionally disabled, all targets have state "disabled" —
+// in that case the disabled targets are returned as a fallback so the scanner
+// still knows which arches/repos to scan.
 func SucceededTargets(targets []model.Target) []model.Target {
-	var out []model.Target
+	var succeeded, disabled []model.Target
 	for _, t := range targets {
-		if t.State == "succeeded" {
-			out = append(out, t)
+		switch t.State {
+		case "succeeded":
+			succeeded = append(succeeded, t)
+		case "disabled":
+			disabled = append(disabled, t)
 		}
 	}
-	return out
+	if len(succeeded) > 0 {
+		return succeeded
+	}
+	return disabled
 }

@@ -186,6 +186,22 @@ func preservePackageEnrichment(prev, next *model.Package) {
 	if next.Trigger == nil {
 		next.Trigger = prev.Trigger
 	}
+	// For containers whose builds are intentionally disabled (e.g. release
+	// containers), the poller's buildPackage returns no active targets because
+	// skipState filters them out. Preserve whatever targets ContainerTagsTask
+	// stored so that arch info survives across poll ticks.
+	if len(next.Targets) == 0 && len(prev.Targets) > 0 {
+		allDisabled := true
+		for _, t := range prev.Targets {
+			if t.State != "disabled" {
+				allDisabled = false
+				break
+			}
+		}
+		if allDisabled {
+			next.Targets = prev.Targets
+		}
+	}
 	if len(prev.Tags) > 0 {
 		seen := make(map[string]bool, len(next.Tags)+len(prev.Tags))
 		for _, tag := range next.Tags {

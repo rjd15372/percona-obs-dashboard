@@ -251,10 +251,35 @@ func (t VersionTask) Run(ctx context.Context, client *Client, pkg *model.Package
 type ContainerTagsTask struct{}
 
 func (t ContainerTagsTask) Run(ctx context.Context, client *Client, pkg *model.Package) error {
-	if pkg.IsContainer == nil || !*pkg.IsContainer || len(pkg.Targets) == 0 {
+	if pkg.IsContainer == nil || !*pkg.IsContainer {
 		return nil
 	}
-	target := firstSucceededTarget(pkg.Targets)
+	targets := pkg.Targets
+	// Release containers have all builds intentionally disabled (to prevent
+	// spurious rebuilds). OBS returns only "disabled" statuses, which the poller
+	// filters out, leaving pkg.Targets empty. Fall back to querying OBS directly
+	// so we can still discover the available repos/arches and fetch container tags.
+	if len(targets) == 0 && pkg.IsRelease {
+		results, err := client.PackageBuildResults(ctx, pkg.Project, pkg.Name)
+		if err != nil {
+			slog.Warn("obs: container tags: query release targets", "pkg", pkg.Name, "err", err)
+			return nil
+		}
+		for _, r := range results {
+			if r.Repo == "images" {
+				targets = append(targets, model.Target{Repo: r.Repo, Arch: r.Arch, State: r.State})
+			}
+		}
+		if len(targets) > 0 {
+			// Persist the arch info so the CVE scanner has targets to iterate over
+			// even though the build is disabled.
+			pkg.Targets = targets
+		}
+	}
+	if len(targets) == 0 {
+		return nil
+	}
+	target := firstSucceededTarget(targets)
 	filename, err := client.PackageContainerInfoFilename(ctx, pkg.Project, target.Repo, target.Arch, pkg.Name)
 	if err != nil {
 		slog.Warn("obs: container info filename", "pkg", pkg.Name, "err", err)
@@ -275,6 +300,12 @@ func (t ContainerTagsTask) Run(ctx context.Context, client *Client, pkg *model.P
 		pkg.Version = tags[0]
 	}
 	pkg.ContainerTags = tags
+	// Promote release containers to published once their tags are confirmed.
+	// OBS marks release builds as "disabled" (builds are frozen after release),
+	// so they never naturally transition to "published" via the poller.
+	if pkg.IsRelease && pkg.RollupState != model.RollupPublished {
+		pkg.RollupState = model.RollupPublished
+	}
 	return nil
 }
 
