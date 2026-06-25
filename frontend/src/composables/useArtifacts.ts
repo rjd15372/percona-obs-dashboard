@@ -133,7 +133,7 @@ export function useArtifacts(
         const baseOs = deriveBaseOs(pkg.project)
         const published = pkg.targets?.some((t: Target) => t.published === true) ?? false
 
-        const registryPath = pkg.project.split(':').join('/')
+        const registryPath = pkg.project.toLowerCase().split(':').join('/')
         const registry = `registry.opensuse.org/${registryPath}/images/${pkg.name}`
 
         const pullTag = tags[tags.length - 1] ?? ''
