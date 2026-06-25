@@ -95,6 +95,129 @@ func TestAttachCveScans(t *testing.T) {
 	}
 }
 
+func TestUpsertCveScanStateMachine(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+
+	withVulns := func(arch string) model.CveScan {
+		return model.CveScan{Arch: arch, ImageRef: "r/img:1.0", ScannedAt: now, CriticalCount: 1}
+	}
+	clean := func(arch string) model.CveScan {
+		return model.CveScan{Arch: arch, ImageRef: "r/img:1.0", ScannedAt: now}
+	}
+
+	t.Run("no_row+vulns sets cve_since", func(t *testing.T) {
+		db, _ := store.Open(":memory:")
+		defer db.Close()
+		_ = store.UpsertCveScan(db, "p", "pkg", withVulns("x86_64"))
+		scans, _ := store.QueryCveScans(db, "p", "pkg")
+		if scans[0].CveSince == nil {
+			t.Fatal("expected cve_since to be set")
+		}
+		if scans[0].CleanSince != nil {
+			t.Fatal("expected clean_since to be nil")
+		}
+	})
+
+	t.Run("no_row+clean sets clean_since", func(t *testing.T) {
+		db, _ := store.Open(":memory:")
+		defer db.Close()
+		_ = store.UpsertCveScan(db, "p", "pkg", clean("x86_64"))
+		scans, _ := store.QueryCveScans(db, "p", "pkg")
+		if scans[0].CleanSince == nil {
+			t.Fatal("expected clean_since to be set")
+		}
+		if scans[0].CveSince != nil {
+			t.Fatal("expected cve_since to be nil")
+		}
+	})
+
+	t.Run("cve_since+vulns carries cve_since", func(t *testing.T) {
+		db, _ := store.Open(":memory:")
+		defer db.Close()
+		_ = store.UpsertCveScan(db, "p", "pkg", withVulns("x86_64"))
+		scans1, _ := store.QueryCveScans(db, "p", "pkg")
+		original := *scans1[0].CveSince
+
+		time.Sleep(10 * time.Millisecond)
+		_ = store.UpsertCveScan(db, "p", "pkg", withVulns("x86_64"))
+		scans2, _ := store.QueryCveScans(db, "p", "pkg")
+		if scans2[0].CveSince == nil || !scans2[0].CveSince.Equal(original) {
+			t.Fatalf("expected cve_since %v to be carried, got %v", original, scans2[0].CveSince)
+		}
+	})
+
+	t.Run("cve_since+clean flips to clean_since and inserts cve_periods", func(t *testing.T) {
+		db, _ := store.Open(":memory:")
+		defer db.Close()
+		_ = store.UpsertCveScan(db, "p", "pkg", withVulns("x86_64"))
+		_ = store.UpsertCveScan(db, "p", "pkg", clean("x86_64"))
+
+		scans, _ := store.QueryCveScans(db, "p", "pkg")
+		if scans[0].CveSince != nil {
+			t.Fatal("expected cve_since to be nil after clean")
+		}
+		if scans[0].CleanSince == nil {
+			t.Fatal("expected clean_since to be set")
+		}
+
+		periods, _ := store.QueryCvePeriods(db, "p", "pkg")
+		if len(periods) != 1 {
+			t.Fatalf("expected 1 cve_period, got %d", len(periods))
+		}
+		if periods[0].Arch != "x86_64" {
+			t.Errorf("unexpected arch %q", periods[0].Arch)
+		}
+	})
+
+	t.Run("clean_since+vulns flips to cve_since", func(t *testing.T) {
+		db, _ := store.Open(":memory:")
+		defer db.Close()
+		_ = store.UpsertCveScan(db, "p", "pkg", clean("x86_64"))
+		_ = store.UpsertCveScan(db, "p", "pkg", withVulns("x86_64"))
+		scans, _ := store.QueryCveScans(db, "p", "pkg")
+		if scans[0].CveSince == nil {
+			t.Fatal("expected cve_since to be set")
+		}
+		if scans[0].CleanSince != nil {
+			t.Fatal("expected clean_since to be nil")
+		}
+	})
+
+	t.Run("clean_since+clean carries clean_since", func(t *testing.T) {
+		db, _ := store.Open(":memory:")
+		defer db.Close()
+		_ = store.UpsertCveScan(db, "p", "pkg", clean("x86_64"))
+		scans1, _ := store.QueryCveScans(db, "p", "pkg")
+		original := *scans1[0].CleanSince
+
+		time.Sleep(10 * time.Millisecond)
+		_ = store.UpsertCveScan(db, "p", "pkg", clean("x86_64"))
+		scans2, _ := store.QueryCveScans(db, "p", "pkg")
+		if scans2[0].CleanSince == nil || !scans2[0].CleanSince.Equal(original) {
+			t.Fatalf("expected clean_since %v to be carried, got %v", original, scans2[0].CleanSince)
+		}
+	})
+
+	t.Run("QueryCvePeriods returns newest first", func(t *testing.T) {
+		db, _ := store.Open(":memory:")
+		defer db.Close()
+		// Episode 1: vuln → clean
+		_ = store.UpsertCveScan(db, "p", "pkg", withVulns("x86_64"))
+		_ = store.UpsertCveScan(db, "p", "pkg", clean("x86_64"))
+		// Episode 2: vuln → clean
+		_ = store.UpsertCveScan(db, "p", "pkg", withVulns("x86_64"))
+		_ = store.UpsertCveScan(db, "p", "pkg", clean("x86_64"))
+
+		periods, _ := store.QueryCvePeriods(db, "p", "pkg")
+		if len(periods) != 2 {
+			t.Fatalf("expected 2 periods, got %d", len(periods))
+		}
+		if !periods[0].CveSince.After(periods[1].CveSince) && !periods[0].CveSince.Equal(periods[1].CveSince) {
+			t.Error("periods not ordered newest-first")
+		}
+	})
+}
+
 func TestOpenSchemaHasCvePeriods(t *testing.T) {
 	db, err := store.Open(":memory:")
 	if err != nil {

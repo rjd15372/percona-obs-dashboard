@@ -9,27 +9,75 @@ import (
 	"github.com/percona/obs-dashboard/internal/model"
 )
 
-// UpsertCveScan inserts or replaces one arch scan result.
+// UpsertCveScan inserts or replaces one arch scan result, maintaining the
+// six-state CVE age transition machine in a single transaction.
 func UpsertCveScan(db *sql.DB, project, pkg string, scan model.CveScan) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var prevCveSince, prevCleanSince sql.NullString
+	tx.QueryRow(
+		`SELECT cve_since, clean_since FROM cve_scans WHERE project=? AND package=? AND arch=?`,
+		project, pkg, scan.Arch,
+	).Scan(&prevCveSince, &prevCleanSince)
+
+	hasVulns := scan.CriticalCount > 0 || scan.HighCount > 0
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+
+	var newCveSince, newCleanSince sql.NullString
+
+	if hasVulns {
+		if prevCveSince.Valid {
+			newCveSince = prevCveSince // carry forward
+		} else {
+			newCveSince = sql.NullString{String: now, Valid: true}
+		}
+		// newCleanSince stays zero-value (NULL)
+	} else {
+		if prevCveSince.Valid {
+			// CVE→clean transition: record completed episode
+			if _, err := tx.Exec(
+				`INSERT OR IGNORE INTO cve_periods (project, package, arch, cve_since, clean_since) VALUES (?, ?, ?, ?, ?)`,
+				project, pkg, scan.Arch, prevCveSince.String, now,
+			); err != nil {
+				return err
+			}
+		}
+		if prevCleanSince.Valid {
+			newCleanSince = prevCleanSince // carry forward
+		} else {
+			newCleanSince = sql.NullString{String: now, Valid: true}
+		}
+		// newCveSince stays zero-value (NULL)
+	}
+
 	findingsJSON, err := json.Marshal(scan.Findings)
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(`
+
+	_, err = tx.Exec(`
 		INSERT OR REPLACE INTO cve_scans
-			(project, package, arch, image_ref, scanned_at, critical_count, high_count, findings_json)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			(project, package, arch, image_ref, scanned_at, critical_count, high_count, findings_json, cve_since, clean_since)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		project, pkg, scan.Arch, scan.ImageRef,
 		scan.ScannedAt.UTC().Format(time.RFC3339),
 		scan.CriticalCount, scan.HighCount, string(findingsJSON),
+		newCveSince, newCleanSince,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // QueryCveScans returns all arch scan results for a package.
 func QueryCveScans(db *sql.DB, project, pkg string) ([]model.CveScan, error) {
 	rows, err := db.Query(`
-		SELECT arch, image_ref, scanned_at, critical_count, high_count, findings_json
+		SELECT arch, image_ref, scanned_at, critical_count, high_count, findings_json, cve_since, clean_since
 		FROM cve_scans WHERE project = ? AND package = ?`,
 		project, pkg,
 	)
@@ -65,7 +113,7 @@ func AttachCveScans(db *sql.DB, packages []*model.Package) error {
 		placeholders = append(placeholders, '?')
 	}
 	rows, err := db.Query(
-		`SELECT project, package, arch, image_ref, scanned_at, critical_count, high_count, findings_json
+		`SELECT project, package, arch, image_ref, scanned_at, critical_count, high_count, findings_json, cve_since, clean_since
 		 FROM cve_scans WHERE project || '/' || package IN (`+string(placeholders)+`)`,
 		keys...,
 	)
@@ -79,14 +127,26 @@ func AttachCveScans(db *sql.DB, packages []*model.Package) error {
 		var scan model.CveScan
 		var scannedAtStr string
 		var findingsJSON string
+		var cveSinceStr, cleanSinceStr sql.NullString
 		if err := rows.Scan(&project, &pkg, &scan.Arch, &scan.ImageRef,
-			&scannedAtStr, &scan.CriticalCount, &scan.HighCount, &findingsJSON); err != nil {
+			&scannedAtStr, &scan.CriticalCount, &scan.HighCount, &findingsJSON,
+			&cveSinceStr, &cleanSinceStr); err != nil {
 			return err
 		}
 		var parseErr error
 		scan.ScannedAt, parseErr = time.Parse(time.RFC3339, scannedAtStr)
 		if parseErr != nil {
 			return fmt.Errorf("cve_scans: invalid scanned_at %q: %w", scannedAtStr, parseErr)
+		}
+		if cveSinceStr.Valid {
+			if t, err := parseRFC3339(cveSinceStr.String); err == nil {
+				scan.CveSince = &t
+			}
+		}
+		if cleanSinceStr.Valid {
+			if t, err := parseRFC3339(cleanSinceStr.String); err == nil {
+				scan.CleanSince = &t
+			}
 		}
 		if findingsJSON != "" && findingsJSON != "[]" {
 			_ = json.Unmarshal([]byte(findingsJSON), &scan.Findings)
@@ -97,6 +157,35 @@ func AttachCveScans(db *sql.DB, packages []*model.Package) error {
 		}
 	}
 	return rows.Err()
+}
+
+// QueryCvePeriods returns completed CVE episodes for a package, newest first.
+func QueryCvePeriods(db *sql.DB, project, pkg string) ([]model.CvePeriod, error) {
+	rows, err := db.Query(`
+		SELECT arch, cve_since, clean_since
+		FROM cve_periods
+		WHERE project = ? AND package = ?
+		ORDER BY cve_since DESC`,
+		project, pkg,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var periods []model.CvePeriod
+	for rows.Next() {
+		var p model.CvePeriod
+		p.Project = project
+		p.Package = pkg
+		var cveSinceStr, cleanSinceStr string
+		if err := rows.Scan(&p.Arch, &cveSinceStr, &cleanSinceStr); err != nil {
+			return nil, err
+		}
+		p.CveSince, _ = parseRFC3339(cveSinceStr)
+		p.CleanSince, _ = parseRFC3339(cleanSinceStr)
+		periods = append(periods, p)
+	}
+	return periods, rows.Err()
 }
 
 // QueryPublishedContainers returns all confirmed container packages with rollup_state='published'.
@@ -125,19 +214,39 @@ func GetPackage(db *sql.DB, project, name string) (*model.Package, error) {
 	return pkgs[0], nil
 }
 
+// parseRFC3339 parses a time string in RFC3339 or RFC3339Nano format.
+func parseRFC3339(s string) (time.Time, error) {
+	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+		return t, nil
+	}
+	return time.Parse(time.RFC3339, s)
+}
+
 func scanCveRows(rows *sql.Rows) ([]model.CveScan, error) {
 	var scans []model.CveScan
 	for rows.Next() {
 		var scan model.CveScan
 		var scannedAtStr, findingsJSON string
+		var cveSinceStr, cleanSinceStr sql.NullString
 		if err := rows.Scan(&scan.Arch, &scan.ImageRef, &scannedAtStr,
-			&scan.CriticalCount, &scan.HighCount, &findingsJSON); err != nil {
+			&scan.CriticalCount, &scan.HighCount, &findingsJSON,
+			&cveSinceStr, &cleanSinceStr); err != nil {
 			return nil, err
 		}
 		var parseErr error
 		scan.ScannedAt, parseErr = time.Parse(time.RFC3339, scannedAtStr)
 		if parseErr != nil {
 			return nil, fmt.Errorf("cve_scans: invalid scanned_at %q: %w", scannedAtStr, parseErr)
+		}
+		if cveSinceStr.Valid {
+			if t, err := parseRFC3339(cveSinceStr.String); err == nil {
+				scan.CveSince = &t
+			}
+		}
+		if cleanSinceStr.Valid {
+			if t, err := parseRFC3339(cleanSinceStr.String); err == nil {
+				scan.CleanSince = &t
+			}
 		}
 		if findingsJSON != "" && findingsJSON != "[]" {
 			_ = json.Unmarshal([]byte(findingsJSON), &scan.Findings)
