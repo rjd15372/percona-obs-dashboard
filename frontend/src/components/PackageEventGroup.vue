@@ -32,11 +32,9 @@ function reasonCanExpand(event: Event): boolean {
 
 <template>
   <div
-    :style="{
-      borderRadius: '9px',
-      border: expanded ? '1px solid var(--border)' : '1px solid transparent',
-      background: expanded ? 'var(--bg-card-2)' : 'transparent',
-      marginBottom: expanded ? '4px' : '0',
+    :class="{
+      'rounded-[9px] border-[1px] border-border bg-bg-card-2 mb-1': expanded,
+      'rounded-[9px] border-[1px] border-transparent': !expanded,
     }"
   >
     <!-- Header row (always visible, click to toggle) -->
@@ -52,25 +50,25 @@ function reasonCanExpand(event: Event): boolean {
       ></span>
 
       <!-- Glyph -->
-      <div style="flex-shrink: 0;">
+      <div class="shrink-0">
         <span
-          style="width: 24px; height: 24px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800;"
+          class="flex h-6 w-6 items-center justify-center rounded-[7px] text-[12px] font-black"
           :style="{ color: GLYPH_COLOR[head.type], background: GLYPH_BG[head.type] }"
         >{{ GLYPH[head.type] }}</span>
       </div>
 
       <!-- Text -->
-      <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1;">
+      <div class="flex flex-col gap-[2px] min-w-0 flex-1">
         <!-- Row 1: package name + count badge + timestamp -->
-        <div style="display: flex; align-items: center; gap: 8px;">
+        <div class="flex items-center gap-2">
           <span class="package-name">{{ props.package }}</span>
-          <span style="font-size: 10.5px; font-weight: 600; color: var(--text-muted); background: var(--bg-muted, var(--blocked-tint)); border-radius: 5px; padding: 1px 6px; white-space: nowrap; flex-shrink: 0;">{{ events.length }} events</span>
-          <span :title="head.at" style="margin-left: auto; font-size: 10.5px; color: var(--text-muted); font-family: var(--font-mono); white-space: nowrap; flex-shrink: 0;">{{ timeStr(head.at) }}</span>
+          <span class="text-[10.5px] font-600 text-text-muted bg-bg-muted rounded-[5px] px-[6px] py-[1px] whitespace-nowrap shrink-0">{{ events.length }} events</span>
+          <span :title="head.at" class="ml-auto text-[10.5px] text-text-muted font-mono whitespace-nowrap shrink-0">{{ timeStr(head.at) }}</span>
         </div>
         <!-- Row 2: subtitle (most recent event's what, repo/arch stripped) -->
         <span class="event-title">{{ eventTitle(head) }}</span>
         <!-- Row 3: scope chip + version badge + project path -->
-        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 1px;">
+        <div class="flex items-center gap-[6px] flex-wrap mt-[1px]">
           <span
             v-for="tag in tags" :key="tag"
             :style="`font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 6px; border-radius: 5px; ${TAG_STYLE[tag] ?? 'background: var(--blocked-tint); color: var(--blocked);'}`"
@@ -90,31 +88,31 @@ function reasonCanExpand(event: Event): boolean {
               flexShrink: '0',
             }"
           >{{ displayVersion(head.version, tags.includes('container')) }}</span>
-          <code style="font-family: var(--font-mono); font-size: 10px; color: var(--text-muted);">{{ project }}</code>
+          <code class="font-mono text-[10px] text-text-muted">{{ project }}</code>
         </div>
       </div>
     </div>
 
     <!-- Expanded child event rows -->
-    <div v-if="expanded" style="padding: 0 14px 8px 14px;">
+    <div v-if="expanded" class="px-[14px] pb-2">
       <div v-for="(event, idx) in events" :key="event.id">
         <div class="child-event-row">
           <!-- Glyph + connector -->
-          <div style="display: flex; flex-direction: column; align-items: center; gap: 0; flex-shrink: 0; margin-left: 6px;">
+          <div class="flex flex-col items-center gap-0 shrink-0 ml-[6px]">
             <span
-              style="width: 20px; height: 20px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800;"
+              class="flex h-5 w-5 items-center justify-center rounded-[6px] text-[10px] font-black"
               :style="{ color: GLYPH_COLOR[event.type], background: GLYPH_BG[event.type] }"
             >{{ GLYPH[event.type] }}</span>
             <span
               v-if="idx < events.length - 1"
-              style="flex: 1; width: 2px; background: var(--border); margin-top: 2px; min-height: 8px; border-radius: 2px;"
+              class="flex-1 w-[2px] bg-border mt-[2px] min-h-2 rounded-[2px]"
             ></span>
           </div>
           <!-- Child text -->
           <div class="child-event-content">
-            <div style="display: flex; align-items: center; gap: 8px;">
+            <div class="flex items-center gap-2">
               <span class="child-event-title">{{ eventTitle(event) }}</span>
-              <span :title="event.at" style="margin-left: auto; font-size: 10.5px; color: var(--text-muted); font-family: var(--font-mono); white-space: nowrap; flex-shrink: 0;">{{ timeStr(event.at) }}</span>
+              <span :title="event.at" class="ml-auto text-[10.5px] text-text-muted font-mono whitespace-nowrap shrink-0">{{ timeStr(event.at) }}</span>
             </div>
             <div v-if="showReason(event)" class="reason-box">
               <div class="reason-text" :class="{ expanded: expandedReasons.has(event.id) }">{{ event.why }}</div>
@@ -137,7 +135,7 @@ function reasonCanExpand(event: Event): boolean {
                 alignSelf: 'flex-start',
               }"
             >{{ displayVersion(event.version, tags.includes('container')) }}</span>
-            <code v-if="event.repo" style="font-family: var(--font-mono); font-size: 11px; font-weight: 600; color: var(--text-secondary);">{{ event.repo }}/{{ event.arch }}</code>
+            <code v-if="event.repo" class="font-mono text-[11px] font-600 text-text-secondary">{{ event.repo }}/{{ event.arch }}</code>
           </div>
         </div>
       </div>
