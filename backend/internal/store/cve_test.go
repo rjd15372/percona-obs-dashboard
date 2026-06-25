@@ -94,3 +94,33 @@ func TestAttachCveScans(t *testing.T) {
 		t.Errorf("expected 0 scans for pkgB, got %d", len(pkgB.CveScans))
 	}
 }
+
+func TestOpenSchemaHasCvePeriods(t *testing.T) {
+	db, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	// cve_periods table exists
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='cve_periods'`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Error("cve_periods table missing")
+	}
+	// cve_scans has cve_since
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('cve_scans') WHERE name='cve_since'`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Error("cve_scans.cve_since column missing")
+	}
+	// cve_scans has clean_since
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('cve_scans') WHERE name='clean_since'`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Error("cve_scans.clean_since column missing")
+	}
+}

@@ -74,6 +74,15 @@ CREATE TABLE IF NOT EXISTS cve_scans (
     findings_json  TEXT     NOT NULL DEFAULT '[]',
     PRIMARY KEY (project, package, arch)
 );
+
+CREATE TABLE IF NOT EXISTS cve_periods (
+    project     TEXT     NOT NULL,
+    package     TEXT     NOT NULL,
+    arch        TEXT     NOT NULL,
+    cve_since   DATETIME NOT NULL,
+    clean_since DATETIME NOT NULL,
+    PRIMARY KEY (project, package, arch, cve_since)
+);
 `
 
 // columnExists reports whether table has a column named col.
@@ -104,6 +113,8 @@ func Open(path string) (*sql.DB, error) {
 	db.Exec(`ALTER TABLE packages ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'`)
 	db.Exec(`ALTER TABLE packages ADD COLUMN is_release INTEGER NOT NULL DEFAULT 0`)
 	db.Exec(`ALTER TABLE events ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'`)
+	db.Exec(`ALTER TABLE cve_scans ADD COLUMN cve_since DATETIME`)
+	db.Exec(`ALTER TABLE cve_scans ADD COLUMN clean_since DATETIME`)
 
 	// Data migration: backfill packages.tags and is_release from scope.
 	// Must run BEFORE migrateIsContainerNullable because that rebuilds the table
