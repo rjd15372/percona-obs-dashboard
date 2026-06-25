@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useMediaQuery } from '../composables/useMediaQuery'
 import TimeWindowPicker from './TimeWindowPicker.vue'
 import EventRow from './EventRow.vue'
 import PackageEventGroup from './PackageEventGroup.vue'
@@ -136,6 +137,10 @@ const grouped = computed(() => {
   return groups.filter(g => g.events.length > 0)
 })
 
+const isDesktop = useMediaQuery('(min-width: 1024px)')
+const expanded = ref(false)
+const showBody = computed(() => isDesktop.value || expanded.value)
+
 // ── Grouped mode ──────────────────────────────────────────────
 const groupedMode = ref(false)
 const expandedGroups = ref<Map<string, boolean>>(new Map())
@@ -192,11 +197,11 @@ const groupedAndBucketed = computed(() => {
 </script>
 
 <template>
-  <div class="sticky top-4 bg-bg-card border border-border rounded-[14px] flex flex-col max-h-[calc(100vh-40px)] overflow-hidden">
+  <div class="lg:sticky lg:top-4 bg-bg-card border border-border rounded-[14px] flex flex-col lg:max-h-[calc(100vh-40px)] overflow-hidden">
     <!-- Header -->
     <div class="pt-[15px] px-4 pb-[13px] border-b border-border flex flex-col gap-[11px]">
       <!-- Title row -->
-      <div class="flex items-center gap-[9px]">
+      <div class="flex items-center gap-[9px] lg:cursor-default cursor-pointer select-none" @click="!isDesktop && (expanded = !expanded)">
         <h2 class="m-0 text-[15px] font-bold text-text-primary">Build events</h2>
         <span class="text-[11.5px] text-text-muted [font-family:var(--font-mono)]">
           <template v-if="groupedMode">{{ groupedEvents.length }} packages</template>
@@ -207,9 +212,10 @@ const groupedAndBucketed = computed(() => {
         <span class="ml-auto inline-flex items-center gap-1.5 text-[11px] text-text-muted">
           <span class="w-1.5 h-1.5 rounded-full bg-ok"></span>live
         </span>
+        <span class="lg:hidden text-text-muted text-[11px] transition-transform" :class="{ 'rotate-90': expanded }">▶</span>
       </div>
       <!-- Time window + filter toggle row -->
-      <div class="flex items-center gap-2">
+      <div v-show="showBody" class="flex items-center gap-2">
         <TimeWindowPicker
           class="flex-1"
           :window-min="windowMin"
@@ -241,6 +247,7 @@ const groupedAndBucketed = computed(() => {
       <!-- Collapsible filter panel -->
       <div
         v-if="filterOpen"
+        v-show="showBody"
         class="flex items-center gap-2 flex-wrap bg-bg-card-2 border border-border rounded-[10px] py-[10px] px-[11px] relative"
       >
         <!-- Click-away overlay -->
@@ -351,7 +358,7 @@ const groupedAndBucketed = computed(() => {
     </div>
 
     <!-- Scrollable event list -->
-    <div class="overflow-y-auto pt-1.5 px-1 pb-[10px]">
+    <div v-show="showBody" class="overflow-y-auto pt-1.5 px-1 pb-[10px]">
       <!-- Grouped mode -->
       <template v-if="groupedMode">
         <div v-for="bucket in groupedAndBucketed" :key="bucket.bucket">
