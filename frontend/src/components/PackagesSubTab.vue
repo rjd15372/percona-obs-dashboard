@@ -452,6 +452,7 @@ function canExpand(row: PackageRow): boolean {
   background: var(--bg-muted);
   padding: 3px;
   border-radius: 9px;
+  border: 1px solid var(--border);
 }
 
 .arch-pill {
@@ -460,7 +461,7 @@ function canExpand(row: PackageRow): boolean {
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--text-muted);
 }
@@ -468,6 +469,7 @@ function canExpand(row: PackageRow): boolean {
 .arch-pill.active {
   background: var(--bg-card);
   color: var(--brand-purple);
+  border-color: var(--border-strong);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.10);
 }
 

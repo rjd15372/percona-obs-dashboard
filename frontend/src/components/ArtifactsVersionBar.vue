@@ -144,6 +144,7 @@ const emit = defineEmits<{
   background: var(--bg-muted);
   padding: 3px;
   border-radius: 9px;
+  border: 1px solid var(--border);
 }
 
 .seg-btn {
@@ -152,7 +153,7 @@ const emit = defineEmits<{
   font-weight: 500;
   padding: 4px 12px;
   border-radius: 7px;
-  border: none;
+  border: 1px solid transparent;
   font-size: 13px;
   cursor: pointer;
   font-family: inherit;
@@ -162,5 +163,7 @@ const emit = defineEmits<{
   background: var(--bg-card);
   color: var(--text-primary);
   font-weight: 700;
+  border-color: var(--border-strong);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 </style>

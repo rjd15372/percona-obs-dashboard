@@ -17,13 +17,33 @@ import { useUrlState } from './composables/useUrlState'
 const mainTab = ref<'board' | 'artifacts'>('board')
 
 // Theme
-const theme = ref<'light' | 'dark'>('light')
+// Default to the OS color scheme; a manual toggle is remembered in
+// localStorage and takes precedence over the OS from then on.
+const THEME_STORAGE_KEY = 'theme'
+const prefersDark = window.matchMedia('(prefers-color-scheme: dark)')
+
+function osTheme(): 'light' | 'dark' {
+  return prefersDark.matches ? 'dark' : 'light'
+}
+
+const storedTheme = localStorage.getItem(THEME_STORAGE_KEY)
+const theme = ref<'light' | 'dark'>(
+  storedTheme === 'light' || storedTheme === 'dark' ? storedTheme : osTheme(),
+)
+
 watch(theme, (val) => {
   document.documentElement.setAttribute('data-theme', val === 'dark' ? 'dark' : '')
 }, { immediate: true })
 
+// Follow live OS changes only while the user hasn't set a manual override.
+prefersDark.addEventListener('change', (e) => {
+  if (localStorage.getItem(THEME_STORAGE_KEY)) return
+  theme.value = e.matches ? 'dark' : 'light'
+})
+
 function toggleTheme() {
   theme.value = theme.value === 'light' ? 'dark' : 'light'
+  localStorage.setItem(THEME_STORAGE_KEY, theme.value)
 }
 
 // Context

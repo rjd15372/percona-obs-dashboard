@@ -53,10 +53,10 @@
   --info: #5B93C9;
   --info-tint: rgba(91, 147, 201, 0.16);
   --text-primary: #E8EDF4;
-  --text-secondary: #94A2B5;
-  --text-muted: #6B7888;
-  --border: rgba(255, 255, 255, 0.09);
-  --border-strong: rgba(255, 255, 255, 0.15);
+  --text-secondary: #B6C2D2;
+  --text-muted: #909EAF;
+  --border: rgba(255, 255, 255, 0.16);
+  --border-strong: rgba(255, 255, 255, 0.26);
   --tech-postgres: #3FAFCB;
   --tint-postgres: rgba(63, 175, 203, 0.16);
 }

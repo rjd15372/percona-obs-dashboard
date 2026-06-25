@@ -50,6 +50,7 @@ const emit = defineEmits<{
   background: var(--bg-muted);
   padding: 3px;
   border-radius: 11px;
+  border: 1px solid var(--border);
 }
 
 .tab-pill {
@@ -58,7 +59,7 @@ const emit = defineEmits<{
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--text-muted);
   transition: background 0.15s, color 0.15s, box-shadow 0.15s;
@@ -67,6 +68,7 @@ const emit = defineEmits<{
 .tab-pill.active {
   background: var(--bg-card);
   color: var(--brand-purple);
+  border-color: var(--border-strong);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 </style>
