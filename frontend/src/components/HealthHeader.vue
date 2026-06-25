@@ -41,41 +41,39 @@ function isPillActive(states: string[]): boolean {
 </script>
 
 <template>
-  <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 20px 22px; display: flex; align-items: center; gap: 30px; flex-wrap: wrap;">
+  <div class="bg-bg-card border border-border rounded-[16px] px-[22px] py-5 flex items-center gap-[30px] flex-wrap">
     <!-- Left: big count + progress bar -->
-    <div style="display: flex; flex-direction: column; gap: 8px; min-width: 300px; flex: 1;">
-      <div style="display: flex; align-items: baseline; gap: 10px;">
-        <span style="font-size: 40px; font-weight: 800; line-height: 1; letter-spacing: -0.02em; color: var(--text-primary);">
-          {{ okCount }}<span style="color: var(--text-muted); font-weight: 600;">/{{ total }}</span>
+    <div class="flex flex-col gap-2 min-w-[300px] flex-1">
+      <div class="flex items-baseline gap-[10px]">
+        <span class="text-[40px] font-extrabold leading-none tracking-[-0.02em] text-text-primary">
+          {{ okCount }}<span class="text-text-muted font-semibold">/{{ total }}</span>
         </span>
-        <span style="font-size: 15px; color: var(--text-secondary); font-weight: 600;">packages built</span>
+        <span class="text-[15px] text-text-secondary font-semibold">packages built</span>
       </div>
-      <div style="height: 9px; border-radius: 99px; background: var(--bg-muted); overflow: hidden;">
-        <div :style="{ height: '100%', background: allGreen ? 'var(--ok)' : activeColor, borderRadius: '99px', width: `${progressWidth}%`, transition: 'width 0.3s ease' }"></div>
+      <div class="h-[9px] rounded-full bg-bg-muted overflow-hidden">
+        <div class="h-full rounded-full transition-all duration-300" :style="{ background: allGreen ? 'var(--ok)' : activeColor, width: `${progressWidth}%` }"></div>
       </div>
-      <span style="font-size: 12px; color: var(--text-muted);">{{ okTargets }}/{{ totalTargets }} build targets green</span>
+      <span class="text-[12px] text-text-muted">{{ okTargets }}/{{ totalTargets }} build targets green</span>
     </div>
 
     <!-- Right: attention label + pills -->
-    <div v-if="total > 0" style="display: flex; flex-direction: column; gap: 9px;">
-      <span v-if="allGreen" style="font-size: 13px; font-weight: 700; color: var(--ok);">✓ All packages green</span>
-      <span v-else :style="{ fontSize: '13px', fontWeight: '700', color: activeColor }">{{ attentionCount }} package{{ attentionCount !== 1 ? 's' : '' }} need attention</span>
-      <div style="display: flex; gap: 8px; flex-wrap: wrap; max-width: 520px;">
+    <div v-if="total > 0" class="flex flex-col gap-[9px]">
+      <span v-if="allGreen" class="text-[13px] font-bold text-ok">✓ All packages green</span>
+      <span v-else class="text-[13px] font-bold" :style="{ color: activeColor }">{{ attentionCount }} package{{ attentionCount !== 1 ? 's' : '' }} need attention</span>
+      <div class="flex gap-2 flex-wrap max-w-[520px]">
         <span
           v-for="b in breakdown"
           :key="b.label"
           @click="emit('toggle-spotlight', b.states)"
+          class="inline-flex items-center gap-[6px] text-[11.5px] font-bold px-[10px] py-1 rounded-[8px] cursor-pointer transition-all duration-[120ms]"
           :style="{
-            display: 'inline-flex', alignItems: 'center', gap: '6px',
-            fontSize: '11.5px', fontWeight: '700', padding: '4px 10px', borderRadius: '8px',
-            background: b.bg, color: b.color,
-            cursor: 'pointer',
+            background: b.bg,
+            color: b.color,
             outline: isPillActive(b.states) ? `2px solid ${b.color}` : '2px solid transparent',
             outlineOffset: '1px',
-            transition: 'outline 0.12s',
           }"
         >
-          <span :style="{ width: '8px', height: '8px', borderRadius: '2px', background: b.color, flexShrink: '0' }"></span>
+          <span class="w-2 h-2 rounded-[2px] flex-shrink-0" :style="{ background: b.color }"></span>
           {{ b.count }} {{ b.label }}
         </span>
       </div>
