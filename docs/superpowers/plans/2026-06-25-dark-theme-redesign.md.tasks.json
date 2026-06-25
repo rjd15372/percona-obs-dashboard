@@ -4,9 +4,9 @@
     {
       "id": 6,
       "subject": "Task 1: Swap dark-mode palette values",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** Replace all 24 variable values in the `[data-theme=\"dark\"]` block of `theme.css` with the approved slate/cool palette, leaving the light `:root` block untouched.\n\n**Files:**\n- Modify: `frontend/src/assets/theme.css:36-62`\n\n**Acceptance Criteria:**\n- All 24 dark-block variables match approved values\n- Light :root block (lines 6-33) unchanged\n- No old purple/neon dark values remain\n\n**Verify:** `grep -nE '0B0912|181426|4A9EFF|EDE8FD|FF6166|FF5E7A' frontend/src/assets/theme.css` → no output; `grep -nE '#11161D|#3FAFCB|#E8EDF4' frontend/src/assets/theme.css` → matches.\n\n```json:metadata\n{\"files\": [\"frontend/src/assets/theme.css\"], \"verifyCommand\": \"grep -nE '0B0912|181426|4A9EFF|EDE8FD|FF6166|FF5E7A' frontend/src/assets/theme.css\", \"acceptanceCriteria\": [\"All 24 dark-block variables match approved values\", \"Light :root block unchanged\", \"No old purple/neon dark values remain\"], \"modelTier\": \"mechanical\"}\n```"
     }
   ],
-  "lastUpdated": "2026-06-25"
+  "lastUpdated": "2026-06-25T00:00:00Z"
 }
