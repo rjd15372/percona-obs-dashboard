@@ -154,6 +154,13 @@ function stateClass(state: string): string {
   return 'status-other'
 }
 
+// A row is expandable/downloadable when a built artifact is available:
+// either the build succeeded, or a new build is in progress while the
+// previous build's binaries are still downloadable (isRebuilding).
+function canExpand(row: PackageRow): boolean {
+  return row.state === 'succeeded' || !!row.isRebuilding
+}
+
 </script>
 
 <template>
@@ -280,17 +287,21 @@ function stateClass(state: string): string {
             <button
               class="pkg-row"
               :class="{ expanded: expanded[rowKey(row)] }"
-              @click="row.state === 'succeeded' ? toggleRow(row) : undefined"
-              :disabled="row.state !== 'succeeded'"
-              :title="row.state !== 'succeeded' ? 'Package is not in succeeded state' : 'Click to show binaries'"
+              @click="canExpand(row) ? toggleRow(row) : undefined"
+              :disabled="!canExpand(row)"
+              :title="canExpand(row) ? 'Click to show binaries' : 'Package is not in succeeded state'"
             >
-              <span class="expand-glyph">{{ row.state === 'succeeded' ? (expanded[rowKey(row)] ? '▼' : '▶') : '' }}</span>
+              <span class="expand-glyph">{{ canExpand(row) ? (expanded[rowKey(row)] ? '▼' : '▶') : '' }}</span>
               <code class="pkg-name">{{ row.name }}</code>
               <code v-if="row.version" class="pkg-version">{{ row.version }}</code>
               <span v-if="row.builtAt" class="pkg-built-at">{{ formatArtifactTime(row.builtAt) }}</span>
-              <span v-if="row.isRebuilding" class="status-badge status-rebuilding">Rebuilding</span>
-              <span class="status-badge" :class="row.published ? 'status-published' : stateClass(row.state)">
-                {{ row.published ? 'Published' : stateLabel(row.state) }}
+              <span
+                v-if="row.isRebuilding"
+                class="status-badge status-stale-warning"
+                title="A new build is in progress — these files may be replaced soon."
+              >Rebuilding — files may be replaced</span>
+              <span v-else-if="row.state !== 'succeeded'" class="status-badge" :class="stateClass(row.state)">
+                {{ stateLabel(row.state) }}
               </span>
             </button>
 
@@ -653,20 +664,20 @@ function stateClass(state: string): string {
   white-space: nowrap;
 }
 
-.status-published {
-  background: var(--success-tint, #d1fae5);
-  color: var(--success, #16a34a);
-}
-
 .status-built {
   background: var(--success-tint, #d1fae5);
   color: var(--success, #16a34a);
 }
 
-.status-building,
-.status-rebuilding {
+.status-building {
   background: #fef9c3;
   color: #a16207;
+}
+
+.status-stale-warning {
+  background: var(--warn-tint, #fef9c3);
+  color: var(--warn, #a16207);
+  cursor: help;
 }
 
 .status-failed {
