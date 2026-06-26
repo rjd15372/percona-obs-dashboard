@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="96 100 320 320" width="100%" height="100%">
+  <defs>
+    <linearGradient id="perconaGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00D2C4" />
+      <stop offset="100%" stop-color="#007A87" />
+    </linearGradient>
+    
+    <filter id="lightThemeShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#0F172A" flood-opacity="0.18" />
+    </filter>
+  </defs>
+
+  <g filter="url(#lightThemeShadow)" transform="translate(256, 260)">
+    <path d="M-140,40 L0,110 L140,40 L0,-30 Z" fill="#005B66" opacity="0.45" />
+    
+    <path d="M-140,40 L-140,10 L0,-60 L0,10 Z" fill="#007A87" opacity="0.35" />
+    <path d="M140,40 L140,10 L0,-60 L0,10 Z" fill="#00D2C4" opacity="0.15" />
+
+    <path d="M0,-120 L110,-65 L0,-10 L-110,-65 Z" fill="url(#perconaGrad)" />
+    <path d="M-110,-65 L0,-10 L0,100 L-110,45 Z" fill="#00A398" />
+    <path d="M0,-10 L110,-65 L110,45 L0,100 Z" fill="#007A87" />
+    
+    <ellipse cx="0" cy="-65" rx="28" ry="14" fill="#FFFFFF" opacity="0.35" />
+    <circle cx="0" cy="-65" r="7" fill="#FFFFFF" />
+  </g>
+</svg>
