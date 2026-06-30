@@ -4,9 +4,9 @@
     {
       "id": 79,
       "subject": "Task 1: One context per PR (backend + frontend)",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** Switch PR contexts from per-(PR, subproject) to per-PR across the backend routes/queries and the frontend derivations, so a common-only PR is selectable and shows its packages.\n\n**Files:**\n- Modify: backend/internal/store/packages.go\n- Modify: backend/internal/store/events.go\n- Modify: backend/internal/store/packages_test.go\n- Modify: backend/internal/store/events_test.go\n- Modify: backend/internal/api/handlers.go\n- Modify: backend/internal/api/server.go\n- Modify: frontend/src/App.vue\n\n**Acceptance Criteria:**\n- three PR store funcs match whole-PR prefix, no subproject/version params or common union\n- store tests: pr-104 covers all subprojects incl other+common and excludes other PRs; common-only pr-200 returns its packages\n- PR routes /api/pr/{pr}/{version}/{packages,events,repos}, handlers resolve only pr\n- contexts+artifactsContexts emit one context per PR (label PR #N, prefix isv:percona:PR:pr-N, apiBase /api/pr/pr-N), common skip removed\n- go test, go build, npm run build all pass\n\n**Verify:** cd backend && go test ./internal/... && go build ./... && cd ../frontend && npm run build\n\n```json:metadata\n{\"files\": [\"backend/internal/store/packages.go\", \"backend/internal/store/events.go\", \"backend/internal/store/packages_test.go\", \"backend/internal/store/events_test.go\", \"backend/internal/api/handlers.go\", \"backend/internal/api/server.go\", \"frontend/src/App.vue\"], \"verifyCommand\": \"cd backend && go test ./internal/... && go build ./... && cd ../frontend && npm run build\", \"acceptanceCriteria\": [\"three PR store funcs match whole-PR prefix, no subproject/version params or common union\", \"store tests: pr-104 covers all subprojects incl other+common and excludes other PRs; common-only pr-200 returns its packages\", \"PR routes /api/pr/{pr}/{version}/{packages,events,repos}, handlers resolve only pr\", \"contexts+artifactsContexts emit one context per PR (label PR #N, prefix isv:percona:PR:pr-N, apiBase /api/pr/pr-N), common skip removed\", \"go test, go build, npm run build all pass\"], \"modelTier\": \"standard\"}\n```"
     }
   ],
-  "lastUpdated": "2026-06-30T00:00:00Z"
+  "lastUpdated": "2026-06-30T11:45:00Z"
 }
