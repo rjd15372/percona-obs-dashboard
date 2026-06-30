@@ -476,18 +476,16 @@ func QueryPackages(db *sql.DB, projectPrefix string) ([]*model.Package, error) {
 	return scanPackages(db, rows)
 }
 
-// QueryPRBuildPackages returns packages for a PR context: the selected
-// subproject subtree plus the PR-local common subtree.
-func QueryPRBuildPackages(db *sql.DB, root, pr, subproject string) ([]*model.Package, error) {
-	sp := root + ":PR:" + pr + ":" + subproject
-	cp := root + ":PR:" + pr + ":common"
+// QueryPRBuildPackages returns all packages under a PR (every subproject), matching
+// the whole-PR project prefix root:PR:<pr>.
+func QueryPRBuildPackages(db *sql.DB, root, pr string) ([]*model.Package, error) {
+	p := root + ":PR:" + pr
 	rows, err := db.Query(`SELECT`+packageSelectCols+`
 		FROM packages
 		WHERE is_release = 0
-		  AND (  (project = ? OR project LIKE ? || ':%')
-		      OR (project = ? OR project LIKE ? || ':%') )
+		  AND (project = ? OR project LIKE ? || ':%')
 		ORDER BY project, name`,
-		sp, sp, cp, cp,
+		p, p,
 	)
 	if err != nil {
 		return nil, err
@@ -534,17 +532,15 @@ func QueryBuildPackages(db *sql.DB, root, product, version string) ([]*model.Pac
 	return scanPackages(db, rows)
 }
 
-// QueryPRDistinctRepos returns package repos for a PR version subtree plus the
-// PR-local common subtree.
-func QueryPRDistinctRepos(db *sql.DB, root, pr, subproject, version string) ([]string, error) {
-	vp := root + ":PR:" + pr + ":" + subproject + ":" + version
-	cp := root + ":PR:" + pr + ":common"
+// QueryPRDistinctRepos returns the distinct build repos across all of a PR's
+// packages (every subproject), matching the whole-PR project prefix root:PR:<pr>.
+func QueryPRDistinctRepos(db *sql.DB, root, pr string) ([]string, error) {
+	p := root + ":PR:" + pr
 	rows, err := db.Query(
 		`SELECT targets_json FROM packages
 		 WHERE (is_container IS NULL OR is_container = 0)
-		   AND (  (project = ? OR project LIKE ? || ':%')
-		       OR (project = ? OR project LIKE ? || ':%') )`,
-		vp, vp, cp, cp,
+		   AND (project = ? OR project LIKE ? || ':%')`,
+		p, p,
 	)
 	if err != nil {
 		return nil, err

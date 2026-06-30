@@ -62,22 +62,20 @@ func QueryEvents(db *sql.DB, projectPrefix string, from, to time.Time) ([]*model
 	return events, rows.Err()
 }
 
-// QueryPRBuildEvents returns events for a PR context: the selected subproject
-// subtree plus the PR-local common subtree.
-func QueryPRBuildEvents(db *sql.DB, root, pr, subproject string, from, to time.Time) ([]*model.Event, error) {
-	sp := root + ":PR:" + pr + ":" + subproject
-	cp := root + ":PR:" + pr + ":common"
+// QueryPRBuildEvents returns events for all packages under a PR (every subproject),
+// matching the whole-PR project prefix root:PR:<pr>.
+func QueryPRBuildEvents(db *sql.DB, root, pr string, from, to time.Time) ([]*model.Event, error) {
+	p := root + ":PR:" + pr
 	rows, err := db.Query(`
 		SELECT id, type, tags, project, package,
 		       COALESCE(repo,''), COALESCE(arch,''),
 		       what, why, url, at, COALESCE(version,'')
 		FROM events
 		WHERE at >= ? AND at <= ?
-		  AND (  (project = ? OR project LIKE ? || ':%')
-		      OR (project = ? OR project LIKE ? || ':%') )
+		  AND (project = ? OR project LIKE ? || ':%')
 		ORDER BY at DESC
 		LIMIT 500`,
-		from, to, sp, sp, cp, cp,
+		from, to, p, p,
 	)
 	if err != nil {
 		return nil, err

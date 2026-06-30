@@ -99,7 +99,7 @@ watch(availableVersions, (vers) => {
   }
 })
 
-// Derive available contexts from PR groups data
+// Derive available contexts from PR groups data — one context per PR (all subprojects).
 const contexts = computed<Context[]>(() => {
   const seen = new Set<string>()
   const prContexts: Context[] = []
@@ -108,18 +108,15 @@ const contexts = computed<Context[]>(() => {
     for (const pkg of group.packages) {
       const parts = pkg.project.split(':')
       const prIdx = parts.findIndex(p => p.toLowerCase() === 'pr')
-      if (prIdx < 0 || prIdx + 2 >= parts.length) continue
-      const prSegment = parts[prIdx + 1]   // "pr-92"
-      const subproject = parts[prIdx + 2]  // "ppg"
-      if (subproject.toLowerCase() === 'common') continue
-      const key = `${prSegment}:${subproject}`
-      if (seen.has(key)) continue
-      seen.add(key)
+      if (prIdx < 0 || prIdx + 1 >= parts.length) continue
+      const prSegment = parts[prIdx + 1] // "pr-92"
+      if (seen.has(prSegment)) continue
+      seen.add(prSegment)
       const prNum = prSegment.replace(/^pr-/i, '')
       prContexts.push({
-        label: `PR #${prNum} · ${subproject}`,
-        apiBase: `/api/pr/${prSegment}/${subproject}`,
-        prefix: `isv:percona:PR:${prSegment}:${subproject}`,
+        label: `PR #${prNum}`,
+        apiBase: `/api/pr/${prSegment}`,
+        prefix: `isv:percona:PR:${prSegment}`,
       })
     }
   }
@@ -138,7 +135,7 @@ const artifactsVersion = ref('')
 const artifactsTab = ref<'packages' | 'containers'>('packages')
 const artifactsContext = ref<Context>(PPG_CONTEXT)
 
-// Artifacts contexts: PPG + Releases + PR contexts
+// Artifacts contexts: PPG + Releases + one context per PR (all subprojects)
 const artifactsContexts = computed<Context[]>(() => {
   const seen = new Set<string>()
   const prContexts: Context[] = []
@@ -147,18 +144,15 @@ const artifactsContexts = computed<Context[]>(() => {
     for (const pkg of group.packages) {
       const parts = pkg.project.split(':')
       const prIdx = parts.findIndex(p => p.toLowerCase() === 'pr')
-      if (prIdx < 0 || prIdx + 2 >= parts.length) continue
+      if (prIdx < 0 || prIdx + 1 >= parts.length) continue
       const prSegment = parts[prIdx + 1]
-      const subproject = parts[prIdx + 2]
-      if (subproject.toLowerCase() === 'common') continue
-      const key = `${prSegment}:${subproject}`
-      if (seen.has(key)) continue
-      seen.add(key)
+      if (seen.has(prSegment)) continue
+      seen.add(prSegment)
       const prNum = prSegment.replace(/^pr-/i, '')
       prContexts.push({
-        label: `PR #${prNum} · ${subproject}`,
-        apiBase: `/api/pr/${prSegment}/${subproject}`,
-        prefix: `isv:percona:PR:${prSegment}:${subproject}`,
+        label: `PR #${prNum}`,
+        apiBase: `/api/pr/${prSegment}`,
+        prefix: `isv:percona:PR:${prSegment}`,
       })
     }
   }

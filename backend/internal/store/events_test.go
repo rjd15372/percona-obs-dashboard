@@ -129,7 +129,7 @@ func TestEventVersionRoundtrip(t *testing.T) {
 	}
 }
 
-func TestQueryPRBuildEventsIncludesPRCommon(t *testing.T) {
+func TestQueryPRBuildEventsCoversWholePR(t *testing.T) {
 	db, err := Open(":memory:")
 	if err != nil {
 		t.Fatal(err)
@@ -139,33 +139,24 @@ func TestQueryPRBuildEventsIncludesPRCommon(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	events := []*model.Event{
 		{
-			ID:      "evt_pr_ppg",
-			Type:    model.EventFailed,
-			Tags:    []string{"ppg", "pr"},
-			Project: "isv:percona:PR:pr-104:ppg:17",
-			Package: "pg_tde",
-			What:    "build failed",
-			URL:     "https://build.opensuse.org/package/show/isv:percona:PR:pr-104:ppg:17/pg_tde",
-			At:      now,
+			ID: "evt_pr_ppg", Type: model.EventFailed, Tags: []string{"ppg", "pr"},
+			Project: "isv:percona:PR:pr-104:ppg:17", Package: "pg_tde",
+			What: "build failed", URL: "https://build.opensuse.org/x", At: now,
 		},
 		{
-			ID:      "evt_pr_common",
-			Type:    model.EventSucceeded,
-			Tags:    []string{"common", "pr"},
-			Project: "isv:percona:PR:pr-104:common",
-			Package: "common_pkg",
-			What:    "build succeeded",
-			URL:     "https://build.opensuse.org/package/show/isv:percona:PR:pr-104:common/common_pkg",
-			At:      now.Add(-time.Second),
+			ID: "evt_pr_common", Type: model.EventSucceeded, Tags: []string{"common", "pr"},
+			Project: "isv:percona:PR:pr-104:common", Package: "common_pkg",
+			What: "build succeeded", URL: "https://build.opensuse.org/x", At: now.Add(-time.Second),
 		},
 		{
-			ID:      "evt_other_subproject",
-			Type:    model.EventFailed,
-			Project: "isv:percona:PR:pr-104:other:17",
-			Package: "other_pkg",
-			What:    "build failed",
-			URL:     "https://build.opensuse.org/package/show/isv:percona:PR:pr-104:other:17/other_pkg",
-			At:      now,
+			ID: "evt_other_subproject", Type: model.EventFailed,
+			Project: "isv:percona:PR:pr-104:other:17", Package: "other_pkg",
+			What: "build failed", URL: "https://build.opensuse.org/x", At: now,
+		},
+		{
+			ID: "evt_other_pr", Type: model.EventFailed,
+			Project: "isv:percona:PR:pr-105:common", Package: "other_pr_pkg",
+			What: "build failed", URL: "https://build.opensuse.org/x", At: now,
 		},
 	}
 	for _, evt := range events {
@@ -174,19 +165,20 @@ func TestQueryPRBuildEventsIncludesPRCommon(t *testing.T) {
 		}
 	}
 
-	got, err := QueryPRBuildEvents(db, "isv:percona", "pr-104", "ppg", now.Add(-time.Minute), now.Add(time.Minute))
+	got, err := QueryPRBuildEvents(db, "isv:percona", "pr-104", now.Add(-time.Minute), now.Add(time.Minute))
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	ids := make(map[string]bool)
 	for _, evt := range got {
 		ids[evt.ID] = true
 	}
-	if !ids["evt_pr_ppg"] || !ids["evt_pr_common"] {
-		t.Fatalf("expected PR ppg and common events, got %v", ids)
+	for _, want := range []string{"evt_pr_ppg", "evt_pr_common", "evt_other_subproject"} {
+		if !ids[want] {
+			t.Fatalf("missing expected event %q", want)
+		}
 	}
-	if ids["evt_other_subproject"] {
-		t.Fatalf("unexpected event from another subproject: %v", ids)
+	if ids["evt_other_pr"] {
+		t.Fatalf("unexpected event from another PR")
 	}
 }

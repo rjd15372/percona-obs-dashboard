@@ -148,7 +148,7 @@ func TestEventsHandler_InvalidWindow(t *testing.T) {
 
 func TestPRContextPackagesHandler_EmptyDB(t *testing.T) {
 	router := setupTestServer(t)
-	req := httptest.NewRequest(http.MethodGet, "/api/pr/pr-92/ppg/17/packages", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/pr/pr-92/17/packages", nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -169,7 +169,7 @@ func TestPRContextPackagesHandler_EmptyDB(t *testing.T) {
 
 func TestPRContextEventsHandler_EmptyDB(t *testing.T) {
 	router := setupTestServer(t)
-	req := httptest.NewRequest(http.MethodGet, "/api/pr/pr-92/ppg/17/events", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/pr/pr-92/17/events", nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -190,7 +190,7 @@ func TestPRContextEventsHandler_EmptyDB(t *testing.T) {
 
 func TestPRContextEventsHandler_WindowParam(t *testing.T) {
 	router := setupTestServer(t)
-	req := httptest.NewRequest(http.MethodGet, "/api/pr/pr-92/ppg/17/events?window=60", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/pr/pr-92/17/events?window=60", nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -204,7 +204,7 @@ func TestPRContextEventsHandler_WindowParam(t *testing.T) {
 
 func TestPRContextEventsHandler_InvalidWindow(t *testing.T) {
 	router := setupTestServer(t)
-	req := httptest.NewRequest(http.MethodGet, "/api/pr/pr-92/ppg/17/events?window=bad", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/pr/pr-92/17/events?window=bad", nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
@@ -245,7 +245,7 @@ func TestReleasesReposHandler_EmptyDB(t *testing.T) {
 
 func TestPRReposHandler_EmptyDB(t *testing.T) {
 	router := setupTestServer(t)
-	req := httptest.NewRequest(http.MethodGet, "/api/pr/pr-92/ppg/17/repos", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/pr/pr-92/17/repos", nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {

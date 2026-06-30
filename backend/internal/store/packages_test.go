@@ -281,7 +281,7 @@ func TestQueryBuildPackages(t *testing.T) {
 	}
 }
 
-func TestQueryPRBuildPackagesIncludesPRCommon(t *testing.T) {
+func TestQueryPRBuildPackagesCoversWholePR(t *testing.T) {
 	db, err := Open(":memory:")
 	if err != nil {
 		t.Fatal(err)
@@ -300,31 +300,41 @@ func TestQueryPRBuildPackagesIncludesPRCommon(t *testing.T) {
 	insert("isv:percona:PR:pr-104:ppg:17:containers:ubi9", "pg_container")
 	insert("isv:percona:PR:pr-104:common", "common_pkg")
 	insert("isv:percona:PR:pr-104:common:deps", "common_dep")
-	insert("isv:percona:PR:pr-104:other:17", "other_pkg")
-	insert("isv:percona:PR:pr-105:common", "other_pr_common")
+	insert("isv:percona:PR:pr-104:other:17", "other_pkg")            // now part of the PR
+	insert("isv:percona:PR:pr-105:common", "other_pr_common")        // different PR
+	insert("isv:percona:PR:pr-200:common:deps:build", "common_only") // common-only PR
+	insert("isv:percona:PR:pr-10:common", "pr10_pkg")                // digit-prefix boundary
 
-	pkgs, err := QueryPRBuildPackages(db, "isv:percona", "pr-104", "ppg")
+	pkgs, err := QueryPRBuildPackages(db, "isv:percona", "pr-104")
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	names := make(map[string]bool)
 	for _, p := range pkgs {
 		names[p.Name] = true
 	}
-	for _, want := range []string{"pg_tde", "pg_container", "common_pkg", "common_dep"} {
+	for _, want := range []string{"pg_tde", "pg_container", "common_pkg", "common_dep", "other_pkg"} {
 		if !names[want] {
-			t.Errorf("missing expected package %q", want)
+			t.Errorf("pr-104: missing expected package %q", want)
 		}
 	}
-	for _, unwanted := range []string{"other_pkg", "other_pr_common"} {
+	for _, unwanted := range []string{"other_pr_common", "common_only", "pr10_pkg"} {
 		if names[unwanted] {
-			t.Errorf("unexpected package %q", unwanted)
+			t.Errorf("pr-104: unexpected package %q from another PR", unwanted)
 		}
+	}
+
+	// Common-only PR must be reachable.
+	onlyCommon, err := QueryPRBuildPackages(db, "isv:percona", "pr-200")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(onlyCommon) != 1 || onlyCommon[0].Name != "common_only" {
+		t.Errorf("pr-200 (common-only): got %d packages, want exactly [common_only]", len(onlyCommon))
 	}
 }
 
-func TestQueryPRDistinctReposIncludesPRCommon(t *testing.T) {
+func TestQueryPRDistinctReposCoversWholePR(t *testing.T) {
 	db, err := Open(":memory:")
 	if err != nil {
 		t.Fatal(err)
@@ -341,22 +351,24 @@ func TestQueryPRDistinctReposIncludesPRCommon(t *testing.T) {
 	}
 	insert("isv:percona:PR:pr-104:ppg:17", "pg_tde", `[{"repo":"EL_9"}]`)
 	insert("isv:percona:PR:pr-104:common", "common_pkg", `[{"repo":"Debian_12"}]`)
-	insert("isv:percona:PR:pr-104:ppg:18", "pg_tde18", `[{"repo":"EL_8"}]`)
+	insert("isv:percona:PR:pr-104:ppg:18", "pg_tde18", `[{"repo":"EL_8"}]`) // now included
+	insert("isv:percona:PR:pr-105:ppg:17", "other", `[{"repo":"EL_7"}]`)    // different PR
 
-	repos, err := QueryPRDistinctRepos(db, "isv:percona", "pr-104", "ppg", "17")
+	repos, err := QueryPRDistinctRepos(db, "isv:percona", "pr-104")
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	got := make(map[string]bool)
 	for _, repo := range repos {
 		got[repo] = true
 	}
-	if !got["EL_9"] || !got["Debian_12"] {
-		t.Fatalf("expected version and common repos, got %v", repos)
+	for _, want := range []string{"EL_9", "Debian_12", "EL_8"} {
+		if !got[want] {
+			t.Errorf("missing expected repo %q", want)
+		}
 	}
-	if got["EL_8"] {
-		t.Fatalf("unexpected repo from another version: %v", repos)
+	if got["EL_7"] {
+		t.Errorf("unexpected repo EL_7 from another PR")
 	}
 }
 

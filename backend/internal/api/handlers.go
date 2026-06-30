@@ -101,16 +101,15 @@ func eventsHandler(db *sql.DB) http.HandlerFunc {
 	}
 }
 
-// prContextPackagesHandler returns a handler for GET /api/pr/{pr}/{subproject}/{version}/packages.
-// Builds the OBS prefix as isv:percona:PR:{pr}:{subproject}.
+// prContextPackagesHandler returns a handler for GET /api/pr/{pr}/{version}/packages.
+// Builds the OBS prefix as isv:percona:PR:{pr} (covers all subprojects).
 // {version} is accepted for URL symmetry with /api/products routes but ignored server-side;
 // the prefix covers all versions and version filtering is done client-side.
 func prContextPackagesHandler(db *sql.DB, root string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		pr := chi.URLParam(r, "pr")
-		subproject := chi.URLParam(r, "subproject")
 
-		pkgs, err := store.QueryPRBuildPackages(db, root, pr, subproject)
+		pkgs, err := store.QueryPRBuildPackages(db, root, pr)
 		if err != nil {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
@@ -127,13 +126,12 @@ func prContextPackagesHandler(db *sql.DB, root string) http.HandlerFunc {
 	}
 }
 
-// prContextEventsHandler returns a handler for GET /api/pr/{pr}/{subproject}/{version}/events.
-// Builds the OBS prefix as isv:percona:PR:{pr}:{subproject}.
+// prContextEventsHandler returns a handler for GET /api/pr/{pr}/{version}/events.
+// Builds the OBS prefix as isv:percona:PR:{pr} (covers all subprojects).
 // {version} is accepted for URL symmetry but ignored server-side (filtering is client-side).
 func prContextEventsHandler(db *sql.DB, root string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		pr := chi.URLParam(r, "pr")
-		subproject := chi.URLParam(r, "subproject")
 
 		from, to, err := parseTimeWindow(r)
 		if err != nil {
@@ -141,7 +139,7 @@ func prContextEventsHandler(db *sql.DB, root string) http.HandlerFunc {
 			return
 		}
 
-		events, err := store.QueryPRBuildEvents(db, root, pr, subproject, from, to)
+		events, err := store.QueryPRBuildEvents(db, root, pr, from, to)
 		if err != nil {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
@@ -317,15 +315,15 @@ func releasesReposHandler(db *sql.DB, root string) http.HandlerFunc {
 	}
 }
 
-// prReposHandler returns a handler for GET /api/pr/{pr}/{subproject}/{version}/repos.
+// prReposHandler returns a handler for GET /api/pr/{pr}/{version}/repos.
+// Builds the OBS prefix as isv:percona:PR:{pr} (covers all subprojects).
+// {version} is accepted for URL symmetry but ignored server-side; the prefix covers all versions.
 func prReposHandler(db *sql.DB, root string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		repos, err := store.QueryPRDistinctRepos(
 			db,
 			root,
 			chi.URLParam(r, "pr"),
-			chi.URLParam(r, "subproject"),
-			chi.URLParam(r, "version"),
 		)
 		if err != nil {
 			http.Error(w, "internal server error", http.StatusInternalServerError)

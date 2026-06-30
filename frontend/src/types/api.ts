@@ -3,8 +3,8 @@ export type EventType = 'triggered' | 'started' | 'succeeded' | 'failed' | 'unre
 
 export interface Context {
   label: string
-  apiBase: string  // e.g. "/api/products/ppg" or "/api/pr/pr-92/ppg"
-  prefix: string   // e.g. "isv:percona:ppg" or "isv:percona:PR:pr-92:ppg"
+  apiBase: string  // e.g. "/api/products/ppg" or "/api/pr/pr-92"
+  prefix: string   // e.g. "isv:percona:ppg" or "isv:percona:PR:pr-92"
 }
 
 export interface Trigger {
