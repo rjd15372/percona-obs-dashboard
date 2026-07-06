@@ -603,3 +603,117 @@ func TestBuildStateTaskPreservationMatrix(t *testing.T) {
 		})
 	}
 }
+
+func TestVersionTaskSkipsWhenStable(t *testing.T) {
+	var calls int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		fmt.Fprint(w, `<resultlist></resultlist>`)
+	}))
+	defer ts.Close()
+
+	c := obs.NewClient(ts.URL, "u", "p")
+	pkg := &model.Package{
+		Project: "isv:percona:ppg:17", Name: "percona-pg_tde",
+		IsContainer:   boolPtr(false),
+		Version:       "17.5-1",
+		TargetsStable: true,
+		UpdatedAt:     time.Now().UTC(),
+	}
+	if err := (obs.VersionTask{}).Run(context.Background(), c, pkg); err != nil {
+		t.Fatal(err)
+	}
+	if atomic.LoadInt32(&calls) != 0 {
+		t.Fatalf("expected no OBS call when version known and targets stable, got %d", calls)
+	}
+	if pkg.Version != "17.5-1" {
+		t.Errorf("version changed: %q", pkg.Version)
+	}
+}
+
+func TestVersionTaskFetchesWhenUnstable(t *testing.T) {
+	var calls int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		fmt.Fprint(w, `<resultlist>
+			<result repository="UBI_9" arch="x86_64" state="published">
+				<status package="percona-pg_tde" code="succeeded" versrel="17.5-2"/>
+			</result>
+		</resultlist>`)
+	}))
+	defer ts.Close()
+
+	c := obs.NewClient(ts.URL, "u", "p")
+	pkg := &model.Package{
+		Project: "isv:percona:ppg:17", Name: "percona-pg_tde",
+		IsContainer:   boolPtr(false),
+		Version:       "17.5-1",
+		TargetsStable: false, // a target changed → version may have moved
+		UpdatedAt:     time.Now().UTC(),
+	}
+	if err := (obs.VersionTask{}).Run(context.Background(), c, pkg); err != nil {
+		t.Fatal(err)
+	}
+	if atomic.LoadInt32(&calls) != 1 {
+		t.Fatalf("expected 1 OBS call when unstable, got %d", calls)
+	}
+	if pkg.Version != "17.5-2" {
+		t.Errorf("version not refreshed: %q", pkg.Version)
+	}
+}
+
+func TestContainerTagsTaskSkipsWhenStable(t *testing.T) {
+	var calls int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+	}))
+	defer ts.Close()
+
+	c := obs.NewClient(ts.URL, "u", "p")
+	pkg := &model.Package{
+		Project: "isv:percona:ppg:17:containers", Name: "percona-distribution-postgresql",
+		IsContainer:   boolPtr(true),
+		ContainerTags: []string{"18.4-1-1.7", "18.4-1"},
+		TargetsStable: true,
+		Targets:       []model.Target{{Repo: "images", Arch: "x86_64", State: "succeeded"}},
+		UpdatedAt:     time.Now().UTC(),
+	}
+	if err := (obs.ContainerTagsTask{}).Run(context.Background(), c, pkg); err != nil {
+		t.Fatal(err)
+	}
+	if atomic.LoadInt32(&calls) != 0 {
+		t.Fatalf("expected no OBS call when tags known and targets stable, got %d", calls)
+	}
+}
+
+func TestContainerTagsTaskFetchesWhenUnstable(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ".containerinfo") {
+			fmt.Fprint(w, `{"tags":["percona-distribution-postgresql:18.4-2-1.8","percona-distribution-postgresql:18.4-2"]}`)
+		} else {
+			fmt.Fprint(w, `<binarylist>
+				<binary filename="percona-distribution-postgresql.x86_64-1.8.containerinfo" size="1" mtime="1"/>
+			</binarylist>`)
+		}
+	}))
+	defer ts.Close()
+
+	c := obs.NewClient(ts.URL, "u", "p")
+	pkg := &model.Package{
+		Project: "isv:percona:ppg:17:containers", Name: "percona-distribution-postgresql",
+		IsContainer:   boolPtr(true),
+		ContainerTags: []string{"18.4-1-1.7", "18.4-1"},
+		TargetsStable: false, // new build landed
+		Targets:       []model.Target{{Repo: "images", Arch: "x86_64", State: "succeeded"}},
+		UpdatedAt:     time.Now().UTC(),
+	}
+	if err := (obs.ContainerTagsTask{}).Run(context.Background(), c, pkg); err != nil {
+		t.Fatal(err)
+	}
+	if len(pkg.ContainerTags) != 2 || pkg.ContainerTags[0] != "18.4-2-1.8" {
+		t.Errorf("tags not refreshed: %v", pkg.ContainerTags)
+	}
+	if pkg.Version != "18.4-2-1.8" {
+		t.Errorf("version not updated from refreshed tags: %q", pkg.Version)
+	}
+}

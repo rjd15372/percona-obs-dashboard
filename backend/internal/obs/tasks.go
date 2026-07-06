@@ -281,6 +281,11 @@ func (t VersionTask) Run(ctx context.Context, client *Client, pkg *model.Package
 	if pkg.IsContainer != nil && *pkg.IsContainer {
 		return nil
 	}
+	if pkg.Version != "" && pkg.TargetsStable {
+		// versrel only changes when a new build lands, which always transitions
+		// target states; TargetsStable confirms none did since the last pass.
+		return nil
+	}
 	versrel, err := client.PackageVersionResult(ctx, pkg.Project, pkg.Name)
 	if err != nil {
 		slog.Warn("obs: version result", "pkg", pkg.Name, "err", err)
@@ -301,6 +306,12 @@ type ContainerTagsTask struct{}
 
 func (t ContainerTagsTask) Run(ctx context.Context, client *Client, pkg *model.Package) error {
 	if pkg.IsContainer == nil || !*pkg.IsContainer {
+		return nil
+	}
+	if len(pkg.ContainerTags) > 0 && pkg.TargetsStable {
+		// Image tags only change when a new build lands (same invariant as
+		// versrel). The release chain has no BuildStateTask so TargetsStable is
+		// never set there — release containers keep fetching, same as today.
 		return nil
 	}
 	targets := pkg.Targets
