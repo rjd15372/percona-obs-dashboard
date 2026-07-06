@@ -43,15 +43,31 @@ func (t BuildStateTask) Run(ctx context.Context, client *Client, pkg *model.Pack
 		return err
 	}
 	updated := buildPackage(pkg.Project, pkg.Name, pkg.Tags, results)
-	// Preserve existing per-target enrichment from prior task runs.
+	// Preserve per-target enrichment from prior passes only while the target's
+	// state is unchanged; a state transition leaves the fields at their zero
+	// values, forcing the downstream tasks to refetch. Also compute
+	// TargetsStable: true only when the previous pass had the same target set
+	// with identical states — all cold-start paths (no previous targets, MQ
+	// replace, restart) yield false so downstream tasks fetch conservatively.
+	stable := len(pkg.Targets) > 0 && len(pkg.Targets) == len(updated.Targets)
 	for i := range updated.Targets {
+		matched := false
 		for _, old := range pkg.Targets {
 			if old.Repo == updated.Targets[i].Repo && old.Arch == updated.Targets[i].Arch {
-				updated.Targets[i].BlockedBy = old.BlockedBy
-				updated.Targets[i].BuildReason = old.BuildReason
-				updated.Targets[i].BuildReasonPackages = old.BuildReasonPackages
+				matched = true
+				if old.State == updated.Targets[i].State {
+					updated.Targets[i].BlockedBy = old.BlockedBy
+					updated.Targets[i].BuildReason = old.BuildReason
+					updated.Targets[i].BuildReasonPackages = old.BuildReasonPackages
+					updated.Targets[i].BlockedByFetchedAt = old.BlockedByFetchedAt
+				} else {
+					stable = false
+				}
 				break
 			}
+		}
+		if !matched {
+			stable = false
 		}
 	}
 	pkg.Targets = updated.Targets
@@ -59,6 +75,7 @@ func (t BuildStateTask) Run(ctx context.Context, client *Client, pkg *model.Pack
 	pkg.OKTargets = updated.OKTargets
 	pkg.TotalTargets = updated.TotalTargets
 	pkg.UpdatedAt = updated.UpdatedAt
+	pkg.TargetsStable = stable
 	return nil
 }
 

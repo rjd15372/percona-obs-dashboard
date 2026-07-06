@@ -397,3 +397,117 @@ func TestContainerTagsTaskSkipsNonContainers(t *testing.T) {
 		t.Error("ContainerTagsTask should not call OBS for non-container packages")
 	}
 }
+
+// resultXML builds a single-package resultlist with one <result> per (repo, arch, code).
+func resultXML(entries [][3]string) string {
+	var sb strings.Builder
+	sb.WriteString(`<resultlist>`)
+	for _, e := range entries {
+		sb.WriteString(fmt.Sprintf(
+			`<result project="isv:percona" repository="%s" arch="%s" state="building">
+				<status package="mypkg" code="%s"/>
+			</result>`, e[0], e[1], e[2]))
+	}
+	sb.WriteString(`</resultlist>`)
+	return sb.String()
+}
+
+func TestBuildStateTaskPreservationMatrix(t *testing.T) {
+	fetchedAt := time.Now().UTC().Add(-time.Minute)
+	enriched := func(state string) model.Target {
+		return model.Target{
+			Repo: "repo", Arch: "x86_64", State: state,
+			BlockedBy:           "waiting on libfoo",
+			BuildReason:         "meta change",
+			BuildReasonPackages: []string{"libfoo"},
+			BlockedByFetchedAt:  fetchedAt,
+		}
+	}
+
+	cases := []struct {
+		name         string
+		prevTargets  []model.Target
+		serverStates [][3]string // repo, arch, code
+		wantPreserve bool
+		wantStable   bool
+	}{
+		{
+			name:         "state unchanged: preserved and stable",
+			prevTargets:  []model.Target{enriched("blocked")},
+			serverStates: [][3]string{{"repo", "x86_64", "blocked"}},
+			wantPreserve: true,
+			wantStable:   true,
+		},
+		{
+			name:         "state changed: wiped and unstable",
+			prevTargets:  []model.Target{enriched("blocked")},
+			serverStates: [][3]string{{"repo", "x86_64", "building"}},
+			wantPreserve: false,
+			wantStable:   false,
+		},
+		{
+			name:         "target added: unstable",
+			prevTargets:  []model.Target{enriched("blocked")},
+			serverStates: [][3]string{{"repo", "x86_64", "blocked"}, {"repo", "aarch64", "building"}},
+			wantPreserve: true, // the matching target still preserves
+			wantStable:   false,
+		},
+		{
+			name:         "target removed: unstable",
+			prevTargets:  []model.Target{enriched("blocked"), {Repo: "repo", Arch: "aarch64", State: "building"}},
+			serverStates: [][3]string{{"repo", "x86_64", "blocked"}},
+			wantPreserve: true,
+			wantStable:   false,
+		},
+		{
+			name:         "no previous targets: unstable",
+			prevTargets:  nil,
+			serverStates: [][3]string{{"repo", "x86_64", "blocked"}},
+			wantPreserve: false, // nothing to preserve from
+			wantStable:   false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprint(w, resultXML(tc.serverStates))
+			}))
+			defer ts.Close()
+
+			c := obs.NewClient(ts.URL, "u", "p")
+			pkg := &model.Package{
+				Project: "isv:percona", Name: "mypkg",
+				Targets: tc.prevTargets, UpdatedAt: time.Now().UTC(),
+			}
+			if err := (obs.BuildStateTask{}).Run(context.Background(), c, pkg); err != nil {
+				t.Fatal(err)
+			}
+
+			if pkg.TargetsStable != tc.wantStable {
+				t.Errorf("TargetsStable = %v, want %v", pkg.TargetsStable, tc.wantStable)
+			}
+			var got *model.Target
+			for i := range pkg.Targets {
+				if pkg.Targets[i].Repo == "repo" && pkg.Targets[i].Arch == "x86_64" {
+					got = &pkg.Targets[i]
+					break
+				}
+			}
+			if got == nil {
+				t.Fatal("repo/x86_64 target missing from result")
+			}
+			if tc.wantPreserve {
+				if got.BlockedBy != "waiting on libfoo" || got.BuildReason != "meta change" ||
+					len(got.BuildReasonPackages) != 1 || !got.BlockedByFetchedAt.Equal(fetchedAt) {
+					t.Errorf("enrichment not preserved: %+v", got)
+				}
+			} else {
+				if got.BlockedBy != "" || got.BuildReason != "" ||
+					got.BuildReasonPackages != nil || !got.BlockedByFetchedAt.IsZero() {
+					t.Errorf("enrichment not wiped: %+v", got)
+				}
+			}
+		})
+	}
+}
