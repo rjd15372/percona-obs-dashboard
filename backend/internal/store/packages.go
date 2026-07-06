@@ -73,13 +73,17 @@ func UpsertPackageState(db *sql.DB, p *model.Package, now time.Time) error {
 	if p.IsRelease {
 		isReleaseVal = 1
 	}
+	settledVal := 0
+	if p.Settled {
+		settledVal = 1
+	}
 
 	_, err = db.Exec(`
 		INSERT INTO packages
 			(project, name, rollup_state, ok_targets, total_targets,
 			 trigger_what, trigger_kind, trigger_at, targets_json, updated_at,
-			 state_changed_at, is_container, version, container_tags, tags, is_release)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+			 state_changed_at, is_container, version, container_tags, tags, is_release, settled)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(project, name) DO UPDATE SET
 			rollup_state=excluded.rollup_state,
 			ok_targets=excluded.ok_targets,
@@ -95,6 +99,7 @@ func UpsertPackageState(db *sql.DB, p *model.Package, now time.Time) error {
 			container_tags=excluded.container_tags,
 			tags=CASE WHEN excluded.tags != '[]' THEN excluded.tags ELSE tags END,
 			is_release=CASE WHEN excluded.is_release != 0 THEN 1 ELSE is_release END,
+			settled=excluded.settled,
 			state_changed_at = CASE
 				WHEN excluded.rollup_state != rollup_state THEN excluded.state_changed_at
 				WHEN state_changed_at IS NULL              THEN excluded.state_changed_at
@@ -105,7 +110,7 @@ func UpsertPackageState(db *sql.DB, p *model.Package, now time.Time) error {
 		trigWhat, trigKind, trigAt,
 		string(targetsJSON), p.UpdatedAt, now,
 		isContainerVal, p.Version, string(containerTagsJSON),
-		string(tagsJSON), isReleaseVal,
+		string(tagsJSON), isReleaseVal, settledVal,
 	)
 	if err != nil {
 		return err
@@ -215,13 +220,13 @@ func DeletePackage(db *sql.DB, project, name string) error {
 
 const packageSelectCols = ` project, name, rollup_state, ok_targets, total_targets,
 	trigger_what, trigger_kind, trigger_at, targets_json, updated_at,
-	state_changed_at, is_container, version, container_tags, tags, is_release`
+	state_changed_at, is_container, version, container_tags, tags, is_release, settled`
 
 // scanPackages is a helper that extracts the scan loop pattern used by multiple query functions.
 // It expects rows to have been created with the standard package column order defined
 // in packageSelectCols: project, name, rollup_state, ok_targets, total_targets,
 // trigger_what, trigger_kind, trigger_at, targets_json, updated_at, state_changed_at,
-// is_container, version, container_tags, tags, is_release.
+// is_container, version, container_tags, tags, is_release, settled.
 func scanPackages(db *sql.DB, rows *sql.Rows) ([]*model.Package, error) {
 	pkgs := make([]*model.Package, 0)
 	for rows.Next() {
@@ -234,13 +239,14 @@ func scanPackages(db *sql.DB, rows *sql.Rows) ([]*model.Package, error) {
 		var containerTagsJSON string
 		var tagsJSON string
 		var isRelease int
+		var settled int
 		if err := rows.Scan(
 			&p.Project, &p.Name, &p.RollupState,
 			&p.OKTargets, &p.TotalTargets,
 			&trigWhat, &trigKind, &trigAt,
 			&targetsJSON, &p.UpdatedAt,
 			&stateChangedAt, &isContainerNull, &p.Version,
-			&containerTagsJSON, &tagsJSON, &isRelease,
+			&containerTagsJSON, &tagsJSON, &isRelease, &settled,
 		); err != nil {
 			return nil, err
 		}
@@ -273,6 +279,7 @@ func scanPackages(db *sql.DB, rows *sql.Rows) ([]*model.Package, error) {
 			}
 		}
 		p.IsRelease = isRelease != 0
+		p.Settled = settled != 0
 		pkgs = append(pkgs, p)
 	}
 	if err := rows.Err(); err != nil {
@@ -565,14 +572,15 @@ func QueryReleasePackages(db *sql.DB, prefix string) ([]*model.Package, error) {
 	return scanPackages(db, rows)
 }
 
-// GetActivePackages returns packages that need worker attention:
-//   - packages not yet in a final succeeded state, plus
-//   - packages whose is_container type has not yet been detected (is_container IS NULL),
-//     so PackageTypeTask can run for them even if they already succeeded.
+// GetActivePackages returns packages that have not settled and still need
+// worker attention: the working set the worker seeds on startup. A package
+// is excluded once the worker has determined there is nothing left to poll
+// for it (settled = 1); this governs working-set membership only and is
+// independent of the displayed rollup_state.
 func GetActivePackages(db *sql.DB) ([]*model.Package, error) {
 	rows, err := db.Query(`SELECT` + packageSelectCols + `
 		FROM packages
-		WHERE rollup_state != 'published' OR is_container IS NULL
+		WHERE settled = 0
 		ORDER BY project, name`,
 	)
 	if err != nil {

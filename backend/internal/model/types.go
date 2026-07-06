@@ -98,6 +98,7 @@ type Package struct {
 	UpdatedAt      time.Time   `json:"updated_at"`
 	StateChangedAt *time.Time  `json:"state_changed_at,omitempty"`
 	CveScans       []CveScan   `json:"cve_scans,omitempty"`
+	Settled        bool        `json:"settled,omitempty"`
 }
 
 type EventType string

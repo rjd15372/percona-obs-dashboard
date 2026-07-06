@@ -99,11 +99,11 @@ func TestGetActivePackages(t *testing.T) {
 	trueVal := true
 	falseVal := false
 
-	// Published + is_container detected: excluded (terminal published state).
+	// Published + is_container detected + settled: excluded (worker has nothing left to poll).
 	publishedContainer := &model.Package{
 		Project: "isv:percona", Name: "pkg-container-done",
 		RollupState: model.RollupPublished, OKTargets: 1, TotalTargets: 1,
-		IsContainer: &trueVal,
+		IsContainer: &trueVal, Settled: true,
 		Targets:     []model.Target{{Repo: "repo", Arch: "x86_64", State: "succeeded"}},
 		UpdatedAt:   now,
 	}
@@ -111,11 +111,11 @@ func TestGetActivePackages(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Published + is_container=false: also excluded.
+	// Published + is_container=false + settled: also excluded.
 	publishedNonContainer := &model.Package{
 		Project: "isv:percona", Name: "pkg-dep-done",
 		RollupState: model.RollupPublished, OKTargets: 1, TotalTargets: 1,
-		IsContainer: &falseVal,
+		IsContainer: &falseVal, Settled: true,
 		Targets:     []model.Target{{Repo: "repo", Arch: "x86_64", State: "succeeded"}},
 		UpdatedAt:   now,
 	}
@@ -123,7 +123,7 @@ func TestGetActivePackages(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Succeeded + is_container IS NULL: included so PackageTypeTask can detect it.
+	// Succeeded + is_container IS NULL + not settled: included so PackageTypeTask can detect it.
 	succeededUndetected := &model.Package{
 		Project: "isv:percona", Name: "pkg-ok",
 		RollupState: model.RollupSucceeded, OKTargets: 1, TotalTargets: 1,
@@ -164,10 +164,10 @@ func TestGetActivePackages(t *testing.T) {
 		t.Error("expected pkg-fail (failing) to be included")
 	}
 	if names["pkg-container-done"] {
-		t.Error("expected pkg-container-done (published + detected) to be excluded")
+		t.Error("expected pkg-container-done (settled) to be excluded")
 	}
 	if names["pkg-dep-done"] {
-		t.Error("expected pkg-dep-done (published + detected non-container) to be excluded")
+		t.Error("expected pkg-dep-done (settled) to be excluded")
 	}
 }
 
@@ -911,5 +911,53 @@ func TestStateChangedAt(t *testing.T) {
 	}
 	if pkgs[0].StateChangedAt == nil || !pkgs[0].StateChangedAt.Equal(t2) {
 		t.Errorf("state-change upsert: want state_changed_at=%v, got %v", t2, pkgs[0].StateChangedAt)
+	}
+}
+
+func TestSettledPersistedAndScanned(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	p := &model.Package{
+		Project: "isv:percona:ppg:17", Name: "pkg-a",
+		RollupState: model.RollupSucceeded, Settled: true,
+		Targets:   []model.Target{{Repo: "images", Arch: "x86_64", State: "succeeded"}},
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := UpsertPackageState(db, p, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	got, err := QueryPackages(db, "isv:percona:ppg:17")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || !got[0].Settled {
+		t.Fatalf("settled not persisted/scanned: %+v", got)
+	}
+}
+
+func TestGetActivePackagesExcludesSettled(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	now := time.Now().UTC()
+	active := &model.Package{Project: "p", Name: "active", RollupState: model.RollupSucceeded, Settled: false, UpdatedAt: now}
+	settled := &model.Package{Project: "p", Name: "settled", RollupState: model.RollupSucceeded, Settled: true, UpdatedAt: now}
+	if err := UpsertPackageState(db, active, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := UpsertPackageState(db, settled, now); err != nil {
+		t.Fatal(err)
+	}
+	got, err := GetActivePackages(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Name != "active" {
+		t.Fatalf("GetActivePackages = %+v, want only 'active'", got)
 	}
 }

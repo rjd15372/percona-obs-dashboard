@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS packages (
     container_tags TEXT NOT NULL DEFAULT '[]',
     tags           TEXT NOT NULL DEFAULT '[]',
     is_release     INTEGER NOT NULL DEFAULT 0,
+    settled        INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (project, name)
 );
 
@@ -115,6 +116,7 @@ func Open(path string) (*sql.DB, error) {
 	db.Exec(`ALTER TABLE events ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'`)
 	db.Exec(`ALTER TABLE cve_scans ADD COLUMN cve_since DATETIME`)
 	db.Exec(`ALTER TABLE cve_scans ADD COLUMN clean_since DATETIME`)
+	db.Exec(`ALTER TABLE packages ADD COLUMN settled INTEGER NOT NULL DEFAULT 0`)
 
 	// Data migration: backfill packages.tags and is_release from scope.
 	// Must run BEFORE migrateIsContainerNullable because that rebuilds the table
@@ -186,6 +188,7 @@ func migrateIsContainerNullable(db *sql.DB) error {
 			container_tags   TEXT NOT NULL DEFAULT '[]',
 			tags             TEXT NOT NULL DEFAULT '[]',
 			is_release       INTEGER NOT NULL DEFAULT 0,
+			settled          INTEGER NOT NULL DEFAULT 0,
 			PRIMARY KEY (project, name)
 		)`,
 		`INSERT INTO packages_new
@@ -196,7 +199,8 @@ func migrateIsContainerNullable(db *sql.DB) error {
 			       version,
 			       container_tags,
 			       tags,
-			       is_release
+			       is_release,
+			       settled
 			FROM packages`,
 		`DROP TABLE packages`,
 		`ALTER TABLE packages_new RENAME TO packages`,
