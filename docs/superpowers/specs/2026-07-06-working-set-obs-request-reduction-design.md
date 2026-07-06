@@ -60,7 +60,7 @@ Stop re-polling packages that have nothing left to observe. A package should lea
 - **`rollup_state` is never faked.** The dashboard keeps showing the truthful `succeeded`/`failed`. A new `settled` flag governs working-set membership independently.
 - **Persisted `settled` column** so the 158 packages are not re-seeded into the working set on every restart.
 - **Adjacent cheap fix:** guard `BlockedReasonTask` so it only calls OBS when the package has a `blocked` target.
-- **Telemetry (bundled):** periodic structured log lines reporting (a) working-set size — total, inflight, and by-rollup-state — and (b) OBS request volume over the window — total, window delta, req/s, and **per-endpoint** breakdown. Configurable interval, default 60s. This is also how we verify the fix in production (watch `succeeded` collapse and req/s drop).
+- **Telemetry (bundled):** periodic structured log lines reporting (a) working-set size — total, inflight, and by-rollup-state — and (b) OBS request volume over the window — total, window delta, req/s, and **per-endpoint** breakdown. Configurable interval, default 60s. **Disabled by default**, toggleable at runtime via an HTTP endpoint (`GET /api/telemetry` status, `POST /api/telemetry?enabled=…` to set). This is also how we verify the fix in production (watch `succeeded` collapse and req/s drop).
 - **Re-entry** relies on the existing poller (≤2 min) and MQ `build_*`/`repo.published` events. There is **no** per-package build-started event in OBS (see `BUILD_STARTED_EVENT_FINDINGS.md`), so removal does not make re-entry meaningfully worse — the 30s in-set self-poll was the only faster signal, and it only ever mattered for packages we now correctly consider done.
 
 **Out of scope (deferred to follow-ups):**
@@ -201,7 +201,9 @@ All OBS traffic passes through `Client.get` / `getFile` / `post`. Give each an *
 
 This is a broad but mechanical change — every `Client` public method gains one argument to its internal request call.
 
-**Reporter.** `runTelemetry(ctx, ws, client, interval)` keeps the previous `MetricsSnapshot` and, each tick, computes the per-op delta and total delta, then emits:
+**Runtime toggle.** A shared `*atomic.Bool` (telemetry enabled), created in `main.go`, seeded from config, and shared between the reporter goroutine and the API handler.
+
+**Reporter.** `runTelemetry(ctx, ws, client, interval, enabled)` keeps the previous `MetricsSnapshot` and ticks every `interval`. **Each tick it refreshes its `prev` baseline unconditionally** (so window deltas never accumulate across disabled periods), but **emits the log line only when `enabled.Load()` is true**:
 ```
 slog.Info("telemetry",
     "window", interval,
@@ -209,9 +211,16 @@ slog.Info("telemetry",
     "obs_window", totalDelta, "obs_total", cumulative, "obs_req_per_s", rate,
     "obs_by_endpoint", perOpDelta)
 ```
-(`ws_by_state` and `obs_by_endpoint` rendered as slog sub-groups or compact `key=n` strings — format is a plan-time detail.)
+(`ws_by_state` and `obs_by_endpoint` rendered as slog sub-groups or compact `key=n` strings — format is a plan-time detail.) OBS counters in `Client` always accumulate regardless of the toggle.
 
-**Config.** New `Telemetry.Interval` (`config.go`): default `"60s"`, env `TELEMETRY_INTERVAL`, parsed like the other durations.
+**HTTP endpoint** (added to `api` router; `NewRouter` gains the `*atomic.Bool` toggle and the configured interval for status):
+- `GET /api/telemetry` → `{"enabled": bool, "interval": "60s"}`.
+- `POST /api/telemetry?enabled=true|false` → sets the flag, returns the new status. Missing/invalid `enabled` → 400.
+- Curl: `curl -X POST 'http://host:4000/api/telemetry?enabled=true'`.
+
+**Config.** New block (`config.go`):
+- `Telemetry.Interval`: default `"60s"`, env `TELEMETRY_INTERVAL`, parsed like the other durations.
+- `Telemetry.Enabled`: default `false`, env `TELEMETRY_ENABLED` (the startup value of the runtime flag).
 
 ## Re-entry (safety net, unchanged)
 
@@ -229,7 +238,8 @@ There is no reliance on a per-package build-started event (none exists in OBS).
 - **Cache:** a second `ProjectPublishFlags` call within TTL makes no HTTP request (fake transport call-count assertion).
 - **Seeding:** `GetActivePackages` returns `settled=0` rows only; a `settled=1` row is excluded; a type-unknown row is included.
 - **`BlockedReasonTask` guard:** no OBS call when there are no blocked targets; call made when a blocked target exists.
-- **Telemetry:** `WorkingSet.Stats()` returns correct total/inflight/by-state for a seeded set; `Client` metrics increment per op and `MetricsSnapshot` returns a stable copy; the reporter computes correct window deltas across two ticks (fake clock/manual invocation, no real sleep).
+- **Telemetry:** `WorkingSet.Stats()` returns correct total/inflight/by-state for a seeded set; `Client` metrics increment per op and `MetricsSnapshot` returns a stable copy; the reporter computes correct window deltas across two ticks (fake clock/manual invocation, no real sleep) and emits nothing while the toggle is off but keeps `prev` fresh.
+- **Telemetry endpoint:** `GET /api/telemetry` reflects the current flag; `POST ?enabled=true`/`false` flips it (and the reporter observes the change); invalid/missing `enabled` → 400.
 - **Regression:** existing poller/consumer/worker tests still pass (publish-aware path defaults to "publishes" on error, preserving current behavior for publishing projects).
 
 ## Expected impact
