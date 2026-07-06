@@ -586,3 +586,28 @@ func TestRebuild_URLEncoding(t *testing.T) {
 		t.Errorf("package missing from URL: %s", capturedURL)
 	}
 }
+
+func TestClientMetrics(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		_, _ = w.Write([]byte(`<resultlist></resultlist>`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "u", "p")
+	ctx := context.Background()
+	if _, err := c.BuildResults(ctx, "isv:percona:ppg:17"); err != nil {
+		t.Fatalf("BuildResults: %v", err)
+	}
+	if _, err := c.BuildResults(ctx, "isv:percona:ppg:17"); err != nil {
+		t.Fatalf("BuildResults: %v", err)
+	}
+	snap := c.MetricsSnapshot()
+	if snap["build_results"] != 2 {
+		t.Fatalf("build_results = %d, want 2", snap["build_results"])
+	}
+	snap["build_results"] = 99
+	if c.MetricsSnapshot()["build_results"] != 2 {
+		t.Fatalf("snapshot is not a copy")
+	}
+}

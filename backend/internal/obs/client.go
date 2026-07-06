@@ -9,8 +9,31 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
+
+// obsMetrics counts OBS requests by operation label.
+type obsMetrics struct {
+	mu     sync.Mutex
+	counts map[string]int64
+}
+
+func (m *obsMetrics) inc(op string) {
+	m.mu.Lock()
+	m.counts[op]++
+	m.mu.Unlock()
+}
+
+func (m *obsMetrics) snapshot() map[string]int64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make(map[string]int64, len(m.counts))
+	for k, v := range m.counts {
+		out[k] = v
+	}
+	return out
+}
 
 // Client is an authenticated OBS HTTP client.
 type Client struct {
@@ -18,6 +41,7 @@ type Client struct {
 	username string
 	password string
 	http     *http.Client
+	metrics  *obsMetrics
 }
 
 func NewClient(base, username, password string) *Client {
@@ -26,16 +50,21 @@ func NewClient(base, username, password string) *Client {
 		username: username,
 		password: password,
 		http:     &http.Client{Timeout: 30 * time.Second},
+		metrics:  &obsMetrics{counts: make(map[string]int64)},
 	}
 }
 
-func (c *Client) get(ctx context.Context, path string) (*http.Response, error) {
+// MetricsSnapshot returns a copy of the per-operation OBS request counts.
+func (c *Client) MetricsSnapshot() map[string]int64 { return c.metrics.snapshot() }
+
+func (c *Client) get(ctx context.Context, op, path string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.SetBasicAuth(c.username, c.password)
 	req.Header.Set("Accept", "application/xml")
+	c.metrics.inc(op)
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, err
@@ -50,12 +79,13 @@ func (c *Client) get(ctx context.Context, path string) (*http.Response, error) {
 
 // getFile fetches a binary artifact from OBS without setting an Accept header,
 // so OBS serves the raw file content (e.g. JSON containerinfo files).
-func (c *Client) getFile(ctx context.Context, path string) (*http.Response, error) {
+func (c *Client) getFile(ctx context.Context, op, path string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.SetBasicAuth(c.username, c.password)
+	c.metrics.inc(op)
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, err
@@ -70,12 +100,13 @@ func (c *Client) getFile(ctx context.Context, path string) (*http.Response, erro
 
 // post issues an authenticated POST request to path with no request body.
 // Returns nil on 2xx; returns an error with up to 512 bytes of the response body on non-2xx.
-func (c *Client) post(ctx context.Context, path string) error {
+func (c *Client) post(ctx context.Context, op, path string) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+path, nil)
 	if err != nil {
 		return err
 	}
 	req.SetBasicAuth(c.username, c.password)
+	c.metrics.inc(op)
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return err
@@ -97,7 +128,7 @@ func (c *Client) Rebuild(ctx context.Context, project, repo, arch, pkg string) e
 		url.QueryEscape(arch),
 		url.QueryEscape(pkg),
 	)
-	return c.post(ctx, path)
+	return c.post(ctx, "rebuild", path)
 }
 
 // --- XML response types ---
@@ -190,7 +221,7 @@ type buildReasonXML struct {
 func (c *Client) SearchProjects(ctx context.Context, prefix string) ([]string, error) {
 	// XPath: starts-with(@name,'prefix:') to catch all sub-namespaces
 	path := "/search/project/id?match=starts-with(@name,'" + prefix + ":" + "')"
-	resp, err := c.get(ctx, path)
+	resp, err := c.get(ctx, "search_projects", path)
 	if err != nil {
 		return nil, err
 	}
@@ -214,7 +245,7 @@ func (c *Client) SearchProjects(ctx context.Context, prefix string) ([]string, e
 
 // BuildResults fetches all package build states for a project.
 func (c *Client) BuildResults(ctx context.Context, project string) ([]PackageBuildState, error) {
-	resp, err := c.get(ctx, "/build/"+project+"/_result")
+	resp, err := c.get(ctx, "build_results", "/build/"+project+"/_result")
 	if err != nil {
 		return nil, err
 	}
@@ -241,8 +272,8 @@ func (c *Client) BuildResults(ctx context.Context, project string) ([]PackageBui
 }
 
 // projectDir fetches a /build/… directory listing and returns the entry names.
-func (c *Client) projectDir(ctx context.Context, path string) ([]string, error) {
-	resp, err := c.get(ctx, path)
+func (c *Client) projectDir(ctx context.Context, op, path string) ([]string, error) {
+	resp, err := c.get(ctx, op, path)
 	if err != nil {
 		return nil, err
 	}
@@ -265,19 +296,19 @@ func (c *Client) projectDir(ctx context.Context, path string) ([]string, error) 
 // ProjectRepos returns the repository names configured for an OBS project.
 // Calls GET /build/{project}/.
 func (c *Client) ProjectRepos(ctx context.Context, project string) ([]string, error) {
-	return c.projectDir(ctx, "/build/"+url.PathEscape(project)+"/")
+	return c.projectDir(ctx, "project_repos", "/build/"+url.PathEscape(project)+"/")
 }
 
 // ProjectRepoArchs returns the architectures available for a repository.
 // Calls GET /build/{project}/{repo}/.
 func (c *Client) ProjectRepoArchs(ctx context.Context, project, repo string) ([]string, error) {
-	return c.projectDir(ctx, "/build/"+url.PathEscape(project)+"/"+url.PathEscape(repo)+"/")
+	return c.projectDir(ctx, "project_repo_archs", "/build/"+url.PathEscape(project)+"/"+url.PathEscape(repo)+"/")
 }
 
 // ProjectRepoPackages returns the package names built in a specific repo/arch.
 // Calls GET /build/{project}/{repo}/{arch}/.
 func (c *Client) ProjectRepoPackages(ctx context.Context, project, repo, arch string) ([]string, error) {
-	return c.projectDir(ctx, "/build/"+url.PathEscape(project)+"/"+
+	return c.projectDir(ctx, "project_repo_packages", "/build/"+url.PathEscape(project)+"/"+
 		url.PathEscape(repo)+"/"+url.PathEscape(arch)+"/")
 }
 
@@ -286,7 +317,7 @@ func (c *Client) ProjectRepoPackages(ctx context.Context, project, repo, arch st
 // OBS rather than from the DB.
 func (c *Client) ProjectBuildResults(ctx context.Context, project string) ([]PackageBuildState, error) {
 	path := fmt.Sprintf("/build/%s/_result?view=versrel", url.PathEscape(project))
-	resp, err := c.get(ctx, path)
+	resp, err := c.get(ctx, "project_build_results", path)
 	if err != nil {
 		return nil, err
 	}
@@ -317,7 +348,7 @@ func (c *Client) ProjectBuildResults(ctx context.Context, project string) ([]Pac
 // BuildLog returns the tail of a package build log.
 func (c *Client) BuildLog(ctx context.Context, project, repo, arch, pkg string, tailBytes int) (string, error) {
 	path := fmt.Sprintf("/build/%s/%s/%s/%s/_log?last=1&nostream=1", project, repo, arch, pkg)
-	resp, err := c.get(ctx, path)
+	resp, err := c.get(ctx, "build_log", path)
 	if err != nil {
 		return "", err
 	}
@@ -329,7 +360,7 @@ func (c *Client) BuildLog(ctx context.Context, project, repo, arch, pkg string, 
 // PackageHistory returns build history entries for a package target.
 func (c *Client) PackageHistory(ctx context.Context, project, repo, arch, pkg string) ([]HistoryEntry, error) {
 	path := fmt.Sprintf("/build/%s/%s/%s/%s/_history", project, repo, arch, pkg)
-	resp, err := c.get(ctx, path)
+	resp, err := c.get(ctx, "package_history", path)
 	if err != nil {
 		return nil, err
 	}
@@ -347,7 +378,7 @@ func (c *Client) PackageHistory(ctx context.Context, project, repo, arch, pkg st
 // BuildDepInfo returns dependency info for a repo+arch.
 func (c *Client) BuildDepInfo(ctx context.Context, project, repo, arch string) ([]DepInfo, error) {
 	path := fmt.Sprintf("/build/%s/%s/%s/_builddepinfo", project, repo, arch)
-	resp, err := c.get(ctx, path)
+	resp, err := c.get(ctx, "build_dep_info", path)
 	if err != nil {
 		return nil, err
 	}
@@ -368,7 +399,7 @@ func (c *Client) BuildDepInfo(ctx context.Context, project, repo, arch string) (
 func (c *Client) PackageBlockedReasons(ctx context.Context, project, pkg string) (map[string]string, error) {
 	path := fmt.Sprintf("/build/%s/_result?package=%s&view=status",
 		url.PathEscape(project), url.QueryEscape(pkg))
-	resp, err := c.get(ctx, path)
+	resp, err := c.get(ctx, "blocked_reasons", path)
 	if err != nil {
 		return nil, err
 	}
@@ -393,7 +424,7 @@ func (c *Client) PackageBlockedReasons(ctx context.Context, project, pkg string)
 // SourceHistory returns commit history for a source package.
 func (c *Client) SourceHistory(ctx context.Context, project, pkg string) ([]SourceCommit, error) {
 	path := fmt.Sprintf("/source/%s/%s/_history", project, pkg)
-	resp, err := c.get(ctx, path)
+	resp, err := c.get(ctx, "source_history", path)
 	if err != nil {
 		return nil, err
 	}
@@ -412,7 +443,7 @@ func (c *Client) SourceHistory(ctx context.Context, project, pkg string) ([]Sour
 func (c *Client) PackageBuildResults(ctx context.Context, project, pkg string) ([]PackageBuildState, error) {
 	path := fmt.Sprintf("/build/%s/_result?package=%s&view=status",
 		url.PathEscape(project), url.QueryEscape(pkg))
-	resp, err := c.get(ctx, path)
+	resp, err := c.get(ctx, "package_build_results", path)
 	if err != nil {
 		return nil, err
 	}
@@ -444,7 +475,7 @@ func (c *Client) PackageBuildResults(ctx context.Context, project, pkg string) (
 func (c *Client) RepoPublishStates(ctx context.Context, project, pkg string) (map[string]string, error) {
 	path := fmt.Sprintf("/build/%s/_result?package=%s&view=status",
 		url.PathEscape(project), url.QueryEscape(pkg))
-	resp, err := c.get(ctx, path)
+	resp, err := c.get(ctx, "publish_states", path)
 	if err != nil {
 		return nil, err
 	}
@@ -467,7 +498,7 @@ func (c *Client) PackageBuildReason(ctx context.Context, project, repo, arch, pk
 	path := fmt.Sprintf("/build/%s/%s/%s/%s/_reason",
 		url.PathEscape(project), url.PathEscape(repo),
 		url.PathEscape(arch), url.PathEscape(pkg))
-	resp, err := c.get(ctx, path)
+	resp, err := c.get(ctx, "build_reason", path)
 	if err != nil {
 		return BuildReasonResult{}, err
 	}
@@ -505,6 +536,7 @@ func (c *Client) PackageIsContainer(ctx context.Context, project, pkg string) (b
 	}
 	req.SetBasicAuth(c.username, c.password)
 	req.Header.Set("Accept", "application/xml")
+	c.metrics.inc("is_container")
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return false, err
@@ -537,7 +569,7 @@ func (c *Client) PackageIsContainer(ctx context.Context, project, pkg string) (b
 func (c *Client) PackageVersionResult(ctx context.Context, project, pkg string) (string, error) {
 	path := fmt.Sprintf("/build/%s/_result?view=versrel&package=%s",
 		url.PathEscape(project), url.QueryEscape(pkg))
-	resp, err := c.get(ctx, path)
+	resp, err := c.get(ctx, "version", path)
 	if err != nil {
 		return "", err
 	}
@@ -560,7 +592,7 @@ func (c *Client) PackageVersionResult(ctx context.Context, project, pkg string) 
 // ProjectBinaryList returns every binary entry from _result?view=binarylist.
 func (c *Client) ProjectBinaryList(ctx context.Context, project string) ([]BinaryArtifact, error) {
 	path := fmt.Sprintf("/build/%s/_result?view=binarylist", url.PathEscape(project))
-	resp, err := c.get(ctx, path)
+	resp, err := c.get(ctx, "binary_list", path)
 	if err != nil {
 		return nil, err
 	}
@@ -634,7 +666,7 @@ func (c *Client) PackageBinaries(ctx context.Context, project, repo, arch, pkg s
 	path := fmt.Sprintf("/build/%s/%s/%s/%s",
 		url.PathEscape(project), url.PathEscape(repo),
 		url.PathEscape(arch), url.PathEscape(pkg))
-	resp, err := c.get(ctx, path)
+	resp, err := c.get(ctx, "package_binaries", path)
 	if err != nil {
 		return nil, err
 	}
@@ -664,7 +696,7 @@ func (c *Client) PackageContainerInfoFilename(ctx context.Context, project, repo
 	path := fmt.Sprintf("/build/%s/%s/%s/%s",
 		url.PathEscape(project), url.PathEscape(repo),
 		url.PathEscape(arch), url.PathEscape(pkg))
-	resp, err := c.get(ctx, path)
+	resp, err := c.get(ctx, "container_info_filename", path)
 	if err != nil {
 		return "", err
 	}
@@ -694,7 +726,7 @@ func (c *Client) PackageContainerTags(ctx context.Context, project, repo, arch, 
 		url.PathEscape(project), url.PathEscape(repo),
 		url.PathEscape(arch), url.PathEscape(pkg),
 		url.PathEscape(filename))
-	resp, err := c.getFile(ctx, path)
+	resp, err := c.getFile(ctx, "container_tags", path)
 	if err != nil {
 		return nil, err
 	}
@@ -739,7 +771,7 @@ func stripEpoch(evr string) string {
 func (c *Client) RepoBinaryVersions(ctx context.Context, project, repo, arch string) (map[string]string, error) {
 	path := fmt.Sprintf("/build/%s/%s/%s/_repository?view=binaryversions&withevr=1",
 		url.PathEscape(project), url.PathEscape(repo), url.PathEscape(arch))
-	resp, err := c.get(ctx, path)
+	resp, err := c.get(ctx, "binary_versions", path)
 	if err != nil {
 		return nil, err
 	}
