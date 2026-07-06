@@ -17,6 +17,7 @@ type Config struct {
 	Store      StoreConfig
 	Server     ServerConfig
 	WorkerPool WorkerPoolConfig
+	Telemetry  TelemetryConfig
 }
 
 type OBSConfig struct {
@@ -49,6 +50,11 @@ type WorkerPoolConfig struct {
 	QueueSize    int
 }
 
+type TelemetryConfig struct {
+	Interval time.Duration
+	Enabled  bool
+}
+
 func Load() (*Config, error) {
 	v := viper.New()
 
@@ -65,6 +71,8 @@ func Load() (*Config, error) {
 	v.SetDefault("worker_pool.size", 5)
 	v.SetDefault("worker_pool.poll_interval", "30s")
 	v.SetDefault("worker_pool.queue_size", 512)
+	v.SetDefault("telemetry.interval", "60s")
+	v.SetDefault("telemetry.enabled", false)
 
 	// Config file (optional)
 	cfgFile := "config.yaml"
@@ -90,6 +98,8 @@ func Load() (*Config, error) {
 		{"worker_pool.size", "WORKER_POOL_SIZE"},
 		{"worker_pool.poll_interval", "WORKER_POOL_POLL_INTERVAL"},
 		{"worker_pool.queue_size", "WORKER_POOL_QUEUE_SIZE"},
+		{"telemetry.interval", "TELEMETRY_INTERVAL"},
+		{"telemetry.enabled", "TELEMETRY_ENABLED"},
 	} {
 		_ = v.BindEnv(pair[0], pair[1])
 	}
@@ -107,6 +117,11 @@ func Load() (*Config, error) {
 	pollIntervalWP, err := time.ParseDuration(v.GetString("worker_pool.poll_interval"))
 	if err != nil {
 		return nil, fmt.Errorf("invalid WORKER_POOL_POLL_INTERVAL %q: %w", v.GetString("worker_pool.poll_interval"), err)
+	}
+
+	telemetryInterval, err := time.ParseDuration(v.GetString("telemetry.interval"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid TELEMETRY_INTERVAL %q: %w", v.GetString("telemetry.interval"), err)
 	}
 
 	cfg := &Config{
@@ -130,6 +145,10 @@ func Load() (*Config, error) {
 			Size:         v.GetInt("worker_pool.size"),
 			PollInterval: pollIntervalWP,
 			QueueSize:    v.GetInt("worker_pool.queue_size"),
+		},
+		Telemetry: TelemetryConfig{
+			Interval: telemetryInterval,
+			Enabled:  v.GetBool("telemetry.enabled"),
 		},
 	}
 

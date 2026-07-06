@@ -46,3 +46,17 @@ func TestLoadEnvOverride(t *testing.T) {
 		t.Errorf("expected 2m override, got %v", cfg.Poller.Interval)
 	}
 }
+
+func TestTelemetryDefaults(t *testing.T) {
+	t.Setenv("OBS_USERNAME", "u")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Telemetry.Interval != 60*time.Second {
+		t.Fatalf("interval = %v, want 60s", cfg.Telemetry.Interval)
+	}
+	if cfg.Telemetry.Enabled {
+		t.Fatalf("enabled = true, want false by default")
+	}
+}
