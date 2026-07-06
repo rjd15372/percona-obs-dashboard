@@ -42,6 +42,9 @@ type Client struct {
 	password string
 	http     *http.Client
 	metrics  *obsMetrics
+
+	pubMu    sync.Mutex
+	pubCache map[string]PublishFlags
 }
 
 func NewClient(base, username, password string) *Client {
@@ -51,6 +54,7 @@ func NewClient(base, username, password string) *Client {
 		password: password,
 		http:     &http.Client{Timeout: 30 * time.Second},
 		metrics:  &obsMetrics{counts: make(map[string]int64)},
+		pubCache: make(map[string]PublishFlags),
 	}
 }
 
@@ -129,6 +133,98 @@ func (c *Client) Rebuild(ctx context.Context, project, repo, arch, pkg string) e
 		url.QueryEscape(pkg),
 	)
 	return c.post(ctx, "rebuild", path)
+}
+
+// PublishFlags answers whether a repository publishes, resolved from a project's
+// _meta <publish> block. Zero value = everything publishes (safe default).
+type PublishFlags struct {
+	hasDefault     bool
+	defaultPublish bool
+	perRepo        map[string]bool
+}
+
+// Publishes reports whether repo publishes for this project.
+func (f PublishFlags) Publishes(repo string) bool {
+	if f.perRepo != nil {
+		if v, ok := f.perRepo[repo]; ok {
+			return v
+		}
+	}
+	if !f.hasDefault {
+		return true
+	}
+	return f.defaultPublish
+}
+
+type publishMetaXML struct {
+	Publish *struct {
+		Disable []struct {
+			Repository string `xml:"repository,attr"`
+		} `xml:"disable"`
+		Enable []struct {
+			Repository string `xml:"repository,attr"`
+		} `xml:"enable"`
+	} `xml:"publish"`
+}
+
+// parsePublishFlags resolves publish rules from a project _meta document.
+func parsePublishFlags(metaXML []byte) PublishFlags {
+	var m publishMetaXML
+	_ = xml.Unmarshal(metaXML, &m)
+	f := PublishFlags{defaultPublish: true, hasDefault: true, perRepo: map[string]bool{}}
+	if m.Publish == nil {
+		return f
+	}
+	for _, d := range m.Publish.Disable {
+		if d.Repository == "" {
+			f.defaultPublish = false
+		} else {
+			f.perRepo[d.Repository] = false
+		}
+	}
+	for _, e := range m.Publish.Enable {
+		if e.Repository == "" {
+			f.defaultPublish = true
+		} else {
+			f.perRepo[e.Repository] = true
+		}
+	}
+	return f
+}
+
+// ProjectPublishFlags returns the (cached) publish flags for a project. The cache
+// never expires — publish config is immutable for the repo lifetime — and is
+// cleared explicitly via EvictPublishFlags when a project is removed.
+func (c *Client) ProjectPublishFlags(ctx context.Context, project string) (PublishFlags, error) {
+	c.pubMu.Lock()
+	if f, ok := c.pubCache[project]; ok {
+		c.pubMu.Unlock()
+		return f, nil
+	}
+	c.pubMu.Unlock()
+
+	resp, err := c.get(ctx, "publish_flags", "/source/"+url.PathEscape(project)+"/_meta")
+	if err != nil {
+		return PublishFlags{}, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return PublishFlags{}, err
+	}
+	f := parsePublishFlags(body)
+
+	c.pubMu.Lock()
+	c.pubCache[project] = f
+	c.pubMu.Unlock()
+	return f, nil
+}
+
+// EvictPublishFlags removes a project's cached publish flags (call on project removal).
+func (c *Client) EvictPublishFlags(project string) {
+	c.pubMu.Lock()
+	delete(c.pubCache, project)
+	c.pubMu.Unlock()
 }
 
 // --- XML response types ---

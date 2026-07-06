@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -584,6 +585,61 @@ func TestRebuild_URLEncoding(t *testing.T) {
 	}
 	if !strings.Contains(capturedURL, "package=percona-pg_tde") {
 		t.Errorf("package missing from URL: %s", capturedURL)
+	}
+}
+
+func TestPublishFlagsResolution(t *testing.T) {
+	cases := []struct {
+		name string
+		meta string
+		repo string
+		want bool
+	}{
+		{"no publish block", `<project name="p"></project>`, "images", true},
+		{"bare disable", `<project name="p"><publish><disable/></publish></project>`, "images", false},
+		{"repo disable", `<project name="p"><publish><disable repository="UBI_8"/></publish></project>`, "UBI_8", false},
+		{"repo disable other repo publishes", `<project name="p"><publish><disable repository="UBI_8"/></publish></project>`, "images", true},
+		{"disable all, enable one", `<project name="p"><publish><disable/><enable repository="images"/></publish></project>`, "images", true},
+		{"disable all, enable one, other stays disabled", `<project name="p"><publish><disable/><enable repository="images"/></publish></project>`, "UBI_8", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := parsePublishFlags([]byte(tc.meta))
+			if got := f.Publishes(tc.repo); got != tc.want {
+				t.Fatalf("Publishes(%q) = %v, want %v", tc.repo, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestProjectPublishFlagsCacheAndEvict(t *testing.T) {
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		_, _ = w.Write([]byte(`<project name="p"><publish><disable/></publish></project>`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "u", "p")
+	ctx := context.Background()
+	if _, err := c.ProjectPublishFlags(ctx, "isv:percona:common:containers:ubi8"); err != nil {
+		t.Fatalf("first: %v", err)
+	}
+	if _, err := c.ProjectPublishFlags(ctx, "isv:percona:common:containers:ubi8"); err != nil {
+		t.Fatalf("second: %v", err)
+	}
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Fatalf("HTTP calls = %d, want 1 (cached)", got)
+	}
+	c.EvictPublishFlags("isv:percona:common:containers:ubi8")
+	if _, err := c.ProjectPublishFlags(ctx, "isv:percona:common:containers:ubi8"); err != nil {
+		t.Fatalf("third: %v", err)
+	}
+	if got := atomic.LoadInt32(&calls); got != 2 {
+		t.Fatalf("HTTP calls = %d, want 2 (refetched after evict)", got)
+	}
+	if c.MetricsSnapshot()["publish_flags"] != 2 {
+		t.Fatalf("publish_flags metric = %d, want 2", c.MetricsSnapshot()["publish_flags"])
 	}
 }
 
