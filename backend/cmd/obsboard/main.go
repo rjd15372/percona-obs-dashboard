@@ -19,6 +19,7 @@ import (
 	"github.com/percona/obs-dashboard/internal/mq"
 	"github.com/percona/obs-dashboard/internal/obs"
 	"github.com/percona/obs-dashboard/internal/store"
+	"github.com/percona/obs-dashboard/internal/telemetry"
 	"github.com/percona/obs-dashboard/internal/worker"
 	"github.com/percona/obs-dashboard/internal/workingset"
 )
@@ -86,7 +87,17 @@ func run() error {
 	go consumer.Run(ctx)
 	go runPruner(ctx, db, cfg.Poller.Interval, cfg.Store.EventRetention)
 
-	router := api.NewRouter(db, h, obsClient, cfg.OBSRoot, new(atomic.Bool), cfg.Telemetry.Interval)
+	telemetryEnabled := &atomic.Bool{}
+	telemetryEnabled.Store(cfg.Telemetry.Enabled)
+	reporter := &telemetry.Reporter{
+		Interval: cfg.Telemetry.Interval,
+		Enabled:  telemetryEnabled,
+		Stats:    ws,
+		Snap:     obsClient,
+	}
+	go reporter.Run(ctx)
+
+	router := api.NewRouter(db, h, obsClient, cfg.OBSRoot, telemetryEnabled, cfg.Telemetry.Interval)
 
 	var handler http.Handler = router
 	if cfg.Server.FrontendDir != "" {
