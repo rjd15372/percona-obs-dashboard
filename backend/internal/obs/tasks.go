@@ -220,6 +220,14 @@ func (t BlockedReasonTask) Run(ctx context.Context, client *Client, pkg *model.P
 type BuildReasonTask struct{}
 
 func (t BuildReasonTask) Run(ctx context.Context, client *Client, pkg *model.Package) error {
+	if pkg.TargetsStable {
+		// Negative-result caching: under stable targets every non-succeeded
+		// target was already queried in this exact state — populated reasons
+		// are current, and empty ones (e.g. unresolvable targets, which OBS
+		// has no reason for) will stay empty until a state transition flips
+		// TargetsStable off and refetches.
+		return nil
+	}
 	for i, target := range pkg.Targets {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -282,9 +290,10 @@ func (t VersionTask) Run(ctx context.Context, client *Client, pkg *model.Package
 	if pkg.IsContainer != nil && *pkg.IsContainer {
 		return nil
 	}
-	if pkg.Version != "" && pkg.TargetsStable {
+	if pkg.TargetsStable {
 		// versrel only changes when a new build lands, which always transitions
-		// target states; TargetsStable confirms none did since the last pass.
+		// target states. This also negative-caches never-built packages (empty
+		// versrel) — they refetch only on a state transition.
 		return nil
 	}
 	versrel, err := client.PackageVersionResult(ctx, pkg.Project, pkg.Name)

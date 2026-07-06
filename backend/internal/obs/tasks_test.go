@@ -802,3 +802,59 @@ func TestContainerTagsTaskFetchesWhenUnstable(t *testing.T) {
 		t.Errorf("version not updated from refreshed tags: %q", pkg.Version)
 	}
 }
+
+// Negative-result caching: under stable targets, an empty reason was already
+// confirmed empty in this exact state (e.g. unresolvable targets, which OBS
+// has no reason for) — no refetch until a state transition.
+func TestBuildReasonTaskSkipsWhenStable(t *testing.T) {
+	var calls int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		fmt.Fprint(w, `<reason><explain>should never be fetched</explain></reason>`)
+	}))
+	defer ts.Close()
+
+	c := obs.NewClient(ts.URL, "u", "p")
+	pkg := &model.Package{
+		Project: "isv:percona", Name: "mypkg",
+		TargetsStable: true,
+		Targets: []model.Target{
+			{Repo: "repo", Arch: "x86_64", State: "unresolvable"}, // empty reason, stable → skip
+			{Repo: "repo", Arch: "aarch64", State: "building", BuildReason: "meta change"},
+		},
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := (obs.BuildReasonTask{}).Run(context.Background(), c, pkg); err != nil {
+		t.Fatal(err)
+	}
+	if got := atomic.LoadInt32(&calls); got != 0 {
+		t.Fatalf("expected no OBS calls under stable targets, got %d", got)
+	}
+	if pkg.Targets[0].BuildReason != "" {
+		t.Errorf("unresolvable target reason should stay empty: %q", pkg.Targets[0].BuildReason)
+	}
+}
+
+func TestVersionTaskSkipsEmptyVersionWhenStable(t *testing.T) {
+	var calls int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		fmt.Fprint(w, `<resultlist></resultlist>`)
+	}))
+	defer ts.Close()
+
+	c := obs.NewClient(ts.URL, "u", "p")
+	pkg := &model.Package{
+		Project: "isv:percona:ppg:17", Name: "percona-pg_tde",
+		IsContainer:   boolPtr(false),
+		Version:       "", // never built — empty versrel is now negative-cached
+		TargetsStable: true,
+		UpdatedAt:     time.Now().UTC(),
+	}
+	if err := (obs.VersionTask{}).Run(context.Background(), c, pkg); err != nil {
+		t.Fatal(err)
+	}
+	if atomic.LoadInt32(&calls) != 0 {
+		t.Fatalf("expected no OBS call for empty version under stable targets, got %d", calls)
+	}
+}
