@@ -168,12 +168,21 @@ type publishMetaXML struct {
 }
 
 // parsePublishFlags resolves publish rules from a project _meta document.
-func parsePublishFlags(metaXML []byte) PublishFlags {
+//
+// Per-repo rules override the project-level default. Among conflicting
+// same-repo rules, the enable/disable applied is last-of-its-type processed
+// (not document order); a self-contradictory _meta with the same repo both
+// enabled and disabled is not resolved by document order, but real projects
+// don't emit such contradictory rules. Arch-scoped disable/enable attributes
+// are not supported; resolution is per-repo only.
+func parsePublishFlags(metaXML []byte) (PublishFlags, error) {
 	var m publishMetaXML
-	_ = xml.Unmarshal(metaXML, &m)
+	if err := xml.Unmarshal(metaXML, &m); err != nil {
+		return PublishFlags{}, err
+	}
 	f := PublishFlags{defaultPublish: true, hasDefault: true, perRepo: map[string]bool{}}
 	if m.Publish == nil {
-		return f
+		return f, nil
 	}
 	for _, d := range m.Publish.Disable {
 		if d.Repository == "" {
@@ -189,7 +198,7 @@ func parsePublishFlags(metaXML []byte) PublishFlags {
 			f.perRepo[e.Repository] = true
 		}
 	}
-	return f
+	return f, nil
 }
 
 // ProjectPublishFlags returns the (cached) publish flags for a project. The cache
@@ -212,7 +221,10 @@ func (c *Client) ProjectPublishFlags(ctx context.Context, project string) (Publi
 	if err != nil {
 		return PublishFlags{}, err
 	}
-	f := parsePublishFlags(body)
+	f, err := parsePublishFlags(body)
+	if err != nil {
+		return PublishFlags{}, err
+	}
 
 	c.pubMu.Lock()
 	c.pubCache[project] = f

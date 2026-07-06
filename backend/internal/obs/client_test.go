@@ -604,7 +604,10 @@ func TestPublishFlagsResolution(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			f := parsePublishFlags([]byte(tc.meta))
+			f, err := parsePublishFlags([]byte(tc.meta))
+			if err != nil {
+				t.Fatalf("parsePublishFlags: %v", err)
+			}
 			if got := f.Publishes(tc.repo); got != tc.want {
 				t.Fatalf("Publishes(%q) = %v, want %v", tc.repo, got, tc.want)
 			}
