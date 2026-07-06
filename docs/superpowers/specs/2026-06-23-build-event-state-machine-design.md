@@ -36,7 +36,7 @@ Intermediate states (`blocked`, `unresolvable`, `broken`) may occur zero or more
 | `blocked` | State transitions to `"blocked"` AND `t.BuildReason != ""` | `t.BlockedBy` |
 | `unresolvable` | State transitions to `"unresolvable"` AND `t.BuildReason != ""` | `t.Details` |
 | `broken` | State transitions to `"broken"` AND `t.BuildReason != ""` | `t.Details` |
-| `succeeded` | `!old.Published && t.Published` (publication = real success) | — |
+| `succeeded` | `!old.Published && t.Published` (publication = real success) **OR**, for repos with publishing disabled, state transitions to `"succeeded"` (`!flags.Publishes(t.Repo)` — amended 2026-07-06) | — |
 | `failed` | State transitions to `"failed"` (not `unresolvable`/`broken` — those are intermediate) | scaffolded empty; populated when source is available |
 
 ### Key invariants
@@ -46,6 +46,8 @@ Intermediate states (`blocked`, `unresolvable`, `broken`) may occur zero or more
 **Intermediate states only emit after `build_started`.** The guard `t.BuildReason != ""` enforces this: since `build_started` fires the moment `BuildReason` appears, any subsequent (or same-cycle) intermediate state is guaranteed to follow it. If a target goes `blocked` in the same poll cycle that `BuildReason` first appears, the event log records `build_started` then `blocked` — both ordered correctly within a single worker cycle.
 
 **`succeeded` = publication, not `State == "succeeded"`.** OBS marks a target as `succeeded` when the build binary is ready, and separately flips `Published` when the package is available in repos. Publication is the real consumer-visible success. Emitting on the `Published` flag flip means one clean `succeeded` per target per build, rather than multiple intermediates.
+
+**Amendment (2026-07-06): non-publishing repos emit on the state transition.** For projects with `<publish><disable/></publish>` (e.g. `isv:percona:ppg:common:deps`), `Published` never flips, so the publication gate silently swallowed all success events. `emitBuildEvents` now takes the package's cached `PublishFlags` and additionally fires `succeeded` on `old.State != "succeeded" && t.State == "succeeded" && !flags.Publishes(t.Repo)` — for a repo that never publishes, the build-state transition is the only terminal moment there is. Publishing repos keep publication-gated semantics; both conditions feed a single append (never a duplicate). Known inherited blind spot: a full cycle completing between observations (package settled and re-added already-`succeeded`) shows no transition and emits nothing — same window the publication path always had.
 
 **`published` events are removed.** Publishing is now represented by `succeeded`. No separate `published` event is emitted.
 
