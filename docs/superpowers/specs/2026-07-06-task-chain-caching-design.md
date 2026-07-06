@@ -12,6 +12,7 @@ Follow-up #1 from the working-set OBS request reduction (`2026-07-06-working-set
 | `BuildReasonTask` | 1 req **per non-succeeded target**, ×3 retries on failure | The build reason explains why the current cycle was triggered — constant within a cycle; cycles are delimited by state transitions |
 | `BlockedReasonTask` | 1 req while any target is blocked | The blocked state persists for minutes–hours; details evolve slowly |
 | `VersionTask` | 1 req per pass (non-containers) | versrel only changes when a new build lands, which always shows up as a target state transition |
+| `ContainerTagsTask` | 2 reqs per pass (in-set containers) | Image tags only change when a new build lands — same invariant as versrel |
 
 A blocked 4-target package costs ~6 requests per 30s pass; steady-state that's ~17K req/day for one package.
 
@@ -19,7 +20,7 @@ A blocked 4-target package costs ~6 requests per 30s pass; steady-state that's ~
 
 ## Goal
 
-Skip the `BuildReason`/`BlockedReason`/`Version` re-fetch when the relevant target state is unchanged since the last fetch, without changing the `Task` interface or adding any external cache structure.
+Skip the `BuildReason`/`BlockedReason`/`Version`/`ContainerTags` re-fetch when the relevant target state is unchanged since the last fetch, without changing the `Task` interface or adding any external cache structure.
 
 ## Key decisions (locked during brainstorming)
 
@@ -109,17 +110,31 @@ if pkg.Version != "" && pkg.TargetsStable {
 
 Fetches when the version is unknown, when any target changed, or when stability was not confirmed (cold start). The only theoretical miss — an entire build cycle completing invisibly between two observations with no state delta — is covered by the conservative polarity on restart/replace, the 30s cadence while running, and the fact that a version bump requires a build that transitions states.
 
+### 5. `ContainerTagsTask` — skip when stable (added during review)
+
+Same invariant and same rule as `VersionTask` — image tags change only when a new build lands:
+
+```go
+if len(pkg.ContainerTags) > 0 && pkg.TargetsStable {
+    return nil
+}
+```
+
+Placed after the existing `IsContainer` guard, before the target-discovery logic. Saves the 2-request pair (`PackageContainerInfoFilename` + `PackageContainerTags`) per pass for in-set containers with known tags.
+
+**Release-chain caveat:** `TargetsStable` is set by `BuildStateTask`, which runs only in the dev chain. In the release chain (`PackageType → ContainerTags → BinariesCheck`) the flag is never set, stays `false`, and release containers keep fetching every pass — identical to today (no regression, no gain). Acceptable: release containers exit the working set quickly (tags → published promotion → settled), and the conservative polarity guarantees correctness. Do NOT set `TargetsStable` from `BinariesCheckTask` or the poller — it would run after `ContainerTagsTask` (wrong order) or bypass the single-invalidation-point principle.
+
 ### Untouched paths (verified)
 
 - **Event emission** (`emitBuildEvents`): compares the pre-chain `oldTargets` snapshot against final targets; mid-chain wiping doesn't alter the old side, and the new side is refetched on every transition — `build_started`/`blocked`/`failed` event behaviour is unchanged.
 - **MQ `mergePackageTarget`**: already preserves enrichment state-conditionally for its own merge; `BlockedByFetchedAt` arrives zero after a replace → one refetch.
 - **Poller `preservePackageEnrichment`**: operates on its own structs for DB writes; the working-set pointer is untouched (poller `Add` dedups).
-- **Release chain** (`PackageType`, `ContainerTags`, `BinariesCheck`): contains none of the three cached tasks.
+- **Release chain** (`PackageType`, `ContainerTags`, `BinariesCheck`): `BuildReason`/`BlockedReason`/`Version` are absent; `ContainerTags`'s new guard is inert there (see §5 caveat) — behaviour identical to today.
 - **`Published`/`PublishStateTask`**: not part of the preservation change (`BuildStateTask` never preserved `Published`).
 
 ## Expected impact
 
-Steady-state pass for a blocked 4-target package: ~6 requests → **1** (`PackageBuildResults` only; blocked-reason refresh amortized to 1 per 10 passes). Building/unresolvable multi-target packages: 1 + N → 1 per pass between transitions. Verifiable live via the telemetry endpoint (`build_reason`, `blocked_reasons`, `version` counters should flatten while `package_build_results` continues at the polling rate).
+Steady-state pass for a blocked 4-target package: ~6 requests → **1** (`PackageBuildResults` only; blocked-reason refresh amortized to 1 per 10 passes). Building/unresolvable multi-target packages: 1 + N → 1 per pass between transitions. In-set dev containers with known tags: 2 fewer requests per pass. Verifiable live via the telemetry endpoint (`build_reason`, `blocked_reasons`, `version`, `container_info_filename`, `container_tags` counters should flatten while `package_build_results` continues at the polling rate).
 
 ## Testing strategy
 
@@ -127,11 +142,18 @@ Steady-state pass for a blocked 4-target package: ~6 requests → **1** (`Packag
 - **`BuildReasonTask`**: populated reason → no HTTP call (httptest counter); empty reason → fetches; state transition wipe → refetches.
 - **`BlockedReasonTask`**: fresh `BlockedByFetchedAt` (now) → skip; stale (now−6m) → fetch; empty `BlockedBy` → fetch; stamp set only on value receipt. Deterministic via constructing timestamps directly — no clock injection.
 - **`VersionTask`**: `Version != "" && TargetsStable` → skip; empty version or unstable → fetch.
+- **`ContainerTagsTask`**: tags known + stable → no HTTP call; tags empty or unstable → fetch; release package (flag never set) → always fetches.
 - **Serialization**: `json.Marshal` of `Target`/`Package` excludes the two new fields (guards the DB/API invariant).
 - **Regression**: full existing suite (worker event emission, poller, MQ) stays green.
 
+## Task audit (why the rest of the chain is untouched)
+
+- **`PackageTypeTask`**: already permanently cached — `IsContainer != nil → return`, persisted in the DB, preserved by MQ and poller. A package's type never changes; no invalidation exists or is needed.
+- **`PublishStateTask` / `BinariesCheckTask`**: fundamentally not state-cacheable — the publish transition is precisely a change that occurs *without* a target-state change (state stays `succeeded` while the repo flips to published). Their existing guards are the correct optimization.
+- **`BuildStateTask`**: is the poll itself.
+
 ## Out of scope
 
-- Caching `PackageTypeTask` (already self-caching via `IsContainer != nil`) and `ContainerTagsTask` (containers only, self-limiting).
 - Configurable TTL for BlockedBy (constant 5m until proven insufficient).
 - Negative-result caching for targets with legitimately empty `_reason`.
+- `TargetsStable` support in the release chain (see §5 caveat).
