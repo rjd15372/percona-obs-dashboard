@@ -22,7 +22,7 @@ func TestSettled(t *testing.T) {
 		{"published", pkg(model.RollupPublished), true},
 		{"failed", pkg(model.RollupFailed), true},
 		{"broken", pkg(model.RollupBroken), false},
-		{"unresolvable", pkg(model.RollupUnresolvable), false},
+		{"unresolvable", pkg(model.RollupUnresolvable), true},
 		{"building", pkg(model.RollupBuilding), false},
 		{"blocked", pkg(model.RollupBlocked), false},
 		{"succeeded non-publishing repo", pkg(model.RollupSucceeded, tgt("UBI_8", "succeeded", false)), true},

@@ -6,13 +6,15 @@ import "github.com/percona/obs-dashboard/internal/model"
 // leave the working set. It does NOT mutate rollup_state — it only decides
 // working-set membership.
 //
-//   - published, failed → terminal
+//   - published, failed, unresolvable → terminal (unresolvable added after
+//     production telemetry showed long-lived unresolvable packages re-running
+//     the chain every 30s; the poller re-adds on any rollup change ≤1 tick)
 //   - succeeded         → terminal iff every active target has published OR sits
 //     in a non-publishing repo (nothing will ever flip it to published)
 //   - everything else   → keep polling
 func Settled(pkg *model.Package, flags PublishFlags) bool {
 	switch pkg.RollupState {
-	case model.RollupPublished, model.RollupFailed:
+	case model.RollupPublished, model.RollupFailed, model.RollupUnresolvable:
 		return true
 	case model.RollupSucceeded:
 		for _, t := range pkg.Targets {
