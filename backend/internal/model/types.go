@@ -108,6 +108,11 @@ type Package struct {
 	// In-memory only (json:"-"); the zero value (false) on any cold-start path
 	// forces downstream tasks to fetch.
 	TargetsStable bool `json:"-"`
+	// CacheWarm marks that this in-memory Package has completed at least one
+	// BuildStateTask pass. TargetsStable may only be true when CacheWarm was
+	// already set, so the first pass over any cold-start pointer (DB seed on
+	// restart, MQ replace, fresh stub) always fetches. In-memory only (json:"-").
+	CacheWarm bool `json:"-"`
 }
 
 type EventType string

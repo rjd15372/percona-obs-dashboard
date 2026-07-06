@@ -54,7 +54,7 @@ func (t BuildStateTask) Run(ctx context.Context, client *Client, pkg *model.Pack
 	// TargetsStable: true only when the previous pass had the same target set
 	// with identical states — all cold-start paths (no previous targets, MQ
 	// replace, restart) yield false so downstream tasks fetch conservatively.
-	stable := len(pkg.Targets) > 0 && len(pkg.Targets) == len(updated.Targets)
+	stable := pkg.CacheWarm && len(pkg.Targets) > 0 && len(pkg.Targets) == len(updated.Targets)
 	for i := range updated.Targets {
 		matched := false
 		for _, old := range pkg.Targets {
@@ -81,6 +81,7 @@ func (t BuildStateTask) Run(ctx context.Context, client *Client, pkg *model.Pack
 	pkg.TotalTargets = updated.TotalTargets
 	pkg.UpdatedAt = updated.UpdatedAt
 	pkg.TargetsStable = stable
+	pkg.CacheWarm = true
 	return nil
 }
 

@@ -571,6 +571,7 @@ func TestBuildStateTaskPreservationMatrix(t *testing.T) {
 			pkg := &model.Package{
 				Project: "isv:percona", Name: "mypkg",
 				Targets: tc.prevTargets, UpdatedAt: time.Now().UTC(),
+				CacheWarm: true, // simulate a pointer that completed a prior pass
 			}
 			if err := (obs.BuildStateTask{}).Run(context.Background(), c, pkg); err != nil {
 				t.Fatal(err)
@@ -601,6 +602,90 @@ func TestBuildStateTaskPreservationMatrix(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// A pointer seeded from the DB (or replaced by MQ) has CacheWarm=false even when
+// its targets match live OBS state — the first pass must not report stability.
+func TestBuildStateTaskColdPointerIsNeverStable(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, resultXML([][3]string{{"repo", "x86_64", "blocked"}}))
+	}))
+	defer ts.Close()
+
+	c := obs.NewClient(ts.URL, "u", "p")
+	pkg := &model.Package{
+		Project: "isv:percona", Name: "mypkg",
+		// Same state as the server reports, but CacheWarm is false (cold start).
+		Targets:   []model.Target{{Repo: "repo", Arch: "x86_64", State: "blocked"}},
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := (obs.BuildStateTask{}).Run(context.Background(), c, pkg); err != nil {
+		t.Fatal(err)
+	}
+	if pkg.TargetsStable {
+		t.Error("cold pointer must not be stable on its first pass")
+	}
+	if !pkg.CacheWarm {
+		t.Error("CacheWarm must be set after a completed pass")
+	}
+}
+
+// The second pass over the same pointer (now warm) reports stability.
+func TestBuildStateTaskSecondPassIsStable(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, resultXML([][3]string{{"repo", "x86_64", "blocked"}}))
+	}))
+	defer ts.Close()
+
+	c := obs.NewClient(ts.URL, "u", "p")
+	pkg := &model.Package{
+		Project: "isv:percona", Name: "mypkg",
+		Targets:   []model.Target{{Repo: "repo", Arch: "x86_64", State: "blocked"}},
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := (obs.BuildStateTask{}).Run(context.Background(), c, pkg); err != nil {
+		t.Fatal(err)
+	}
+	if err := (obs.BuildStateTask{}).Run(context.Background(), c, pkg); err != nil {
+		t.Fatal(err)
+	}
+	if !pkg.TargetsStable {
+		t.Error("second pass over a warm pointer with unchanged state must be stable")
+	}
+}
+
+// Release chain has no BuildStateTask, so TargetsStable is never set and release
+// containers keep fetching their tags every pass (accepted in the design).
+func TestContainerTagsTaskReleaseAlwaysFetches(t *testing.T) {
+	var calls int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		if strings.HasSuffix(r.URL.Path, ".containerinfo") {
+			fmt.Fprint(w, `{"tags":["percona-distribution-postgresql:18.4-1-1.7","percona-distribution-postgresql:18.4-1"]}`)
+		} else {
+			fmt.Fprint(w, `<binarylist>
+				<binary filename="percona-distribution-postgresql.x86_64-1.7.containerinfo" size="1" mtime="1"/>
+			</binarylist>`)
+		}
+	}))
+	defer ts.Close()
+
+	c := obs.NewClient(ts.URL, "u", "p")
+	pkg := &model.Package{
+		Project: "isv:percona:ppg:releases:17", Name: "percona-distribution-postgresql",
+		IsRelease:     true,
+		IsContainer:   boolPtr(true),
+		ContainerTags: []string{"18.4-1-1.7", "18.4-1"},
+		// TargetsStable deliberately false: the release chain never sets it.
+		Targets:   []model.Target{{Repo: "images", Arch: "x86_64", State: "succeeded"}},
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := (obs.ContainerTagsTask{}).Run(context.Background(), c, pkg); err != nil {
+		t.Fatal(err)
+	}
+	if atomic.LoadInt32(&calls) == 0 {
+		t.Fatal("release container must keep fetching tags (TargetsStable never set in release chain)")
 	}
 }
 

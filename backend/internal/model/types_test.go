@@ -28,13 +28,14 @@ func TestCacheFieldsExcludedFromJSON(t *testing.T) {
 	pkg := Package{
 		Project: "p", Name: "n",
 		TargetsStable: true,
+		CacheWarm:     true,
 		UpdatedAt:     time.Now(),
 	}
 	b, err = json.Marshal(pkg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, needle := range []string{"TargetsStable", "targets_stable"} {
+	for _, needle := range []string{"TargetsStable", "targets_stable", "CacheWarm", "cache_warm"} {
 		if strings.Contains(string(b), needle) {
 			t.Fatalf("Package JSON must not contain %q: %s", needle, b)
 		}
