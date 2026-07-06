@@ -90,9 +90,24 @@ func (t BuildStateTask) Run(ctx context.Context, client *Client, pkg *model.Pack
 type PublishStateTask struct{}
 
 func (t PublishStateTask) Run(ctx context.Context, client *Client, pkg *model.Package) error {
-	needsCheck := false
+	hasCandidate := false
 	for _, target := range pkg.Targets {
 		if target.State == "succeeded" && !target.Published {
+			hasCandidate = true
+			break
+		}
+	}
+	if !hasCandidate {
+		return nil
+	}
+
+	// Skip targets whose repo never publishes: their repo state stays
+	// "unpublished" forever, so checking is futile. On flags error the zero
+	// value publishes everything → conservative check (same as before).
+	flags, _ := client.ProjectPublishFlags(ctx, pkg.Project)
+	needsCheck := false
+	for _, target := range pkg.Targets {
+		if target.State == "succeeded" && !target.Published && flags.Publishes(target.Repo) {
 			needsCheck = true
 			break
 		}

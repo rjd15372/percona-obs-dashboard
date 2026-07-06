@@ -196,6 +196,38 @@ func TestPublishStateTask(t *testing.T) {
 	}
 }
 
+// Succeeded-unpublished targets in repos that never publish are futile to
+// check: their repo state stays "unpublished" forever. PublishStateTask must
+// consult the (cached) publish flags and skip the _result fetch entirely.
+func TestPublishStateTaskSkipsNonPublishingRepos(t *testing.T) {
+	var metaCalls, resultCalls int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/_meta") {
+			atomic.AddInt32(&metaCalls, 1)
+			fmt.Fprint(w, `<project name="p"><publish><disable/></publish></project>`)
+			return
+		}
+		atomic.AddInt32(&resultCalls, 1)
+		fmt.Fprint(w, `<resultlist></resultlist>`)
+	}))
+	defer ts.Close()
+
+	c := obs.NewClient(ts.URL, "u", "p")
+	pkg := &model.Package{
+		Project: "isv:percona:PR:pr-1:ppg:17", Name: "mypkg",
+		Targets: []model.Target{{Repo: "Ubuntu_24.04", Arch: "x86_64", State: "succeeded"}},
+	}
+	if err := (obs.PublishStateTask{}).Run(context.Background(), c, pkg); err != nil {
+		t.Fatal(err)
+	}
+	if atomic.LoadInt32(&resultCalls) != 0 {
+		t.Fatalf("expected no publish-state check for non-publishing repo, got %d", resultCalls)
+	}
+	if atomic.LoadInt32(&metaCalls) != 1 {
+		t.Fatalf("expected exactly 1 cached _meta fetch, got %d", metaCalls)
+	}
+}
+
 func TestBuildReasonTask(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `<reason>
