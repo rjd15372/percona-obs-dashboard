@@ -4,20 +4,20 @@
     {
       "id": 22,
       "subject": "Task 1: Parkable helper",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** A pure function deciding when a package waits only on MQ-announced build completions.\n\n**Files:** backend/internal/obs/parkable.go (new), backend/internal/obs/parkable_test.go (new)\n\n**Acceptance Criteria:** building-with-reason parkable; without reason not; succeeded inert iff Published or non-publishing repo; unpublished-publishing blocks; any other active state blocks; skipState ignored; requires ≥1 building.\n\n**Verify:** cd backend && go test ./internal/obs/ -run TestParkable -v && go test ./internal/obs/\n\n```json:metadata\n{\"files\": [\"backend/internal/obs/parkable.go\", \"backend/internal/obs/parkable_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/obs/ -run TestParkable -v && go test ./internal/obs/\", \"acceptanceCriteria\": [\"building-with-reason parkable; without reason not\", \"succeeded inert iff Published or non-publishing repo; unpublished-publishing blocks\", \"any other active state blocks\", \"skipState ignored; requires ≥1 building\"], \"modelTier\": \"mechanical\"}\n```"
     },
     {
       "id": 23,
       "subject": "Task 2: Worker parks alongside settle",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [22],
       "description": "**Goal:** ProcessOnce removes parkable packages from the working set without touching settled.\n\n**Files:** backend/internal/worker/worker.go, backend/internal/worker/worker_test.go\n\n**Acceptance Criteria:** removal gate becomes Settled OR (type-known AND Parkable) using in-pass flags; all-building package parked with settled=0 in DB; unpublished-publishing mixed retained; missing BuildReason retained; existing tests pass unmodified.\n\n**Verify:** cd backend && go test ./internal/worker/ -v && go test ./...\n\n```json:metadata\n{\"files\": [\"backend/internal/worker/worker.go\", \"backend/internal/worker/worker_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/worker/ -v && go test ./...\", \"acceptanceCriteria\": [\"removal gate becomes Settled OR (type-known AND Parkable)\", \"all-building package parked with settled=0 in DB\", \"unpublished-publishing mixed package retained\", \"missing BuildReason retained\", \"existing tests pass unmodified\"], \"modelTier\": \"standard\"}\n```"
     },
     {
       "id": 24,
       "subject": "Task 3: MQ build_unchanged wakes the working set",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [23],
       "description": "**Goal:** build_unchanged events flow through the same merge+upsert+Signal path as success/fail, with the completed target marked \"finished\".\n\n**Files:** backend/internal/mq/consumer.go, backend/internal/mq/consumer_test.go\n\n**Acceptance Criteria:** early return deleted; mqStateToRollup maps unchanged to finished; build_unchanged delivery merges target as finished and Signals the working set; existing consumer test unmodified.\n\n**Verify:** cd backend && go test ./internal/mq/ -v && go test ./...\n\n```json:metadata\n{\"files\": [\"backend/internal/mq/consumer.go\", \"backend/internal/mq/consumer_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/mq/ -v && go test ./...\", \"acceptanceCriteria\": [\"build_unchanged early return deleted\", \"mqStateToRollup maps unchanged to finished\", \"build_unchanged delivery merges target as finished and Signals the working set\", \"existing consumer test unmodified\"], \"modelTier\": \"standard\"}\n```"
     }

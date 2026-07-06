@@ -102,6 +102,13 @@ Each building package stops costing ~2 req/min for the build duration; a target 
 - **MQ consumer:** `build_unchanged` no longer early-returns — it upserts a merged package whose completed target is `"finished"` and Signals the working set; `mqStateToRollup("...build_unchanged")` → `RollupFinished`.
 - **Regression:** full suite; existing MQ success/fail tests unchanged.
 
+## Follow-ups (from final review, 2026-07-06 — accepted, not blocking)
+
+1. **Working-set `Remove`/`Done` race**: `ws.Remove` (in `ProcessOnce`) clears `inflight` before the worker loop's trailing `ws.Done`; a `Signal` landing in that microsecond window can double-dispatch a package. Pre-existing for settled removals; parking makes `Remove` more frequent. Consequence: one duplicate (idempotent) pass. Fix idea: generation-count the inflight flag or skip `Done` after a worker-initiated `Remove`.
+2. **MQ-ahead-of-`_result`**: if the wake event outruns OBS's `_result` view, the wake pass re-parks with the completion unobserved; the poller re-adds at the next tick (designed fallback), but the wake event is spent.
+3. **Missed second build cycle while parked**: a rebuild cycling building→scheduled→building entirely between poller ticks keeps the stale reason and delays the cycle-2 `build_started` event until completion — pre-existing preservation gap, widened from the 30s worker poll to the poller interval.
+4. **Composed wake-loop integration test**: merge-preservation → BuildStateTask preservation → zero reason refetches → re-park is verified piece-wise but not as one integration test with a fake client.
+
 ## Out of scope
 
 - Parking `scheduled` targets (user decision — keeps the 30s scheduled→building freshness).
