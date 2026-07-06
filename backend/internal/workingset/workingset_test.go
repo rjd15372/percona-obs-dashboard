@@ -130,3 +130,14 @@ func TestStats(t *testing.T) {
 		t.Fatalf("Inflight = %d, want 0", s.Inflight)
 	}
 }
+
+func TestStatsUsesRecordedStateNotLivePointer(t *testing.T) {
+	ws := workingset.New(10)
+	p := &model.Package{Project: "p", Name: "a", RollupState: model.RollupBuilding}
+	ws.Seed([]*model.Package{p})
+	p.RollupState = model.RollupFailed // mutate the shared pointer (as the worker would)
+	s := ws.Stats()
+	if s.ByState["building"] != 1 || s.ByState["failed"] != 0 {
+		t.Fatalf("Stats should reflect recorded state under lock, got %v", s.ByState)
+	}
+}
