@@ -46,6 +46,10 @@ type Target struct {
 	BuildReason         string     `json:"build_reason,omitempty"`
 	BuildReasonPackages []string   `json:"build_reason_packages,omitempty"`
 	Published           bool       `json:"published,omitempty"`
+	// BlockedByFetchedAt records when BlockedBy was last fetched from OBS.
+	// In-memory only (json:"-"): excluded from targets_json storage and API
+	// responses; zero after restart/MQ-replace → conservative refetch.
+	BlockedByFetchedAt time.Time `json:"-"`
 }
 
 type CveFinding struct {
@@ -99,6 +103,11 @@ type Package struct {
 	StateChangedAt *time.Time  `json:"state_changed_at,omitempty"`
 	CveScans       []CveScan   `json:"cve_scans,omitempty"`
 	Settled        bool        `json:"settled,omitempty"`
+	// TargetsStable is set by BuildStateTask each worker pass: true only when
+	// the previous pass had the same target set with identical states.
+	// In-memory only (json:"-"); the zero value (false) on any cold-start path
+	// forces downstream tasks to fetch.
+	TargetsStable bool `json:"-"`
 }
 
 type EventType string
