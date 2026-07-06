@@ -67,6 +67,10 @@ func (r *Reporter) tick(prev map[string]int64) map[string]int64 {
 
 // Run ticks every Interval until ctx is cancelled.
 func (r *Reporter) Run(ctx context.Context) {
+	if r.Interval <= 0 {
+		slog.Warn("telemetry: non-positive interval, reporter disabled", "interval", r.Interval)
+		return
+	}
 	ticker := time.NewTicker(r.Interval)
 	defer ticker.Stop()
 	prev := r.Snap.MetricsSnapshot()

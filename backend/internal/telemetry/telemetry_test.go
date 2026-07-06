@@ -1,8 +1,10 @@
 package telemetry
 
 import (
+	"context"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/percona/obs-dashboard/internal/workingset"
 )
@@ -41,5 +43,17 @@ func TestTickRefreshesBaselineWhenDisabled(t *testing.T) {
 	newPrev := r.tick(prev)
 	if newPrev["build_results"] != 100 {
 		t.Fatalf("baseline not refreshed while disabled: %v", newPrev)
+	}
+}
+
+func TestRunNoPanicOnZeroInterval(t *testing.T) {
+	var enabled atomic.Bool
+	r := &Reporter{Interval: 0, Enabled: &enabled, Stats: fakeStatter{}, Snap: fakeSnap{m: map[string]int64{}}}
+	done := make(chan struct{})
+	go func() { r.Run(context.Background()); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("Run did not return on zero interval")
 	}
 }
