@@ -111,3 +111,22 @@ func TestStartScheduler(t *testing.T) {
 		t.Fatal("scheduler did not dispatch seeded package")
 	}
 }
+
+func TestStats(t *testing.T) {
+	ws := workingset.New(10)
+	ws.Seed([]*model.Package{
+		pkg("p", "a", model.RollupSucceeded),
+		pkg("p", "b", model.RollupSucceeded),
+		pkg("p", "c", model.RollupFailed),
+	})
+	s := ws.Stats()
+	if s.Total != 3 {
+		t.Fatalf("Total = %d, want 3", s.Total)
+	}
+	if s.ByState["succeeded"] != 2 || s.ByState["failed"] != 1 {
+		t.Fatalf("ByState = %v", s.ByState)
+	}
+	if s.Inflight != 0 {
+		t.Fatalf("Inflight = %d, want 0", s.Inflight)
+	}
+}

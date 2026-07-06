@@ -8,6 +8,13 @@ import (
 	"github.com/percona/obs-dashboard/internal/model"
 )
 
+// Stats is a snapshot of working-set size.
+type Stats struct {
+	Total    int
+	Inflight int
+	ByState  map[string]int // rollup_state → count
+}
+
 type WorkingSet struct {
 	mu       sync.Mutex
 	packages map[string]*model.Package
@@ -67,6 +74,17 @@ func (ws *WorkingSet) Done(key string) {
 
 func (ws *WorkingSet) Dispatch() <-chan *model.Package {
 	return ws.dispatch
+}
+
+// Stats returns a snapshot of the current working set under the lock.
+func (ws *WorkingSet) Stats() Stats {
+	ws.mu.Lock()
+	defer ws.mu.Unlock()
+	s := Stats{Total: len(ws.packages), Inflight: len(ws.inflight), ByState: make(map[string]int)}
+	for _, p := range ws.packages {
+		s.ByState[string(p.RollupState)]++
+	}
+	return s
 }
 
 func (ws *WorkingSet) StartScheduler(ctx context.Context, interval time.Duration) {
