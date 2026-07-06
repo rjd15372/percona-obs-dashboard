@@ -41,9 +41,12 @@ BlockedByFetchedAt time.Time `json:"-"` // when BlockedBy was last fetched; zero
 
 // model.Package
 TargetsStable bool `json:"-"` // set by BuildStateTask each pass: true only when stability was positively confirmed
+CacheWarm     bool `json:"-"` // set after a completed BuildStateTask pass; TargetsStable requires it (see below)
 ```
 
 Lifecycle: fields survive across passes via the shared pointer; after a restart (DB seed) or an MQ `Signal` replacement they are zero → one conservative refetch, then cached again.
+
+**`CacheWarm` gate (added during final review):** comparing DB-seeded targets against live OBS on the first pass after a restart can yield `TargetsStable=true` immediately (states match), which would skip the promised cold-start refetch — and a build cycle completing entirely during downtime with identical end-states would freeze a stale Version/ContainerTags. `TargetsStable` therefore additionally requires `CacheWarm`, which `BuildStateTask` sets only at the end of a completed pass and which — being `json:"-"` — is `false` on every cold-start pointer. Net effect: the first pass over any restarted/replaced/fresh pointer always fetches; the second pass onward caches.
 
 ### 1. `BuildStateTask` — the single invalidation point
 

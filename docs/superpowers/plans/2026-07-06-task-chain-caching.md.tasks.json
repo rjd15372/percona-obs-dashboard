@@ -4,34 +4,34 @@
     {
       "id": 13,
       "subject": "Task 1: In-memory cache fields on the model",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** Add Target.BlockedByFetchedAt and Package.TargetsStable as json:\"-\" fields, with a test locking the never-serialized invariant.\n\n**Files:** backend/internal/model/types.go, backend/internal/model/types_test.go (new)\n\n**Acceptance Criteria:** Target.BlockedByFetchedAt time.Time json:\"-\"; Package.TargetsStable bool json:\"-\"; json.Marshal emits neither field; module builds and full suite green.\n\n**Verify:** cd backend && go test ./internal/model/ -v && go test ./...\n\n```json:metadata\n{\"files\": [\"backend/internal/model/types.go\", \"backend/internal/model/types_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/model/ -v && go test ./...\", \"acceptanceCriteria\": [\"Target.BlockedByFetchedAt time.Time json:\\\"-\\\"\", \"Package.TargetsStable bool json:\\\"-\\\"\", \"json.Marshal emits neither field\", \"module builds and full suite green\"], \"modelTier\": \"mechanical\"}\n```"
     },
     {
       "id": 14,
       "subject": "Task 2: BuildStateTask — state-conditional preservation + TargetsStable",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [13],
       "description": "**Goal:** Preservation conditional on unchanged target state (transition → wipe), and compute pkg.TargetsStable with conservative polarity.\n\n**Files:** backend/internal/obs/tasks.go (BuildStateTask.Run), backend/internal/obs/tasks_test.go\n\n**Acceptance Criteria:** unchanged → four enrichment fields carried; changed → wiped; TargetsStable true iff same target set with identical states; existing TestBuildStateTask passes.\n\n**Verify:** cd backend && go test ./internal/obs/ -run TestBuildStateTask -v && go test ./...\n\n```json:metadata\n{\"files\": [\"backend/internal/obs/tasks.go\", \"backend/internal/obs/tasks_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/obs/ -run TestBuildStateTask -v && go test ./...\", \"acceptanceCriteria\": [\"state unchanged preserves all four enrichment fields\", \"state changed wipes them\", \"TargetsStable true only for identical target set with identical states\", \"existing TestBuildStateTask passes\"], \"modelTier\": \"standard\"}\n```"
     },
     {
       "id": 15,
       "subject": "Task 3: BuildReasonTask — skip populated targets",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [14],
       "description": "**Goal:** Skip the per-target _reason fetch when BuildReason is already populated (cycle-cached; Task 2's wipe is the invalidation).\n\n**Files:** backend/internal/obs/tasks.go (BuildReasonTask.Run), backend/internal/obs/tasks_test.go\n\n**Acceptance Criteria:** populated BuildReason → no HTTP call for that target; empty BuildReason still fetches alongside cached sibling; existing BuildReason tests pass.\n\n**Verify:** cd backend && go test ./internal/obs/ -run TestBuildReasonTask -v && go test ./...\n\n```json:metadata\n{\"files\": [\"backend/internal/obs/tasks.go\", \"backend/internal/obs/tasks_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/obs/ -run TestBuildReasonTask -v && go test ./...\", \"acceptanceCriteria\": [\"populated BuildReason → no HTTP call for that target\", \"empty BuildReason still fetches alongside cached sibling\", \"existing BuildReason tests pass\"], \"modelTier\": \"mechanical\"}\n```"
     },
     {
       "id": 16,
       "subject": "Task 4: BlockedReasonTask — populated + 5-minute freshness",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [13, 14],
       "description": "**Goal:** Fetch blocked reasons only when some blocked target has empty BlockedBy or stale BlockedByFetchedAt (> 5m const TTL); stamp on non-empty value receipt.\n\n**Files:** backend/internal/obs/tasks.go (BlockedReasonTask.Run + blockedByTTL const), backend/internal/obs/tasks_test.go\n\n**Acceptance Criteria:** fresh populated → no HTTP call; stale → refetch + re-stamp; empty BlockedBy still fetches; stamp only on non-empty; existing BlockedReason tests pass.\n\n**Verify:** cd backend && go test ./internal/obs/ -run TestBlockedReasonTask -v && go test ./...\n\n```json:metadata\n{\"files\": [\"backend/internal/obs/tasks.go\", \"backend/internal/obs/tasks_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/obs/ -run TestBlockedReasonTask -v && go test ./...\", \"acceptanceCriteria\": [\"fresh populated blocked targets → no HTTP call\", \"stale target → refetch + re-stamp\", \"empty BlockedBy still fetches\", \"stamp only on non-empty value\", \"existing BlockedReason tests pass\"], \"modelTier\": \"mechanical\"}\n```"
     },
     {
       "id": 17,
       "subject": "Task 5: VersionTask + ContainerTagsTask — skip when stable",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [14],
       "description": "**Goal:** Both tasks skip their fetch when their value is known and TargetsStable confirmed no target changed.\n\n**Files:** backend/internal/obs/tasks.go (VersionTask.Run, ContainerTagsTask.Run), backend/internal/obs/tasks_test.go\n\n**Acceptance Criteria:** VersionTask skips when Version known + stable, fetches otherwise; ContainerTagsTask skips when tags known + stable, fetches otherwise (release chain never sets flag → always fetches); existing Version/ContainerTags tests pass.\n\n**Verify:** cd backend && go test ./internal/obs/ -run 'TestVersionTask|TestContainerTagsTask' -v && go test ./...\n\n```json:metadata\n{\"files\": [\"backend/internal/obs/tasks.go\", \"backend/internal/obs/tasks_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/obs/ -run 'TestVersionTask|TestContainerTagsTask' -v && go test ./...\", \"acceptanceCriteria\": [\"VersionTask skips when version known + stable, fetches otherwise\", \"ContainerTagsTask skips when tags known + stable, fetches otherwise\", \"existing Version/ContainerTags tests pass\"], \"modelTier\": \"mechanical\"}\n```"
     }
