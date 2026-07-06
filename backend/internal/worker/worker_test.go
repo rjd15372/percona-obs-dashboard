@@ -4,6 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -171,6 +174,48 @@ func TestPoolDoesNotRemoveWhenUnpublished(t *testing.T) {
 		t.Fatal("package was unexpectedly removed from working set despite unpublished target")
 	case <-time.After(100 * time.Millisecond):
 		// correct — package is still in the working set
+	}
+}
+
+func TestPoolRemovesSucceededNonPublishing(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/_meta") {
+			_, _ = w.Write([]byte(`<project name="p"><publish><disable/></publish></project>`))
+			return
+		}
+		_, _ = w.Write([]byte(`<resultlist></resultlist>`))
+	}))
+	defer srv.Close()
+
+	db := openDB(t)
+	h := hubpkg.New()
+	ws := workingset.New(10)
+	client := obs.NewClient(srv.URL, "u", "p")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	// No tasks: pkg keeps its succeeded state; the settled decision drives removal.
+	p := worker.NewPool(1, nil, nil, client, db, h, ws, nil)
+	p.Start(ctx)
+
+	isContainer := false
+	pkg := &model.Package{
+		Project: "isv:percona:common:containers:ubi8", Name: "python3-tomli",
+		RollupState: model.RollupSucceeded, OKTargets: 1, TotalTargets: 1,
+		IsContainer: &isContainer,
+		Targets:     []model.Target{{Repo: "UBI_8", Arch: "x86_64", State: "succeeded"}},
+		UpdatedAt:   time.Now().UTC(),
+	}
+	ws.Signal(pkg)
+	time.Sleep(200 * time.Millisecond)
+	cancel()
+	time.Sleep(10 * time.Millisecond)
+
+	ws.Add(pkg) // if it was removed, Add re-dispatches
+	select {
+	case <-ws.Dispatch():
+		// correct — it had been removed
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("succeeded non-publishing package was not removed from working set")
 	}
 }
 

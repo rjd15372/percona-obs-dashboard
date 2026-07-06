@@ -98,6 +98,14 @@ func (p *Pool) ProcessOnce(ctx context.Context, pkg *model.Package) {
 		}
 	}
 
+	var flags obs.PublishFlags
+	if p.client != nil {
+		if f, err := p.client.ProjectPublishFlags(ctx, pkg.Project); err == nil {
+			flags = f // on error: zero value → everything publishes → keep polling
+		}
+	}
+	pkg.Settled = obs.Settled(pkg, flags) && pkg.IsContainer != nil
+
 	if err := store.UpsertPackageState(p.db, pkg, now); err != nil {
 		slog.Error("worker: upsert package state", "pkg", pkg.Project+"/"+pkg.Name, "err", err)
 	}
@@ -128,7 +136,7 @@ func (p *Pool) ProcessOnce(ctx context.Context, pkg *model.Package) {
 		})
 	}
 
-	if pkg.RollupState == model.RollupPublished && pkg.IsContainer != nil {
+	if pkg.Settled {
 		p.ws.Remove(pkg.Project + "/" + pkg.Name)
 	}
 }
