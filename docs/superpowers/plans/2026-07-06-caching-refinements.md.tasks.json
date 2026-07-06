@@ -1,0 +1,26 @@
+{
+  "planPath": "docs/superpowers/plans/2026-07-06-caching-refinements.md",
+  "tasks": [
+    {
+      "id": 18,
+      "subject": "Task A: Negative-result caching (BuildReason + Version)",
+      "status": "pending",
+      "description": "**Goal:** Under TargetsStable, skip BuildReason and Version fetches entirely.\n\n**Files:** backend/internal/obs/tasks.go, backend/internal/obs/tasks_test.go\n\n**Acceptance Criteria:** BuildReasonTask stable → zero calls even with empty reasons; unstable pass keeps populated-skip; VersionTask stable → zero calls even with empty version; existing tests pass unmodified.\n\n**Verify:** cd backend && go test ./internal/obs/ -run 'TestBuildReasonTask|TestVersionTask' -v && go test ./...\n\n```json:metadata\n{\"files\": [\"backend/internal/obs/tasks.go\", \"backend/internal/obs/tasks_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/obs/ -run 'TestBuildReasonTask|TestVersionTask' -v && go test ./...\", \"acceptanceCriteria\": [\"BuildReasonTask: stable → zero calls even with empty reasons\", \"unstable pass keeps per-target populated-skip\", \"VersionTask: stable → zero calls even with empty version\", \"existing tests pass unmodified\"], \"modelTier\": \"mechanical\"}\n```"
+    },
+    {
+      "id": 19,
+      "subject": "Task B: Publish-flag awareness in PublishStateTask",
+      "status": "pending",
+      "blockedBy": [18],
+      "description": "**Goal:** Skip the RepoPublishStates check when every succeeded-unpublished target sits in a repo that never publishes.\n\n**Files:** backend/internal/obs/tasks.go, backend/internal/obs/tasks_test.go\n\n**Acceptance Criteria:** non-publishing succeeded-unpublished target → no RepoPublishStates call; publishing repo still checked; promotion logic untouched.\n\n**Verify:** cd backend && go test ./internal/obs/ -run TestPublishStateTask -v && go test ./...\n\n```json:metadata\n{\"files\": [\"backend/internal/obs/tasks.go\", \"backend/internal/obs/tasks_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/obs/ -run TestPublishStateTask -v && go test ./...\", \"acceptanceCriteria\": [\"non-publishing succeeded-unpublished target → no RepoPublishStates call\", \"publishing repo still checked; existing test passes\", \"promotion logic untouched\"], \"modelTier\": \"standard\"}\n```"
+    },
+    {
+      "id": 20,
+      "subject": "Task C: unresolvable is terminal",
+      "status": "pending",
+      "blockedBy": [19],
+      "description": "**Goal:** obs.Settled treats unresolvable as terminal so long-lived unresolvable packages leave the working set.\n\n**Files:** backend/internal/obs/settled.go, backend/internal/obs/settled_test.go\n\n**Acceptance Criteria:** Settled true for unresolvable; broken stays false; TestSettled unresolvable case expects true; full suite green.\n\n**Verify:** cd backend && go test ./internal/obs/ -run TestSettled -v && go test ./...\n\n```json:metadata\n{\"files\": [\"backend/internal/obs/settled.go\", \"backend/internal/obs/settled_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/obs/ -run TestSettled -v && go test ./...\", \"acceptanceCriteria\": [\"Settled true for unresolvable; broken stays false\", \"TestSettled unresolvable case expects true\", \"full suite green\"], \"modelTier\": \"mechanical\"}\n```"
+    }
+  ],
+  "lastUpdated": "2026-07-06T16:00:00Z"
+}
