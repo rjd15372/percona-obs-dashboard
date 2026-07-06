@@ -47,6 +47,51 @@ func TestOpen(t *testing.T) {
 	}
 }
 
+func TestSettledBackfillMarksTerminalPublishedRows(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	defer db.Close()
+
+	insert := func(project, name, rollupState string, isContainer sql.NullInt64) {
+		_, err := db.Exec(
+			`INSERT INTO packages (project, name, rollup_state, is_container, settled, updated_at)
+			 VALUES (?, ?, ?, ?, 0, datetime('now'))`,
+			project, name, rollupState, isContainer,
+		)
+		if err != nil {
+			t.Fatalf("insert %s/%s failed: %v", project, name, err)
+		}
+	}
+
+	insert("p", "published-known", "published", sql.NullInt64{Int64: 1, Valid: true})
+	insert("p", "published-unknown", "published", sql.NullInt64{})
+	insert("p", "building", "building", sql.NullInt64{Int64: 1, Valid: true})
+
+	if _, err := db.Exec(`UPDATE packages SET settled = 1 WHERE rollup_state = 'published' AND is_container IS NOT NULL`); err != nil {
+		t.Fatalf("backfill exec failed: %v", err)
+	}
+
+	settled := func(name string) int {
+		var s int
+		if err := db.QueryRow(`SELECT settled FROM packages WHERE project = 'p' AND name = ?`, name).Scan(&s); err != nil {
+			t.Fatalf("query settled for %s failed: %v", name, err)
+		}
+		return s
+	}
+
+	if got := settled("published-known"); got != 1 {
+		t.Errorf("published-known settled = %d, want 1", got)
+	}
+	if got := settled("published-unknown"); got != 0 {
+		t.Errorf("published-unknown settled = %d, want 0 (is_container IS NULL should not be backfilled)", got)
+	}
+	if got := settled("building"); got != 0 {
+		t.Errorf("building settled = %d, want 0", got)
+	}
+}
+
 func TestOpenIdempotent(t *testing.T) {
 	db, err := Open(":memory:")
 	if err != nil {

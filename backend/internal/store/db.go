@@ -155,6 +155,11 @@ func Open(path string) (*sql.DB, error) {
 		return nil, fmt.Errorf("migrate succeeded to published: %w", err)
 	}
 
+	// Backfill: published packages whose container type is known are terminal
+	// (settled). This mirrors the pre-settled GetActivePackages exclusion and
+	// avoids re-seeding the entire published backlog on the first restart.
+	db.Exec(`UPDATE packages SET settled = 1 WHERE rollup_state = 'published' AND is_container IS NOT NULL`)
+
 	return db, nil
 }
 
