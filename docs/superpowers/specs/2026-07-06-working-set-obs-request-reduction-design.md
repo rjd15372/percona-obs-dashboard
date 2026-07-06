@@ -60,6 +60,7 @@ Stop re-polling packages that have nothing left to observe. A package should lea
 - **`rollup_state` is never faked.** The dashboard keeps showing the truthful `succeeded`/`failed`. A new `settled` flag governs working-set membership independently.
 - **Persisted `settled` column** so the 158 packages are not re-seeded into the working set on every restart.
 - **Adjacent cheap fix:** guard `BlockedReasonTask` so it only calls OBS when the package has a `blocked` target.
+- **Telemetry (bundled):** periodic structured log lines reporting (a) working-set size — total, inflight, and by-rollup-state — and (b) OBS request volume over the window — total, window delta, req/s, and **per-endpoint** breakdown. Configurable interval, default 60s. This is also how we verify the fix in production (watch `succeeded` collapse and req/s drop).
 - **Re-entry** relies on the existing poller (≤2 min) and MQ `build_*`/`repo.published` events. There is **no** per-package build-started event in OBS (see `BUILD_STARTED_EVENT_FINDINGS.md`), so removal does not make re-entry meaningfully worse — the 30s in-set self-poll was the only faster signal, and it only ever mattered for packages we now correctly consider done.
 
 **Out of scope (deferred to follow-ups):**
@@ -161,6 +162,57 @@ Ordering: compute `settled` before the `UpsertPackageState` for this pass so it 
 
 `tasks.go:160 BlockedReasonTask.Run` currently calls `client.PackageBlockedReasons` unconditionally. Add an early return when no target is in `blocked` state, saving one OBS call per pass for every non-blocked package still in the set.
 
+### 7. Observability — working-set & OBS-request telemetry
+
+A single periodic reporter goroutine (in `main.go`, sibling to `runPruner`) logs two structured lines' worth of state every `Telemetry.Interval` (default 60s).
+
+**Working-set stats.** Add to `internal/workingset`:
+```go
+type Stats struct {
+    Total    int
+    Inflight int
+    ByState  map[string]int // rollup_state → count
+}
+func (ws *WorkingSet) Stats() Stats // computed under ws.mu
+```
+
+**OBS request counters.** Add a small metrics holder to `internal/obs.Client`:
+```go
+type obsMetrics struct {
+    mu     sync.Mutex
+    counts map[string]int64 // operation → cumulative count
+}
+func (m *obsMetrics) inc(op string)
+func (c *Client) MetricsSnapshot() map[string]int64 // copy of counts
+```
+All OBS traffic passes through `Client.get` / `getFile` / `post`. Give each an **operation label** parameter and increment `metrics.inc(op)` there; every public method passes a stable literal op name mapping to its endpoint, e.g.:
+
+| Method | op label |
+|---|---|
+| `BuildResults` | `build_results` |
+| `PackageBuildResults` | `package_build_results` |
+| `RepoPublishStates` | `publish_states` |
+| `PackageBlockedReasons` | `blocked_reasons` |
+| `PackageBuildReason` | `build_reason` |
+| `PackageVersionResult` | `version` |
+| `ProjectPublishFlags` | `publish_flags` |
+| `SearchProjects` | `search_projects` |
+| … | (one label per public method) |
+
+This is a broad but mechanical change — every `Client` public method gains one argument to its internal request call.
+
+**Reporter.** `runTelemetry(ctx, ws, client, interval)` keeps the previous `MetricsSnapshot` and, each tick, computes the per-op delta and total delta, then emits:
+```
+slog.Info("telemetry",
+    "window", interval,
+    "ws_packages", s.Total, "ws_inflight", s.Inflight, "ws_by_state", s.ByState,
+    "obs_window", totalDelta, "obs_total", cumulative, "obs_req_per_s", rate,
+    "obs_by_endpoint", perOpDelta)
+```
+(`ws_by_state` and `obs_by_endpoint` rendered as slog sub-groups or compact `key=n` strings — format is a plan-time detail.)
+
+**Config.** New `Telemetry.Interval` (`config.go`): default `"60s"`, env `TELEMETRY_INTERVAL`, parsed like the other durations.
+
 ## Re-entry (safety net, unchanged)
 
 A removed package returns to the working set via:
@@ -177,6 +229,7 @@ There is no reliance on a per-package build-started event (none exists in OBS).
 - **Cache:** a second `ProjectPublishFlags` call within TTL makes no HTTP request (fake transport call-count assertion).
 - **Seeding:** `GetActivePackages` returns `settled=0` rows only; a `settled=1` row is excluded; a type-unknown row is included.
 - **`BlockedReasonTask` guard:** no OBS call when there are no blocked targets; call made when a blocked target exists.
+- **Telemetry:** `WorkingSet.Stats()` returns correct total/inflight/by-state for a seeded set; `Client` metrics increment per op and `MetricsSnapshot` returns a stable copy; the reporter computes correct window deltas across two ticks (fake clock/manual invocation, no real sleep).
 - **Regression:** existing poller/consumer/worker tests still pass (publish-aware path defaults to "publishes" on error, preserving current behavior for publishing projects).
 
 ## Expected impact
