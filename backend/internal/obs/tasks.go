@@ -211,6 +211,12 @@ func (t BuildReasonTask) Run(ctx context.Context, client *Client, pkg *model.Pac
 		if target.State == "succeeded" {
 			continue
 		}
+		if target.BuildReason != "" {
+			// Cached for this build cycle: BuildStateTask wipes BuildReason on
+			// any state transition, so a populated value is current. Targets
+			// whose OBS _reason is legitimately empty keep fetching (no regression).
+			continue
+		}
 		var result BuildReasonResult
 		err := withRetry(ctx, 3, time.Second, func() error {
 			var e error

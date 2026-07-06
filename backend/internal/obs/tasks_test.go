@@ -207,6 +207,37 @@ func TestBuildReasonTaskRetriesOnTransientError(t *testing.T) {
 	}
 }
 
+func TestBuildReasonTaskSkipsCachedTargets(t *testing.T) {
+	var calls int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		fmt.Fprint(w, `<reason><explain>new cycle</explain></reason>`)
+	}))
+	defer ts.Close()
+
+	c := obs.NewClient(ts.URL, "u", "p")
+	pkg := &model.Package{
+		Project: "isv:percona", Name: "mypkg",
+		Targets: []model.Target{
+			{Repo: "repo", Arch: "x86_64", State: "building", BuildReason: "meta change"}, // cached → skip
+			{Repo: "repo", Arch: "aarch64", State: "building"},                            // empty → fetch
+		},
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := (obs.BuildReasonTask{}).Run(context.Background(), c, pkg); err != nil {
+		t.Fatal(err)
+	}
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Fatalf("expected exactly 1 fetch (cached target skipped), got %d", got)
+	}
+	if pkg.Targets[0].BuildReason != "meta change" {
+		t.Errorf("cached reason overwritten: %q", pkg.Targets[0].BuildReason)
+	}
+	if pkg.Targets[1].BuildReason != "new cycle" {
+		t.Errorf("uncached target not fetched: %q", pkg.Targets[1].BuildReason)
+	}
+}
+
 func boolPtr(b bool) *bool { return &b }
 
 func TestPackageTypeTask(t *testing.T) {
