@@ -112,7 +112,7 @@ func (p *Pool) ProcessOnce(ctx context.Context, pkg *model.Package) {
 
 	if !pkg.IsRelease {
 		p.hub.Notify(hubpkg.PackageUpdate(pkg))
-		p.emitBuildEvents(pkg, oldTargets, now)
+		p.emitBuildEvents(pkg, oldTargets, now, flags)
 	}
 
 	// Enqueue a CVE scan on two conditions:
@@ -146,7 +146,7 @@ const obsBase = "https://build.opensuse.org"
 // emitBuildEvents compares oldTargets with pkg.Targets and appends one event
 // per target for each meaningful state transition, implementing a per-target
 // build event state machine.
-func (p *Pool) emitBuildEvents(pkg *model.Package, oldTargets []model.Target, now time.Time) {
+func (p *Pool) emitBuildEvents(pkg *model.Package, oldTargets []model.Target, now time.Time, flags obs.PublishFlags) {
 	oldByKey := make(map[string]model.Target, len(oldTargets))
 	for _, t := range oldTargets {
 		oldByKey[t.Repo+"/"+t.Arch] = t
@@ -230,8 +230,13 @@ func (p *Pool) emitBuildEvents(pkg *model.Package, oldTargets []model.Target, no
 			}
 		}
 
-		// succeeded: publication is the real terminal success signal.
-		if !old.Published && t.Published {
+		// succeeded: publication is the real terminal success signal for
+		// publishing repos; for repos that never publish, the build-state
+		// transition is the only terminal moment there is.
+		publishedNow := !old.Published && t.Published
+		completedNonPublishing := old.State != "succeeded" && t.State == "succeeded" &&
+			!flags.Publishes(t.Repo)
+		if publishedNow || completedNonPublishing {
 			p.appendEvent(&model.Event{
 				ID:      "evt_" + ulid.Make().String(),
 				Type:    model.EventSucceeded,

@@ -699,6 +699,80 @@ func TestSucceededOnPublishFlip(t *testing.T) {
 	}
 }
 
+func TestProcessOnceEmitsSucceededForNonPublishingRepoOnStateTransition(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/_meta") {
+			_, _ = w.Write([]byte(`<project name="p"><publish><disable/></publish></project>`))
+			return
+		}
+		_, _ = w.Write([]byte(`<resultlist></resultlist>`))
+	}))
+	defer srv.Close()
+
+	db := setupDB(t)
+	h := hubpkg.New()
+	ws := workingset.New(10)
+	client := obs.NewClient(srv.URL, "u", "p")
+
+	pkg := &model.Package{
+		Project:     "isv:percona:common:containers:ubi8",
+		Name:        "mypkg",
+		RollupState: model.RollupBuilding,
+		Targets:     []model.Target{{Repo: "UBI_8", Arch: "x86_64", State: "building", Published: false}},
+		UpdatedAt:   time.Now().UTC(),
+	}
+	if err := store.UpsertPackageState(db, pkg, pkg.UpdatedAt); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	pool := worker.NewPool(0, []worker.Task{
+		setStateTask{"UBI_8", "x86_64", "succeeded", ""},
+	}, nil, client, db, h, ws, nil)
+	pool.ProcessOnce(context.Background(), pkg)
+
+	now := time.Now().UTC()
+	evts, err := store.QueryEvents(db, "isv:percona:common:containers:ubi8", now.Add(-time.Minute), now.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	if len(evts) != 1 {
+		t.Fatalf("expected 1 event, got %d: %v", len(evts), evts)
+	}
+	if evts[0].Type != model.EventSucceeded {
+		t.Errorf("expected succeeded, got %q", evts[0].Type)
+	}
+}
+
+func TestProcessOnceNoSucceededForPublishingRepoOnStateTransitionOnly(t *testing.T) {
+	// Nil client → zero PublishFlags → publishes-all; the publication gate
+	// must still be preserved for repos that do publish.
+	db := setupDB(t)
+	h := hubpkg.New()
+	ws := workingset.New(10)
+
+	pkg := &model.Package{
+		Project:     "isv:percona:ppg:17",
+		Name:        "mypkg",
+		RollupState: model.RollupBuilding,
+		Targets:     []model.Target{{Repo: "Ubuntu_24.04", Arch: "x86_64", State: "building", Published: false}},
+		UpdatedAt:   time.Now().UTC(),
+	}
+	if err := store.UpsertPackageState(db, pkg, pkg.UpdatedAt); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	pool := worker.NewPool(0, []worker.Task{
+		setStateTask{"Ubuntu_24.04", "x86_64", "succeeded", ""},
+	}, nil, nil, db, h, ws, nil)
+	pool.ProcessOnce(context.Background(), pkg)
+
+	now := time.Now().UTC()
+	evts, _ := store.QueryEvents(db, "isv:percona:ppg:17", now.Add(-time.Minute), now.Add(time.Minute))
+	if len(evts) != 0 {
+		t.Errorf("expected 0 events (publication gate preserved), got %d: %v", len(evts), evts)
+	}
+}
+
 type versionTask struct{ v string }
 
 func (t versionTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package) error {
