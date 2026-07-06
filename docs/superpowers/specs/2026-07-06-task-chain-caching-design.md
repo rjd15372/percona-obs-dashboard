@@ -152,11 +152,33 @@ Steady-state pass for a blocked 4-target package: ~6 requests → **1** (`Packag
 ## Task audit (why the rest of the chain is untouched)
 
 - **`PackageTypeTask`**: already permanently cached — `IsContainer != nil → return`, persisted in the DB, preserved by MQ and poller. A package's type never changes; no invalidation exists or is needed.
-- **`PublishStateTask` / `BinariesCheckTask`**: fundamentally not state-cacheable — the publish transition is precisely a change that occurs *without* a target-state change (state stays `succeeded` while the repo flips to published). Their existing guards are the correct optimization.
+- **`PublishStateTask` / `BinariesCheckTask`**: fundamentally not state-cacheable — the publish transition is precisely a change that occurs *without* a target-state change (state stays `succeeded` while the repo flips to published). Their existing guards are the correct optimization. (But see the production amendment below: `PublishStateTask` gains a publish-*flag* skip, which is orthogonal to state-caching.)
 - **`BuildStateTask`**: is the poll itself.
+
+## Production amendment (2026-07-06, post-deploy telemetry)
+
+Live telemetry showed a working set of 44 packages (24 unresolvable / 19 scheduled / 1 building) still generating ~415 req/min. Populated values cached perfectly (scheduled packages' reasons: fetched once, held); the residual traffic was **negative results**, originally out of scope:
+
+- `build_reason: 192/min` — exactly the 24 unresolvable packages' ~96 targets × 2 passes; OBS `_reason` returns an empty explain for never-dispatched targets, and an empty value is indistinguishable from never-fetched.
+- `version: 44/min` — never-built packages return an empty versrel, so `Version` stays `""` and the `Version != ""` half of the skip guard never engages.
+- `publish_states: 44/min` — succeeded-unpublished targets in repos that never publish: the check is permanently futile, and `ProjectPublishFlags` already knows it.
+
+### A. Negative-result caching via `TargetsStable`
+
+Under stable targets, an empty result means the previous pass already asked *in this exact state* and got nothing — and the answer cannot change without a state transition, which flips `TargetsStable` off. So:
+
+- `BuildReasonTask`: top-level `if pkg.TargetsStable { return nil }`. On unstable passes the per-target populated-skip still applies (unchanged targets keep carried reasons; wiped ones refetch).
+- `VersionTask`: guard becomes just `if pkg.TargetsStable { return nil }` (the `Version != ""` condition is dropped — empty versrel is now negative-cached too).
+- `ContainerTagsTask`: **unchanged** — tags can lag a `succeeded` transition (containerinfo write race), so negative-caching tags risks missing them forever; the `len(tags) > 0` requirement stays.
+- Cold-start polarity unchanged: `CacheWarm` still forces the first pass over any restarted/replaced pointer to fetch.
+
+### B. Publish-flag awareness in `PublishStateTask`
+
+A succeeded-unpublished target counts toward `needsCheck` only when `flags.Publishes(target.Repo)` (flags via the cached `ProjectPublishFlags`; zero-value on error → publishes → conservative check, same as before). Rollup-promotion logic is untouched — a package whose succeeded targets sit in non-publishing repos still never promotes to `published`; `Settled` (working-set design) already handles its exit.
 
 ## Out of scope
 
 - Configurable TTL for BlockedBy (constant 5m until proven insufficient).
-- Negative-result caching for targets with legitimately empty `_reason`.
+- Negative-result caching for `ContainerTagsTask` (unsafe — see amendment A).
 - `TargetsStable` support in the release chain (see §5 caveat).
+- Flag-aware rollup promotion in `PublishStateTask` (display stays truthful; membership is `Settled`'s job).

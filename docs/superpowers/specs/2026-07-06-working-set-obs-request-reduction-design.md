@@ -259,6 +259,6 @@ There is no reliance on a per-package build-started event (none exists in OBS).
 ## Follow-ups
 
 1. **Per-pass task caching** (original issue #2): skip `BuildReason`/`BlockedReason`/`Version` re-fetch when a target's state is unchanged since the last fetch. Marginal after this change; revisit if needed.
-2. Reconsider `broken`/`unresolvable` as terminal if they prove to be long-lived in practice.
+2. ~~Reconsider `broken`/`unresolvable` as terminal if they prove to be long-lived in practice.~~ **Resolved for `unresolvable` (2026-07-06):** production telemetry showed 24 packages stuck in `unresolvable` re-running the full task chain every 30s — exactly the long-lived case this follow-up anticipated. `Settled` now treats `unresolvable` as terminal alongside `published`/`failed` (user-approved, superseding the earlier "failed only" decision). Re-entry unchanged: the poller re-adds on any rollup change within one poll interval. `broken` remains non-terminal (no evidence yet).
 3. Publish backstop for missed `repo.published` events during downtime (pre-existing gap).
 4. **Release-project poller `settled` awareness** (surfaced in final review): the release branch of `Poller.tick` re-adds packages by published/container/tags without consulting `settled`, so a *release* `succeeded`-in-non-publishing package can slowly oscillate (re-added every poll tick, re-removed by the worker). The headline 158 stuck packages are all real-time (`common`) and unaffected; fixing this needs publish flags in the poller path. Low priority.
