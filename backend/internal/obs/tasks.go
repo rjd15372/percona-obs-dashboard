@@ -158,6 +158,17 @@ func (t BinariesCheckTask) Run(ctx context.Context, client *Client, pkg *model.P
 type BlockedReasonTask struct{}
 
 func (t BlockedReasonTask) Run(ctx context.Context, client *Client, pkg *model.Package) error {
+	hasBlocked := false
+	for _, target := range pkg.Targets {
+		if target.State == "blocked" {
+			hasBlocked = true
+			break
+		}
+	}
+	if !hasBlocked {
+		return nil
+	}
+
 	reasons, err := client.PackageBlockedReasons(ctx, pkg.Project, pkg.Name)
 	if err != nil {
 		slog.Warn("obs: blocked reasons", "pkg", pkg.Name, "err", err)

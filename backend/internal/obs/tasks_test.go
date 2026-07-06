@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -71,6 +72,27 @@ func TestBlockedReasonTask(t *testing.T) {
 	}
 	if pkg.Targets[0].BlockedBy != "not installable" {
 		t.Errorf("expected BlockedBy to be set, got %q", pkg.Targets[0].BlockedBy)
+	}
+}
+
+func TestBlockedReasonTaskSkipsWhenNoBlocked(t *testing.T) {
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		_, _ = w.Write([]byte(`<resultlist></resultlist>`))
+	}))
+	defer srv.Close()
+
+	c := obs.NewClient(srv.URL, "u", "p")
+	pkg := &model.Package{
+		Project: "p", Name: "pkg",
+		Targets: []model.Target{{Repo: "images", Arch: "x86_64", State: "succeeded"}},
+	}
+	if err := (obs.BlockedReasonTask{}).Run(context.Background(), c, pkg); err != nil {
+		t.Fatal(err)
+	}
+	if atomic.LoadInt32(&calls) != 0 {
+		t.Fatalf("expected no OBS call when no blocked targets, got %d", calls)
 	}
 }
 
