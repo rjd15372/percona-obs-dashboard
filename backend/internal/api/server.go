@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -13,7 +14,7 @@ import (
 )
 
 // NewRouter creates the chi router with all API routes registered.
-func NewRouter(db *sql.DB, h *hub.Hub, obsClient *obs.Client, root string) http.Handler {
+func NewRouter(db *sql.DB, h *hub.Hub, obsClient *obs.Client, root string, telemetryEnabled *atomic.Bool, telemetryInterval time.Duration) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
@@ -44,6 +45,9 @@ func NewRouter(db *sql.DB, h *hub.Hub, obsClient *obs.Client, root string) http.
 	r.Get("/api/binaries", binariesHandler(obsClient))
 	r.Post("/api/rebuild", rebuildHandler(obsClient))
 	r.Post("/api/artifacts/metadata", artifactMetadataHandler(obsClient, metadataCache))
+
+	r.Get("/api/telemetry", telemetryStatusHandler(telemetryEnabled, telemetryInterval))
+	r.Post("/api/telemetry", telemetrySetHandler(telemetryEnabled))
 
 	return r
 }

@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -446,5 +447,30 @@ func rebuildHandler(obsClient *obs.Client) http.HandlerFunc {
 		if err := json.NewEncoder(w).Encode(map[string]string{"status": "ok"}); err != nil {
 			return
 		}
+	}
+}
+
+// telemetryStatusHandler returns GET /api/telemetry.
+func telemetryStatusHandler(enabled *atomic.Bool, interval time.Duration) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"enabled":  enabled.Load(),
+			"interval": interval.String(),
+		})
+	}
+}
+
+// telemetrySetHandler handles POST /api/telemetry?enabled=true|false.
+func telemetrySetHandler(enabled *atomic.Bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		b, err := strconv.ParseBool(r.URL.Query().Get("enabled"))
+		if err != nil {
+			http.Error(w, "query param 'enabled' must be true or false", http.StatusBadRequest)
+			return
+		}
+		enabled.Store(b)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"enabled": b})
 	}
 }

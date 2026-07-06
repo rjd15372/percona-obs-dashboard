@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/percona/obs-dashboard/internal/hub"
 	"github.com/percona/obs-dashboard/internal/obs"
@@ -35,7 +37,7 @@ func setupTestServer(t *testing.T) http.Handler {
 	t.Cleanup(func() { db.Close() })
 	obsSrv := stubOBSServer(t)
 	obsClient := obs.NewClient(obsSrv.URL, "user", "pass")
-	return NewRouter(db, hub.New(), obsClient, "isv:percona")
+	return NewRouter(db, hub.New(), obsClient, "isv:percona", new(atomic.Bool), time.Duration(0))
 }
 
 func TestPackagesHandler_EmptyDB(t *testing.T) {
@@ -337,5 +339,40 @@ func TestRebuildHandler_InvalidJSON(t *testing.T) {
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for invalid JSON, got %d", rec.Code)
+	}
+}
+
+func TestTelemetryEndpoint(t *testing.T) {
+	var enabled atomic.Bool
+	set := telemetrySetHandler(&enabled)
+	status := telemetryStatusHandler(&enabled, 60*time.Second)
+
+	// enable
+	req := httptest.NewRequest(http.MethodPost, "/api/telemetry?enabled=true", nil)
+	w := httptest.NewRecorder()
+	set(w, req)
+	if w.Code != http.StatusOK || !enabled.Load() {
+		t.Fatalf("enable failed: code=%d enabled=%v", w.Code, enabled.Load())
+	}
+
+	// status reflects it
+	w = httptest.NewRecorder()
+	status(w, httptest.NewRequest(http.MethodGet, "/api/telemetry", nil))
+	var body struct {
+		Enabled  bool   `json:"enabled"`
+		Interval string `json:"interval"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if !body.Enabled || body.Interval != "1m0s" {
+		t.Fatalf("status = %+v", body)
+	}
+
+	// invalid → 400
+	w = httptest.NewRecorder()
+	set(w, httptest.NewRequest(http.MethodPost, "/api/telemetry", nil))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("missing enabled: code=%d, want 400", w.Code)
 	}
 }

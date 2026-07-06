@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -85,7 +86,7 @@ func run() error {
 	go consumer.Run(ctx)
 	go runPruner(ctx, db, cfg.Poller.Interval, cfg.Store.EventRetention)
 
-	router := api.NewRouter(db, h, obsClient, cfg.OBSRoot)
+	router := api.NewRouter(db, h, obsClient, cfg.OBSRoot, new(atomic.Bool), cfg.Telemetry.Interval)
 
 	var handler http.Handler = router
 	if cfg.Server.FrontendDir != "" {
