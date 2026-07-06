@@ -1,8 +1,12 @@
 package obs
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/percona/obs-dashboard/internal/model"
@@ -90,5 +94,26 @@ func TestNoPollerRollupEvents(t *testing.T) {
 	}
 	if strings.Contains(string(data), "AppendEvent(") {
 		t.Error("poller.go must not call store.AppendEvent — worker is the sole event emitter")
+	}
+}
+
+func TestEvictPublishFlagsRefetches(t *testing.T) {
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		_, _ = w.Write([]byte(`<project name="p"><publish><disable/></publish></project>`))
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL, "u", "p")
+	ctx := context.Background()
+	if _, err := c.ProjectPublishFlags(ctx, "gone-project"); err != nil {
+		t.Fatal(err)
+	}
+	c.EvictPublishFlags("gone-project")
+	if _, err := c.ProjectPublishFlags(ctx, "gone-project"); err != nil {
+		t.Fatal(err)
+	}
+	if atomic.LoadInt32(&calls) != 2 {
+		t.Fatalf("expected refetch after evict, calls=%d", calls)
 	}
 }

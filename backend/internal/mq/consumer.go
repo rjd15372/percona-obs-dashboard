@@ -212,6 +212,7 @@ func (c *Consumer) handle(ctx context.Context, msg amqp.Delivery) {
 		if err := store.DeletePackagesByProject(c.db, m.Project); err != nil {
 			slog.Error("mq: delete packages for project", "project", m.Project, "err", err)
 		}
+		c.obsClient.EvictPublishFlags(m.Project)
 		c.appendEvent(&model.Event{
 			ID:      "evt_" + ulid.Make().String(),
 			Type:    model.EventDeleted,
