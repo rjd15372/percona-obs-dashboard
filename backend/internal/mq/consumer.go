@@ -266,9 +266,6 @@ func (c *Consumer) handle(ctx context.Context, msg amqp.Delivery) {
 		if kind == obs.KindRelease {
 			return // release build events are ignored; poller owns release state
 		}
-		if key == "opensuse.obs.package.build_unchanged" {
-			return
-		}
 		rollup := mqStateToRollup(key)
 		pkg := c.mergePackageTarget(m, rollup)
 		if err := c.upsertPackage(pkg); err != nil {
@@ -408,6 +405,9 @@ func mqStateToRollup(key string) model.RollupState {
 	case "opensuse.obs.package.build_fail":
 		return model.RollupFailed
 	default:
-		return model.RollupSucceeded
+		// build_unchanged: the build completed with an identical result. Treat
+		// it as finished so the worker's wake pass derives the real terminal
+		// state (and its events) from OBS instead of jumping to succeeded.
+		return model.RollupFinished
 	}
 }
