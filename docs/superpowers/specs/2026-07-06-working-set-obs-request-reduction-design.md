@@ -95,7 +95,11 @@ Publish configuration is set at repo/project creation and is effectively immutab
 
 Cost: **one fetch per project, ever** (~36 total, plus one per newly discovered project) — effectively zero ongoing load.
 
-No eviction is needed; a stale entry for a deleted project is harmless. Edge case: a repo added to a project *after* its flags were cached is not in the cached `_meta`; `Publishes(repo)` then falls back to the project-level default, which is acceptable given the stability assumption.
+**Eviction on project removal.** Because there is no TTL, the cache must be explicitly cleared when a project is removed — otherwise a project that is deleted and later recreated with different publish config would keep serving stale flags. Add `Client.EvictPublishFlags(project)` (deletes the entry under lock) and call it from **both** project-removal sites:
+- MQ consumer `opensuse.obs.project.delete` handler (`consumer.go`, alongside `DeletePackagesByProject`).
+- Poller garbage collection of projects no longer in OBS (`poller.go`, alongside `DeletePackagesByProject`).
+
+Package-level deletions do not evict (publish flags are project-scoped). Edge case: a repo added to a project *after* its flags were cached is not in the cached `_meta`; `Publishes(repo)` then falls back to the project-level default, which is acceptable given the stability assumption.
 
 ### 3. The `settled` decision
 
@@ -237,7 +241,7 @@ There is no reliance on a per-package build-started event (none exists in OBS).
 - **`ProjectPublishFlags` parsing:** unit tests over `_meta` fixtures — no block (default publish), bare `<disable/>`, per-repo `<disable repository=.../>`, `<disable/>` + `<enable repository=.../>` override, most-specific-wins.
 - **`Settled` helper:** table tests — published→true; failed→true; broken/unresolvable/building/blocked→false; succeeded with all-non-publishing repos→true; succeeded with a publishing-but-unpublished target→false; succeeded mixed (publishing target published + non-publishing target)→true; `skipState` targets ignored.
 - **Worker removal:** extend `worker_test.go` — a `succeeded` non-container in a non-publishing project is removed; a `succeeded` package with a publishing-unpublished target is retained; a `failed` package is removed; type-unknown (`IsContainer == nil`) is retained.
-- **Cache:** a second `ProjectPublishFlags` call for the same project makes no HTTP request (fake transport call-count assertion — permanent cache).
+- **Cache:** a second `ProjectPublishFlags` call for the same project makes no HTTP request (fake transport call-count assertion — permanent cache); after `EvictPublishFlags(project)` the next call refetches; poller project-GC and MQ `project.delete` both evict the entry.
 - **Seeding:** `GetActivePackages` returns `settled=0` rows only; a `settled=1` row is excluded; a type-unknown row is included.
 - **`BlockedReasonTask` guard:** no OBS call when there are no blocked targets; call made when a blocked target exists.
 - **Telemetry:** `WorkingSet.Stats()` returns correct total/inflight/by-state for a seeded set; `Client` metrics increment per op and `MetricsSnapshot` returns a stable copy; the reporter computes correct window deltas across two ticks (fake clock/manual invocation, no real sleep) and emits nothing while the toggle is off but keeps `prev` fresh.
