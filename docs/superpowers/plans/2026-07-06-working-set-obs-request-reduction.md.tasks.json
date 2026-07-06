@@ -4,81 +4,81 @@
     {
       "id": 1,
       "subject": "Task 1: OBS per-endpoint request counters",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** Count every OBS HTTP request by a stable operation label, exposed via Client.MetricsSnapshot().\n\n**Files:** backend/internal/obs/client.go, backend/internal/obs/client_test.go\n\n**Acceptance Criteria:** get/getFile/post take op arg and increment per-op counter; every public method passes a stable op label; PackageIsContainer increments is_container; MetricsSnapshot returns a copy; existing obs tests pass.\n\n**Verify:** cd backend && go test ./internal/obs/ -v\n\n```json:metadata\n{\"files\": [\"backend/internal/obs/client.go\", \"backend/internal/obs/client_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/obs/ -v\", \"acceptanceCriteria\": [\"get/getFile/post take op arg and increment per-op counter\", \"every public method passes a stable op label; PackageIsContainer increments is_container\", \"MetricsSnapshot returns a copy\", \"existing obs tests pass\"], \"modelTier\": \"standard\"}\n```"
     },
     {
       "id": 2,
       "subject": "Task 2: Publish-flag detection, cache, and eviction",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [1],
       "description": "**Goal:** Client.ProjectPublishFlags(project) resolves per-repo publish-enabled from _meta, cached forever (fetch-once) with an explicit eviction method.\n\n**Files:** backend/internal/obs/client.go, backend/internal/obs/client_test.go\n\n**Acceptance Criteria:** Publishes resolves default/bare-disable/per-repo/most-specific-wins; ProjectPublishFlags fetches once and caches permanently; EvictPublishFlags forces refetch; fetch uses publish_flags op label.\n\n**Verify:** cd backend && go test ./internal/obs/ -run 'TestPublishFlags|TestProjectPublishFlags' -v\n\n```json:metadata\n{\"files\": [\"backend/internal/obs/client.go\", \"backend/internal/obs/client_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/obs/ -run 'TestPublishFlags|TestProjectPublishFlags' -v\", \"acceptanceCriteria\": [\"Publishes resolves default/bare-disable/per-repo/most-specific-wins\", \"ProjectPublishFlags fetches once and caches permanently\", \"EvictPublishFlags forces refetch\", \"fetch uses publish_flags op label\"], \"modelTier\": \"standard\"}\n```"
     },
     {
       "id": 3,
       "subject": "Task 3: Settled helper",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [2],
       "description": "**Goal:** A pure function deciding when a package has nothing left for the worker to observe.\n\n**Files:** backend/internal/obs/settled.go, backend/internal/obs/settled_test.go\n\n**Acceptance Criteria:** published/failed terminal; broken/unresolvable/building/blocked not; succeeded terminal iff all active targets published or non-publishing repo; skip-state targets ignored.\n\n**Verify:** cd backend && go test ./internal/obs/ -run TestSettled -v\n\n```json:metadata\n{\"files\": [\"backend/internal/obs/settled.go\", \"backend/internal/obs/settled_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/obs/ -run TestSettled -v\", \"acceptanceCriteria\": [\"published/failed terminal; broken/unresolvable/building/blocked not\", \"succeeded terminal iff all active targets published or non-publishing repo\", \"skip-state targets ignored\"], \"modelTier\": \"mechanical\"}\n```"
     },
     {
       "id": 4,
       "subject": "Task 4: settled column — model, migration, store",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** Persist a settled flag on packages; GetActivePackages seeds only settled = 0.\n\n**Files:** backend/internal/model/types.go, backend/internal/store/db.go, backend/internal/store/packages.go, backend/internal/store/packages_test.go\n\n**Acceptance Criteria:** Package.Settled field added; settled column in schema + additive migration + table rebuild; UpsertPackageState writes settled; scanPackages reads it; GetActivePackages returns only settled=0.\n\n**Verify:** cd backend && go test ./internal/store/ -v\n\n```json:metadata\n{\"files\": [\"backend/internal/model/types.go\", \"backend/internal/store/db.go\", \"backend/internal/store/packages.go\", \"backend/internal/store/packages_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/store/ -v\", \"acceptanceCriteria\": [\"Package.Settled field added\", \"settled column in schema + additive migration + table rebuild\", \"UpsertPackageState writes settled; scanPackages reads it\", \"GetActivePackages returns only settled=0\"], \"modelTier\": \"standard\"}\n```"
     },
     {
       "id": 5,
       "subject": "Task 5: Working-set removal via Settled",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [2, 3, 4],
       "description": "**Goal:** The worker removes a package from the working set when it is settled (publish-aware), and persists the flag.\n\n**Files:** backend/internal/worker/worker.go, backend/internal/worker/worker_test.go\n\n**Acceptance Criteria:** ProcessOnce computes settled via obs.Settled with cached flags and sets pkg.Settled; flags default to publishes-all on error (no wrong drop); settled persisted via the existing upsert; succeeded-non-publishing and failed removed; publishing-unpublished and type-unknown retained.\n\n**Verify:** cd backend && go test ./internal/worker/ -v\n\n```json:metadata\n{\"files\": [\"backend/internal/worker/worker.go\", \"backend/internal/worker/worker_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/worker/ -v\", \"acceptanceCriteria\": [\"ProcessOnce computes settled via obs.Settled with cached flags and sets pkg.Settled\", \"flags default to publishes-all on error (no wrong drop)\", \"settled persisted via the existing upsert\", \"succeeded-non-publishing and failed removed; publishing-unpublished and type-unknown retained\"], \"modelTier\": \"standard\"}\n```"
     },
     {
       "id": 6,
       "subject": "Task 6: BlockedReasonTask guard",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** Skip the OBS call in BlockedReasonTask when the package has no blocked target.\n\n**Files:** backend/internal/obs/tasks.go, backend/internal/obs/tasks_test.go\n\n**Acceptance Criteria:** no HTTP call when no blocked target; still calls and populates BlockedBy when a blocked target exists.\n\n**Verify:** cd backend && go test ./internal/obs/ -run TestBlockedReasonTask -v\n\n```json:metadata\n{\"files\": [\"backend/internal/obs/tasks.go\", \"backend/internal/obs/tasks_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/obs/ -run TestBlockedReasonTask -v\", \"acceptanceCriteria\": [\"no HTTP call when no blocked target\", \"still calls and populates BlockedBy when a blocked target exists\"], \"modelTier\": \"mechanical\"}\n```"
     },
     {
       "id": 7,
       "subject": "Task 7: Evict publish-flag cache on project removal",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [2],
       "description": "**Goal:** Clear a project's cached publish flags when it is removed by the poller GC or the MQ project.delete handler.\n\n**Files:** backend/internal/obs/poller.go, backend/internal/mq/consumer.go, backend/internal/obs/poller_test.go\n\n**Acceptance Criteria:** poller GC evicts publish flags per removed project; MQ project.delete evicts publish flags; evict forces refetch.\n\n**Verify:** cd backend && go test ./internal/obs/ ./internal/mq/ -v\n\n```json:metadata\n{\"files\": [\"backend/internal/obs/poller.go\", \"backend/internal/mq/consumer.go\", \"backend/internal/obs/poller_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/obs/ ./internal/mq/ -v\", \"acceptanceCriteria\": [\"poller GC evicts publish flags per removed project\", \"MQ project.delete evicts publish flags\", \"evict forces refetch\"], \"modelTier\": \"mechanical\"}\n```"
     },
     {
       "id": 8,
       "subject": "Task 8: WorkingSet.Stats()",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** Expose working-set size — total, inflight, and by-rollup-state.\n\n**Files:** backend/internal/workingset/workingset.go, backend/internal/workingset/workingset_test.go\n\n**Acceptance Criteria:** Stats returns Total/Inflight/ByState under mutex; ByState counts by rollup_state.\n\n**Verify:** cd backend && go test ./internal/workingset/ -run TestStats -v\n\n```json:metadata\n{\"files\": [\"backend/internal/workingset/workingset.go\", \"backend/internal/workingset/workingset_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/workingset/ -run TestStats -v\", \"acceptanceCriteria\": [\"Stats returns Total/Inflight/ByState under mutex\", \"ByState counts by rollup_state\"], \"modelTier\": \"mechanical\"}\n```"
     },
     {
       "id": 9,
       "subject": "Task 9: Telemetry config",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** Add Telemetry.Interval (default 60s) and Telemetry.Enabled (default false).\n\n**Files:** backend/internal/config/config.go, backend/internal/config/config_test.go\n\n**Acceptance Criteria:** Telemetry config with Interval and Enabled; defaults 60s and false; env overrides bound.\n\n**Verify:** cd backend && go test ./internal/config/ -v\n\n```json:metadata\n{\"files\": [\"backend/internal/config/config.go\", \"backend/internal/config/config_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/config/ -v\", \"acceptanceCriteria\": [\"Telemetry config with Interval and Enabled\", \"defaults 60s and false; env overrides bound\"], \"modelTier\": \"mechanical\"}\n```"
     },
     {
       "id": 10,
       "subject": "Task 10: Telemetry reporter package",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [1, 8],
       "description": "**Goal:** A periodic reporter that logs working-set stats and OBS request deltas, gated by an atomic.Bool, with a pure diff helper.\n\n**Files:** backend/internal/telemetry/telemetry.go, backend/internal/telemetry/telemetry_test.go\n\n**Acceptance Criteria:** Diff returns per-op and total deltas, omitting zero; tick refreshes baseline always, emits only when enabled; Run loops on ticker until ctx cancel.\n\n**Verify:** cd backend && go test ./internal/telemetry/ -v\n\n```json:metadata\n{\"files\": [\"backend/internal/telemetry/telemetry.go\", \"backend/internal/telemetry/telemetry_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/telemetry/ -v\", \"acceptanceCriteria\": [\"Diff returns per-op and total deltas, omitting zero\", \"tick refreshes baseline always, emits only when enabled\", \"Run loops on ticker until ctx cancel\"], \"modelTier\": \"standard\"}\n```"
     },
     {
       "id": 11,
       "subject": "Task 11: Telemetry HTTP endpoint",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** GET /api/telemetry returns status; POST /api/telemetry?enabled=… flips the toggle.\n\n**Files:** backend/internal/api/server.go, backend/internal/api/handlers.go, backend/internal/api/handlers_test.go\n\n**Acceptance Criteria:** NewRouter gains toggle + interval params; GET returns enabled+interval; POST sets flag; invalid/missing enabled -> 400.\n\n**Verify:** cd backend && go test ./internal/api/ -v\n\n```json:metadata\n{\"files\": [\"backend/internal/api/server.go\", \"backend/internal/api/handlers.go\", \"backend/internal/api/handlers_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/api/ -v\", \"acceptanceCriteria\": [\"NewRouter gains toggle + interval params\", \"GET returns enabled+interval\", \"POST sets flag; invalid/missing enabled -> 400\"], \"modelTier\": \"standard\"}\n```"
     },
     {
       "id": 12,
       "subject": "Task 12: Wire telemetry into main.go",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [9, 10, 11],
       "description": "**Goal:** Create the shared toggle from config, start the reporter goroutine, and pass the toggle+interval to the router.\n\n**Files:** backend/cmd/obsboard/main.go\n\n**Acceptance Criteria:** shared atomic.Bool seeded from config; reporter goroutine started with interval/ws/client; NewRouter called with toggle+interval; build/vet/test pass.\n\n**Verify:** cd backend && go build ./... && go vet ./... && go test ./...\n\n```json:metadata\n{\"files\": [\"backend/cmd/obsboard/main.go\"], \"verifyCommand\": \"cd backend && go build ./... && go vet ./... && go test ./...\", \"acceptanceCriteria\": [\"shared atomic.Bool seeded from config\", \"reporter goroutine started with interval/ws/client\", \"NewRouter called with toggle+interval\", \"build/vet/test pass\"], \"modelTier\": \"standard\"}\n```"
     }
   ],
-  "lastUpdated": "2026-07-06T00:00:00Z"
+  "lastUpdated": "2026-07-06T14:00:00Z"
 }
