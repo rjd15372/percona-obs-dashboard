@@ -780,6 +780,124 @@ func (t versionTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package) e
 	return nil
 }
 
+// A package waiting only on build completions (all targets building, reasons
+// known) is parked: removed from the working set but NOT settled.
+func TestPoolParksAllBuildingPackage(t *testing.T) {
+	db := openDB(t)
+	h := hubpkg.New()
+	ws := workingset.New(10)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	p := worker.NewPool(1, nil, nil, nil, db, h, ws, nil) // no tasks, nil client
+	p.Start(ctx)
+
+	isContainer := false
+	pkg := &model.Package{
+		Project: "isv:percona:ppg:17", Name: "pkg-building",
+		RollupState: model.RollupBuilding, OKTargets: 0, TotalTargets: 2,
+		IsContainer: &isContainer,
+		Targets: []model.Target{
+			{Repo: "repo", Arch: "x86_64", State: "building", BuildReason: "meta change"},
+			{Repo: "repo", Arch: "aarch64", State: "succeeded", Published: true}, // inert
+		},
+		UpdatedAt: time.Now().UTC(),
+	}
+	ws.Signal(pkg)
+	time.Sleep(200 * time.Millisecond)
+	cancel()
+	time.Sleep(10 * time.Millisecond)
+
+	// Parked → removed → Add re-dispatches.
+	ws.Add(pkg)
+	select {
+	case <-ws.Dispatch():
+		// correct — package was parked (removed)
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("all-building package was not parked")
+	}
+
+	// Parking must not settle: the DB row stays settled=0 (re-seeded on restart).
+	var settled int
+	if err := db.QueryRow(`SELECT settled FROM packages WHERE project = ? AND name = ?`,
+		pkg.Project, pkg.Name).Scan(&settled); err != nil {
+		t.Fatal(err)
+	}
+	if settled != 0 {
+		t.Fatalf("parked package must keep settled=0, got %d", settled)
+	}
+}
+
+// A succeeded-unpublished target in a publishing repo (zero-value flags →
+// publishes) must keep the package polling — publish detection has no
+// MQ-with-poller-fallback path.
+func TestPoolDoesNotParkWithUnpublishedPublishingTarget(t *testing.T) {
+	db := openDB(t)
+	h := hubpkg.New()
+	ws := workingset.New(10)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	p := worker.NewPool(1, nil, nil, nil, db, h, ws, nil)
+	p.Start(ctx)
+
+	isContainer := false
+	pkg := &model.Package{
+		Project: "isv:percona:ppg:17", Name: "pkg-mixed",
+		RollupState: model.RollupBuilding, OKTargets: 1, TotalTargets: 2,
+		IsContainer: &isContainer,
+		Targets: []model.Target{
+			{Repo: "repo", Arch: "x86_64", State: "building", BuildReason: "meta change"},
+			{Repo: "repo", Arch: "aarch64", State: "succeeded"}, // unpublished, publishing repo
+		},
+		UpdatedAt: time.Now().UTC(),
+	}
+	ws.Signal(pkg)
+	time.Sleep(200 * time.Millisecond)
+	cancel()
+	time.Sleep(10 * time.Millisecond)
+
+	ws.Add(pkg) // still present → Add is a no-op → no dispatch
+	select {
+	case <-ws.Dispatch():
+		t.Fatal("package with unpublished publishing target was wrongly parked")
+	case <-time.After(100 * time.Millisecond):
+		// correct — retained
+	}
+}
+
+// A building target whose BuildReason has not been fetched yet keeps polling.
+func TestPoolDoesNotParkWithoutBuildReason(t *testing.T) {
+	db := openDB(t)
+	h := hubpkg.New()
+	ws := workingset.New(10)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	p := worker.NewPool(1, nil, nil, nil, db, h, ws, nil)
+	p.Start(ctx)
+
+	isContainer := false
+	pkg := &model.Package{
+		Project: "isv:percona:ppg:17", Name: "pkg-noreason",
+		RollupState: model.RollupBuilding, OKTargets: 0, TotalTargets: 1,
+		IsContainer: &isContainer,
+		Targets:     []model.Target{{Repo: "repo", Arch: "x86_64", State: "building"}},
+		UpdatedAt:   time.Now().UTC(),
+	}
+	ws.Signal(pkg)
+	time.Sleep(200 * time.Millisecond)
+	cancel()
+	time.Sleep(10 * time.Millisecond)
+
+	ws.Add(pkg)
+	select {
+	case <-ws.Dispatch():
+		t.Fatal("package without build reason was wrongly parked")
+	case <-time.After(100 * time.Millisecond):
+		// correct — retained
+	}
+}
+
 func TestPoolRoutesDevVsReleaseTasks(t *testing.T) {
 	db := openDB(t)
 	h := hubpkg.New()

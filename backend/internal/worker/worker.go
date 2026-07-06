@@ -136,7 +136,11 @@ func (p *Pool) ProcessOnce(ctx context.Context, pkg *model.Package) {
 		})
 	}
 
-	if pkg.Settled {
+	// Remove from the working set when there is nothing left to poll for:
+	// settled (terminal) or parked (waiting only on build completions that MQ
+	// announces, with the poller as fallback). Parking is in-memory only —
+	// settled stays 0, so a restart re-seeds the package and re-parks it.
+	if pkg.Settled || (pkg.IsContainer != nil && obs.Parkable(pkg, flags)) {
 		p.ws.Remove(pkg.Project + "/" + pkg.Name)
 	}
 }
