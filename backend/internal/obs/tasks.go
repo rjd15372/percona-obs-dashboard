@@ -33,6 +33,11 @@ func withRetry(ctx context.Context, maxAttempts int, base time.Duration, fn func
 	return err
 }
 
+// blockedByTTL bounds BlockedBy staleness: while a target stays blocked, the
+// blocker list evolves as dependencies finish, so a cached reason is refreshed
+// once it is older than this. Constant by design (YAGNI on config).
+const blockedByTTL = 5 * time.Minute
+
 // BuildStateTask refreshes the package's targets, rollup state, and counts
 // by fetching current build results from OBS for the specific package.
 type BuildStateTask struct{}
@@ -175,14 +180,17 @@ func (t BinariesCheckTask) Run(ctx context.Context, client *Client, pkg *model.P
 type BlockedReasonTask struct{}
 
 func (t BlockedReasonTask) Run(ctx context.Context, client *Client, pkg *model.Package) error {
-	hasBlocked := false
+	needsFetch := false
 	for _, target := range pkg.Targets {
-		if target.State == "blocked" {
-			hasBlocked = true
+		if target.State != "blocked" {
+			continue
+		}
+		if target.BlockedBy == "" || time.Since(target.BlockedByFetchedAt) > blockedByTTL {
+			needsFetch = true
 			break
 		}
 	}
-	if !hasBlocked {
+	if !needsFetch {
 		return nil
 	}
 
@@ -191,11 +199,18 @@ func (t BlockedReasonTask) Run(ctx context.Context, client *Client, pkg *model.P
 		slog.Warn("obs: blocked reasons", "pkg", pkg.Name, "err", err)
 		return nil
 	}
+	now := time.Now().UTC()
 	for i, target := range pkg.Targets {
 		if target.State != "blocked" {
 			continue
 		}
-		pkg.Targets[i].BlockedBy = reasons[target.Repo+"/"+target.Arch]
+		reason := reasons[target.Repo+"/"+target.Arch]
+		pkg.Targets[i].BlockedBy = reason
+		if reason != "" {
+			// Stamp only on value receipt: a blocked target whose details OBS
+			// hasn't produced yet keeps retrying every pass (today's freshness).
+			pkg.Targets[i].BlockedByFetchedAt = now
+		}
 	}
 	return nil
 }

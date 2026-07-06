@@ -96,6 +96,67 @@ func TestBlockedReasonTaskSkipsWhenNoBlocked(t *testing.T) {
 	}
 }
 
+func TestBlockedReasonTaskSkipsWhenFresh(t *testing.T) {
+	var calls int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		fmt.Fprint(w, `<resultlist></resultlist>`)
+	}))
+	defer ts.Close()
+
+	c := obs.NewClient(ts.URL, "u", "p")
+	pkg := &model.Package{
+		Project: "isv:percona", Name: "mypkg",
+		Targets: []model.Target{{
+			Repo: "repo", Arch: "x86_64", State: "blocked",
+			BlockedBy:          "waiting on libfoo",
+			BlockedByFetchedAt: time.Now().UTC().Add(-time.Minute), // fresh
+		}},
+	}
+	if err := (obs.BlockedReasonTask{}).Run(context.Background(), c, pkg); err != nil {
+		t.Fatal(err)
+	}
+	if atomic.LoadInt32(&calls) != 0 {
+		t.Fatalf("expected no OBS call for fresh blocked reason, got %d", calls)
+	}
+	if pkg.Targets[0].BlockedBy != "waiting on libfoo" {
+		t.Errorf("cached BlockedBy lost: %q", pkg.Targets[0].BlockedBy)
+	}
+}
+
+func TestBlockedReasonTaskRefetchesWhenStale(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `<resultlist>
+          <result project="isv:percona" repository="repo" arch="x86_64" state="building">
+            <status package="mypkg" code="blocked">
+              <details>now waiting on libbar</details>
+            </status>
+          </result>
+        </resultlist>`)
+	}))
+	defer ts.Close()
+
+	stale := time.Now().UTC().Add(-6 * time.Minute)
+	c := obs.NewClient(ts.URL, "u", "p")
+	pkg := &model.Package{
+		Project: "isv:percona", Name: "mypkg",
+		Targets: []model.Target{{
+			Repo: "repo", Arch: "x86_64", State: "blocked",
+			BlockedBy:          "waiting on libfoo",
+			BlockedByFetchedAt: stale,
+		}},
+	}
+	if err := (obs.BlockedReasonTask{}).Run(context.Background(), c, pkg); err != nil {
+		t.Fatal(err)
+	}
+	if pkg.Targets[0].BlockedBy != "now waiting on libbar" {
+		t.Errorf("stale BlockedBy not refreshed: %q", pkg.Targets[0].BlockedBy)
+	}
+	if !pkg.Targets[0].BlockedByFetchedAt.After(stale) {
+		t.Error("BlockedByFetchedAt not re-stamped after refetch")
+	}
+}
+
 func TestPublishStateTask(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `<resultlist>
