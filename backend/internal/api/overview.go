@@ -181,7 +181,7 @@ func buildOverviewSnapshot(root, window string, now time.Time,
 		getAgg(imgLogical[k]).images[k.project+"/"+k.pkg] = img
 	}
 
-	var projects []OverviewProject
+	projects := []OverviewProject{}
 	for logical, a := range agg {
 		if a.rebuilds == 0 && len(a.images) == 0 {
 			continue
@@ -189,7 +189,7 @@ func buildOverviewSnapshot(root, window string, now time.Time,
 		p := OverviewProject{Project: logical, Rebuilds: a.rebuilds, Images: []OverviewImage{}}
 		var topPkg string
 		for name, n := range a.pkgCount {
-			if topPkg == "" || n > a.pkgCount[topPkg] {
+			if topPkg == "" || n > a.pkgCount[topPkg] || (n == a.pkgCount[topPkg] && name < topPkg) {
 				topPkg = name
 			}
 		}
@@ -221,7 +221,7 @@ func buildOverviewSnapshot(root, window string, now time.Time,
 	}
 	var topRepo string
 	for name, n := range repoCount {
-		if topRepo == "" || n > repoCount[topRepo] {
+		if topRepo == "" || n > repoCount[topRepo] || (n == repoCount[topRepo] && name < topRepo) {
 			topRepo = name
 		}
 	}

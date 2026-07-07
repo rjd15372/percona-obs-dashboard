@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -147,5 +148,41 @@ func TestOverviewHandlerCaches(t *testing.T) {
 	}
 	if len(s2.Projects) != len(s1.Projects) {
 		t.Fatalf("second request bypassed the cache: %d vs %d projects", len(s2.Projects), len(s1.Projects))
+	}
+}
+
+func TestOverviewTopTieBreakDeterministic(t *testing.T) {
+	now := time.Date(2026, 7, 7, 12, 0, 0, 0, time.UTC)
+	// Two packages and two repos, all at equal counts: the
+	// lexicographically-smaller name must win regardless of map order.
+	cur := []store.BuildingEntry{
+		{Project: "isv:percona:ppg:17", Package: "pkg-b", Repo: "UBI_9"},
+		{Project: "isv:percona:ppg:17", Package: "pkg-a", Repo: "Debian_12"},
+	}
+
+	for i := 0; i < 20; i++ {
+		s := buildOverviewSnapshot("isv:percona", "24h", now, cur, nil, nil, nil)
+		if s.TopRepo == nil || s.TopRepo.Name != "Debian_12" || s.TopRepo.Count != 1 {
+			t.Fatalf("top_repo tie-break = %+v, want Debian_12/1", s.TopRepo)
+		}
+		p := findProject(t, s, "isv:percona:ppg:17")
+		if p.TopPackage == nil || p.TopPackage.Name != "pkg-a" || p.TopPackage.Count != 1 {
+			t.Fatalf("top_package tie-break = %+v, want pkg-a/1", p.TopPackage)
+		}
+	}
+}
+
+func TestOverviewEmptySnapshotProjectsNotNull(t *testing.T) {
+	now := time.Date(2026, 7, 7, 12, 0, 0, 0, time.UTC)
+	s := buildOverviewSnapshot("isv:percona", "24h", now, nil, nil, nil, nil)
+	if s.Projects == nil {
+		t.Fatal("Projects is nil; must be an empty slice")
+	}
+	b, err := json.Marshal(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"projects":[]`) {
+		t.Fatalf("empty snapshot JSON = %s, want \"projects\":[]", b)
 	}
 }
