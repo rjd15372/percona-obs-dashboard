@@ -1,11 +1,16 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { RebuildBar } from '../composables/useOverviewData'
+import { groupByCategory } from '../lib/overview'
 
-defineProps<{
+const props = defineProps<{
   bars: RebuildBar[]
   windowLabel: string
   accentOf: (project: string) => string
 }>()
+
+// Devel / Releases / PRs sections; bars stay rebuild-sorted within each.
+const groups = computed(() => groupByCategory(props.bars, b => b.project))
 </script>
 
 <template>
@@ -20,27 +25,34 @@ defineProps<{
     </div>
 
     <div v-else class="flex flex-col gap-3">
-      <div
-        v-for="bar in bars"
-        :key="bar.project"
-        class="grid grid-cols-[215px_1fr_54px] items-center gap-3.5"
-      >
-        <div class="flex items-center gap-2 min-w-0">
-          <span class="w-[9px] h-[9px] rounded-[3px] shrink-0" :style="{ background: accentOf(bar.project) }" />
-          <span class="font-mono text-[12.5px] font-semibold truncate">{{ bar.project }}</span>
+      <template v-for="group in groups" :key="group.category">
+        <!-- Category separator -->
+        <div class="flex items-center gap-2 mt-1 first:mt-0">
+          <span class="text-[10.5px] font-bold uppercase tracking-[0.06em] text-text-muted">{{ group.category }}</span>
+          <span class="flex-1 border-t border-border" />
         </div>
         <div
-          class="h-[22px] bg-bg-muted rounded-md overflow-hidden"
-          role="img"
-          :aria-label="`${bar.project} — ${bar.count} rebuilds`"
+          v-for="bar in group.items"
+          :key="bar.project"
+          class="grid grid-cols-[215px_1fr_54px] items-center gap-3.5"
         >
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="w-[9px] h-[9px] rounded-[3px] shrink-0" :style="{ background: accentOf(bar.project) }" />
+            <span class="font-mono text-[12.5px] font-semibold truncate">{{ bar.project }}</span>
+          </div>
           <div
-            class="h-full rounded-md transition-[width] duration-300"
-            :style="{ width: `${bar.pct}%`, background: accentOf(bar.project) }"
-          />
+            class="h-[22px] bg-bg-muted rounded-md overflow-hidden"
+            role="img"
+            :aria-label="`${bar.project} — ${bar.count} rebuilds`"
+          >
+            <div
+              class="h-full rounded-md transition-[width] duration-300"
+              :style="{ width: `${bar.pct}%`, background: accentOf(bar.project) }"
+            />
+          </div>
+          <span class="font-mono text-[13px] font-bold text-right">{{ bar.count }}</span>
         </div>
-        <span class="font-mono text-[13px] font-bold text-right">{{ bar.count }}</span>
-      </div>
+      </template>
     </div>
   </div>
 </template>

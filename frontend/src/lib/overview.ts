@@ -13,3 +13,28 @@ export function ageColor(days: number): string {
 export function ageLabel(days: number): string {
   return days === 0 ? '—' : `${days}d`
 }
+
+// Category grouping for the overview tables: logical projects are grouped
+// into Devel / Releases / PRs sections, in that order.
+export type ProjectCategory = 'Devel' | 'Releases' | 'PRs'
+
+export const CATEGORY_ORDER: ProjectCategory[] = ['Devel', 'Releases', 'PRs']
+
+export function categoryOf(project: string): ProjectCategory {
+  if (project.includes(':PR:')) return 'PRs'
+  if (project.endsWith(':releases')) return 'Releases'
+  return 'Devel'
+}
+
+// Splits items into non-empty category sections, preserving item order.
+export function groupByCategory<T>(
+  items: T[],
+  projectOf: (item: T) => string,
+): { category: ProjectCategory; items: T[] }[] {
+  return CATEGORY_ORDER
+    .map(category => ({
+      category,
+      items: items.filter(i => categoryOf(projectOf(i)) === category),
+    }))
+    .filter(g => g.items.length > 0)
+}

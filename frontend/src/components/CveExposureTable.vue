@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive } from 'vue'
 import type { OverviewProject } from '../types/overview'
-import { ageColor, ageLabel } from '../lib/overview'
+import { ageColor, ageLabel, groupByCategory } from '../lib/overview'
 
 const props = defineProps<{
   projects: OverviewProject[]
@@ -9,6 +9,9 @@ const props = defineProps<{
 }>()
 
 const projectsWithImages = computed(() => props.projects.filter(p => p.images.length > 0))
+
+// Devel / Releases / PRs sections, preserving snapshot order within each.
+const groups = computed(() => groupByCategory(projectsWithImages.value, p => p.project))
 
 // Keyed by project path (not array index) so expansion survives snapshot
 // replacement from SSE updates. Multiple rows may be open at once.
@@ -93,7 +96,14 @@ function badgeClass(n: number, kind: 'crit' | 'high'): string {
       <span class="text-right">Avg fix time</span>
     </div>
 
-    <template v-for="p in projectsWithImages" :key="p.project">
+    <template v-for="group in groups" :key="group.category">
+      <!-- Category separator row -->
+      <div class="flex items-center gap-2 p-[7px_20px] border-b border-border bg-bg-card-2">
+        <span class="text-[10.5px] font-bold uppercase tracking-[0.06em] text-text-muted">{{ group.category }}</span>
+        <span class="flex-1 border-t border-border" />
+      </div>
+
+      <template v-for="p in group.items" :key="p.project">
       <button
         type="button"
         class="w-full text-left p-[11px_20px] border-b border-border grid grid-cols-[1fr_90px_90px_130px_130px] gap-3 items-center"
@@ -160,6 +170,7 @@ function badgeClass(n: number, kind: 'crit' | 'high'): string {
           </span>
         </div>
       </div>
+      </template>
     </template>
   </div>
 </template>
