@@ -15,7 +15,10 @@ type BuildingEntry struct {
 
 // QueryBuildingEntries returns every target_state_durations row that entered
 // "building" within [since, until). Timestamps in the table are RFC3339Nano
-// strings (UTC), so lexicographic comparison is chronologically correct.
+// strings (UTC); lexicographic comparison is chronologically correct to
+// within sub-second edge cases (a whole-second timestamp sorts after the
+// same second with a fractional part), which is negligible for window
+// counting.
 func QueryBuildingEntries(db *sql.DB, since, until time.Time) ([]BuildingEntry, error) {
 	rows, err := db.Query(`
 		SELECT project, package, repo FROM target_state_durations

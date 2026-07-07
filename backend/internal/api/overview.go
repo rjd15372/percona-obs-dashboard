@@ -58,6 +58,7 @@ type OverviewCount struct {
 }
 
 type OverviewImage struct {
+	Project        string `json:"project"` // raw OBS project (logical rows can aggregate several)
 	Name           string `json:"name"`
 	Critical       int    `json:"critical"`
 	High           int    `json:"high"`
@@ -140,7 +141,7 @@ func buildOverviewSnapshot(root, window string, now time.Time,
 		k := imgKey{s.Project, s.Package}
 		img, ok := imgAt[k]
 		if !ok {
-			img = &OverviewImage{Name: s.Package}
+			img = &OverviewImage{Project: s.Project, Name: s.Package}
 			imgAt[k] = img
 			imgLogical[k] = logical
 		}

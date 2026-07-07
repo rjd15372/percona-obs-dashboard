@@ -71,6 +71,9 @@ func TestOverviewSnapshotBuilder(t *testing.T) {
 	if len(p17.Images) != 1 || p17.Images[0].Critical != 2 || p17.Images[0].High != 7 {
 		t.Fatalf("img-x max-across-archs failed: %+v", p17.Images)
 	}
+	if p17.Images[0].Project != "isv:percona:ppg:17:containers:ubi9" {
+		t.Fatalf("img-x project = %+v", p17.Images[0])
+	}
 	if p17.Images[0].OldestOpenDays != 34 || p17.Images[0].AvgFixDays != 10 { // mean(9,11)=10
 		t.Fatalf("img-x ages = %+v", p17.Images[0])
 	}
