@@ -97,9 +97,10 @@ function badgeClass(n: number, kind: 'crit' | 'high'): string {
     </div>
 
     <template v-for="group in groups" :key="group.category">
-      <!-- Category separator row -->
-      <div class="flex items-center gap-2 p-[7px_20px] border-b border-border bg-bg-card-2">
-        <span class="text-[10.5px] font-bold uppercase tracking-[0.06em] text-text-muted">{{ group.category }}</span>
+      <!-- Category separator row: plain card surface + secondary label so it
+           reads distinctly from the tinted (bg-card-2) column-header band. -->
+      <div class="flex items-center gap-2 p-[9px_20px] border-b border-border">
+        <span class="text-[10.5px] font-bold uppercase tracking-[0.06em] text-text-secondary">{{ group.category }}</span>
         <span class="flex-1 border-t border-border" />
       </div>
 

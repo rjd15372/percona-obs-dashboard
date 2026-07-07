@@ -28,7 +28,7 @@ const groups = computed(() => groupByCategory(props.bars, b => b.project))
       <template v-for="group in groups" :key="group.category">
         <!-- Category separator -->
         <div class="flex items-center gap-2 mt-1 first:mt-0">
-          <span class="text-[10.5px] font-bold uppercase tracking-[0.06em] text-text-muted">{{ group.category }}</span>
+          <span class="text-[10.5px] font-bold uppercase tracking-[0.06em] text-text-secondary">{{ group.category }}</span>
           <span class="flex-1 border-t border-border" />
         </div>
         <div
