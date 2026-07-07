@@ -20,6 +20,7 @@ func NewRouter(db *sql.DB, h *hub.Hub, obsClient *obs.Client, root string, telem
 	r.Use(middleware.Recoverer)
 	releaseArtifacts := newReleaseArtifactsCache(10 * time.Minute)
 	metadataCache := newBinaryListCache(5 * time.Minute)
+	overview := newOverviewCache(60 * time.Second)
 
 	r.Route("/api/products/{product}/{version}", func(r chi.Router) {
 		r.Get("/packages", packagesHandler(db, root))
@@ -48,6 +49,8 @@ func NewRouter(db *sql.DB, h *hub.Hub, obsClient *obs.Client, root string, telem
 
 	r.Get("/api/telemetry", telemetryStatusHandler(telemetryEnabled, telemetryInterval))
 	r.Post("/api/telemetry", telemetrySetHandler(telemetryEnabled))
+
+	r.Get("/api/overview", overviewHandler(db, root, overview))
 
 	return r
 }
