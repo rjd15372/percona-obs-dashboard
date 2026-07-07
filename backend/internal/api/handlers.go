@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -258,13 +259,30 @@ func reposHandlerWithPrefix(db *sql.DB, prefixFn func(*http.Request) string) htt
 	}
 }
 
+// subprojectRe validates the optional ?subproject= repos-endpoint param; the
+// value is appended to a SQL LIKE prefix, so only plain segment names pass.
+var subprojectRe = regexp.MustCompile(`^[a-z0-9_-]+$`)
+
 // reposHandler returns a handler for GET /api/products/{product}/{version}/repos.
 // It queries the DB for distinct OBS repository names found in non-container
 // packages' targets, and returns them grouped into rpm and deb categories.
+// An optional ?subproject=<segment> narrows the query to that subproject
+// (e.g. isv:percona:ppg:18:extras); invalid segments are rejected with 400.
 func reposHandler(db *sql.DB) http.HandlerFunc {
-	return reposHandlerWithPrefix(db, func(r *http.Request) string {
-		return "isv:percona:" + chi.URLParam(r, "product") + ":" + chi.URLParam(r, "version")
+	inner := reposHandlerWithPrefix(db, func(r *http.Request) string {
+		prefix := "isv:percona:" + chi.URLParam(r, "product") + ":" + chi.URLParam(r, "version")
+		if sub := r.URL.Query().Get("subproject"); sub != "" {
+			prefix += ":" + sub
+		}
+		return prefix
 	})
+	return func(w http.ResponseWriter, r *http.Request) {
+		if sub := r.URL.Query().Get("subproject"); sub != "" && !subprojectRe.MatchString(sub) {
+			http.Error(w, "invalid subproject", http.StatusBadRequest)
+			return
+		}
+		inner(w, r)
+	}
 }
 
 // releasesPackagesHandler returns a handler for GET /api/releases/ppg/{version}/packages.

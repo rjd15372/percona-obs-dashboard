@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/percona/obs-dashboard/internal/hub"
+	"github.com/percona/obs-dashboard/internal/model"
 	"github.com/percona/obs-dashboard/internal/obs"
 	"github.com/percona/obs-dashboard/internal/store"
 )
@@ -259,6 +260,95 @@ func TestPRReposHandler_EmptyDB(t *testing.T) {
 	}
 	if resp.RPM == nil || resp.DEB == nil {
 		t.Fatal("expected non-nil rpm and deb slices")
+	}
+}
+
+func TestReposSubprojectParam(t *testing.T) {
+	db, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	obsSrv := stubOBSServer(t)
+	obsClient := obs.NewClient(obsSrv.URL, "user", "pass")
+	router := NewRouter(db, hub.New(), obsClient, "isv:percona", new(atomic.Bool), time.Duration(0))
+
+	falseVal := false
+	now := time.Now()
+	mainPkg := &model.Package{
+		Project: "isv:percona:ppg:18", Name: "percona-postgresql18",
+		RollupState: model.RollupSucceeded, OKTargets: 1, TotalTargets: 1,
+		IsContainer: &falseVal,
+		Targets:     []model.Target{{Repo: "Debian_13", Arch: "x86_64", State: "succeeded"}},
+		UpdatedAt:   now,
+	}
+	if err := store.UpsertPackageState(db, mainPkg, mainPkg.UpdatedAt); err != nil {
+		t.Fatalf("seed main pkg: %v", err)
+	}
+	extrasPkg := &model.Package{
+		Project: "isv:percona:ppg:18:extras", Name: "percona-postgresql18-extras",
+		RollupState: model.RollupSucceeded, OKTargets: 1, TotalTargets: 1,
+		IsContainer: &falseVal,
+		Targets:     []model.Target{{Repo: "UBI_9", Arch: "x86_64", State: "succeeded"}},
+		UpdatedAt:   now,
+	}
+	if err := store.UpsertPackageState(db, extrasPkg, extrasPkg.UpdatedAt); err != nil {
+		t.Fatalf("seed extras pkg: %v", err)
+	}
+
+	containsRepo := func(resp ReposResponse, obsName string) bool {
+		for _, r := range resp.RPM {
+			if r.OBS == obsName {
+				return true
+			}
+		}
+		for _, r := range resp.DEB {
+			if r.OBS == obsName {
+				return true
+			}
+		}
+		return false
+	}
+
+	// 1. subproject=extras returns only extras repos.
+	req := httptest.NewRequest(http.MethodGet, "/api/products/ppg/18/repos?subproject=extras", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var resp ReposResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !containsRepo(resp, "UBI_9") {
+		t.Errorf("expected UBI_9 in extras response, got %+v", resp)
+	}
+	if containsRepo(resp, "Debian_13") {
+		t.Errorf("did not expect Debian_13 in extras response, got %+v", resp)
+	}
+
+	// 2. no subproject param: unchanged behaviour, main repo present.
+	req2 := httptest.NewRequest(http.MethodGet, "/api/products/ppg/18/repos", nil)
+	rec2 := httptest.NewRecorder()
+	router.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec2.Code)
+	}
+	var resp2 ReposResponse
+	if err := json.NewDecoder(rec2.Body).Decode(&resp2); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !containsRepo(resp2, "Debian_13") {
+		t.Errorf("expected Debian_13 in default response, got %+v", resp2)
+	}
+
+	// 3. invalid subproject param -> 400.
+	req3 := httptest.NewRequest(http.MethodGet, "/api/products/ppg/18/repos?subproject=EX%25TRAS", nil)
+	rec3 := httptest.NewRecorder()
+	router.ServeHTTP(rec3, req3)
+	if rec3.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec3.Code)
 	}
 }
 
