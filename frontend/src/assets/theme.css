@@ -22,6 +22,10 @@
   --blocked-tint: #F0EFF4;
   --info: #2A78D4;
   --info-tint: #EFF6FF;
+  --crit: #B0203A;
+  --crit-tint: rgba(176, 32, 58, 0.12);
+  --high: #E5731C;
+  --high-tint: rgba(229, 115, 28, 0.14);
   --text-primary: #14111C;
   --text-secondary: #4A4655;
   --text-muted: #7A7585;
@@ -52,6 +56,10 @@
   --blocked-tint: rgba(133, 149, 168, 0.16);
   --info: #5B93C9;
   --info-tint: rgba(91, 147, 201, 0.16);
+  --crit: #FF5E7A;
+  --crit-tint: rgba(255, 94, 122, 0.16);
+  --high: #FF9147;
+  --high-tint: rgba(255, 145, 71, 0.16);
   --text-primary: #E8EDF4;
   --text-secondary: #B6C2D2;
   --text-muted: #909EAF;
