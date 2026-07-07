@@ -60,7 +60,6 @@ const emit = defineEmits<{
 
 // Computed aliases so the rest of the component body can use them unchanged
 const localVersion = computed(() => props.artifactsVersion)
-const contextPrefix = computed(() => props.artifactsContext.prefix)
 const isReleaseContext = computed(() => props.artifactsContext.apiBase.startsWith('/api/releases/'))
 
 // Package state (self-fetched)
@@ -69,14 +68,16 @@ const pendingFetches = ref(0)
 
 // Version derived from fetched packages
 const availableVersions = computed<string[]>(() => {
-  const depth = props.artifactsContext.prefix.split(':').length
+  const ctx = props.artifactsContext
+  const depth = ctx.prefix.split(':').length
   const versions = new Set<string>()
   for (const pkg of artifactsPackages.value) {
     const parts = pkg.project.split(':')
     const seg = parts[depth]
-    if (seg && /^\d+$/.test(seg)) {
-      versions.add(seg)
-    }
+    if (!seg || !/^\d+$/.test(seg)) continue
+    // Subproject contexts only offer versions that actually have the subproject.
+    if (ctx.subproject && parts[depth + 1] !== ctx.subproject) continue
+    versions.add(seg)
   }
   return [...versions].sort((a, b) => parseInt(b) - parseInt(a))
 })
@@ -113,6 +114,9 @@ async function fetchRepos(version: string) {
   let url: string
   if (ctx.apiBase.startsWith('/api/products/')) {
     url = `/api/products/ppg/${version}/repos`
+    if (ctx.subproject) {
+      url += `?subproject=${encodeURIComponent(ctx.subproject)}`
+    }
   } else {
     url = `${ctx.apiBase}/${version}/repos`
   }
@@ -205,7 +209,7 @@ const { packageRows: livePackageRows, containerImages: liveContainerImages } = u
   localVersion,
   selectedRepo,
   artArch,
-  contextPrefix,
+  computed(() => props.artifactsContext),
 )
 
 const { enrichedPackageRows, enrichedContainerImages, isLoading: metadataLoading } = useArtifactMetadata(

@@ -1,6 +1,6 @@
 import { computed, toValue } from 'vue'
 import type { MaybeRef } from 'vue'
-import type { Package, Target, CveScan } from '../types/api'
+import type { Package, Target, CveScan, Context } from '../types/api'
 
 export interface RepoInfo {
   obs: string
@@ -76,28 +76,41 @@ export function useArtifacts(
   version: MaybeRef<string>,
   selectedRepo: MaybeRef<RepoInfo | null>,
   artArch: MaybeRef<string>,
-  contextPrefix: MaybeRef<string>,
+  context: MaybeRef<Context>,
 ) {
+  // matchesProject: does an OBS project belong to this context at this version?
+  //  - subproject contexts (e.g. PPG Extras) own prefix:ver:<subproject> and
+  //    everything beneath it (including its :containers:* subprojects).
+  //  - allowlist contexts (PPG) own prefix:ver plus only the listed direct
+  //    subprojects — future subprojects stay hidden until given an entry.
+  //  - contexts with neither field (PR, Releases) keep the historical
+  //    catch-all: prefix:ver and everything beneath.
+  const matchesProject = (project: string, ver: string): boolean => {
+    const ctx = toValue(context)
+    const root = ctx.subproject
+      ? `${ctx.prefix}:${ver}:${ctx.subproject}`
+      : `${ctx.prefix}:${ver}`
+    if (project === root) return true
+    if (!project.startsWith(root + ':')) return false
+    if (ctx.subproject) return true
+    if (!ctx.allowedSubprojects) return true
+    const first = project.slice(root.length + 1).split(':')[0]
+    return ctx.allowedSubprojects.includes(first)
+  }
+
   const packageRows = computed<PackageRow[]>(() => {
     const pkgs = toValue(packages)
     const ver = toValue(version)
     const repo = toValue(selectedRepo)
     const arch = toValue(artArch)
-    const prefix = toValue(contextPrefix)
 
     if (!repo) return []
 
-    const exactProject = `${prefix}:${ver}`
     const rows: PackageRow[] = []
     for (const pkg of pkgs) {
-      // Accept packages at the exact version project OR in sub-projects beneath it
-      // (e.g. PR packages live at isv:percona:PR:pr-33:ppg:18:containers:ubi9).
       // Confirmed container images (is_container: true) are excluded — they belong
       // in the Container Images tab, not here.
-      const inProject =
-        pkg.project === exactProject ||
-        pkg.project.startsWith(exactProject + ':')
-      if (!inProject || pkg.is_container === true) continue
+      if (!matchesProject(pkg.project, ver) || pkg.is_container === true) continue
 
       const target = pkg.targets?.find(
         (t: Target) => t.repo === repo.obs && t.arch === arch,
@@ -121,12 +134,11 @@ export function useArtifacts(
   const containerImages = computed<ContainerImage[]>(() => {
     const pkgs = toValue(packages)
     const ver = toValue(version)
-    const prefix = toValue(contextPrefix)
 
     return pkgs
       .filter(pkg =>
         pkg.is_container === true &&
-        pkg.project.startsWith(`${prefix}:${ver}:`)
+        matchesProject(pkg.project, ver)
       )
       .map(pkg => {
         const tags = pkg.container_tags ?? []
