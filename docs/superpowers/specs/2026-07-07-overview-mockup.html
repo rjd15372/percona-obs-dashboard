@@ -1,0 +1,437 @@
+<title>OBS Overview — Mockup</title>
+<style>
+  :root {
+    --bg-app:#F6F4F0; --bg-card:#FFFFFF; --bg-card-2:#FBFAF7; --bg-muted:#ECE8DF;
+    --text-primary:#14111C; --text-secondary:#4A4655; --text-muted:#7A7585;
+    --border:rgba(20,17,28,0.08); --border-strong:rgba(20,17,28,0.14);
+    --brand:#6E3FF3; --brand-tint:rgba(110,63,243,0.10);
+    --ok:#1F9D55; --ok-tint:rgba(31,157,85,0.12);
+    --fail:#E5484D; --fail-tint:rgba(229,72,77,0.12);
+    --info:#2A78D4; --info-tint:rgba(42,120,212,0.12);
+    --crit:#B0203A; --crit-tint:rgba(176,32,58,0.12);
+    --high:#E5731C; --high-tint:rgba(229,115,28,0.14);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg-app:#0B0912; --bg-card:#181426; --bg-card-2:#13101F; --bg-muted:#1A1626;
+      --text-primary:#ECE8F6; --text-secondary:#ADA6BF; --text-muted:#7E7894;
+      --border:rgba(255,255,255,0.08); --border-strong:rgba(255,255,255,0.14);
+      --brand:#6E3FF3; --brand-tint:rgba(139,124,255,0.16);
+      --ok:#42C97E; --ok-tint:rgba(66,201,126,0.16);
+      --fail:#FF6166; --fail-tint:rgba(255,97,102,0.16);
+      --info:#5BA0F0; --info-tint:rgba(91,160,240,0.16);
+      --crit:#FF5E7A; --crit-tint:rgba(255,94,122,0.16);
+      --high:#FF9147; --high-tint:rgba(255,145,71,0.16);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg-app:#0B0912; --bg-card:#181426; --bg-card-2:#13101F; --bg-muted:#1A1626;
+    --text-primary:#ECE8F6; --text-secondary:#ADA6BF; --text-muted:#7E7894;
+    --border:rgba(255,255,255,0.08); --border-strong:rgba(255,255,255,0.14);
+    --brand:#6E3FF3; --brand-tint:rgba(139,124,255,0.16);
+    --ok:#42C97E; --ok-tint:rgba(66,201,126,0.16);
+    --fail:#FF6166; --fail-tint:rgba(255,97,102,0.16);
+    --info:#5BA0F0; --info-tint:rgba(91,160,240,0.16);
+    --crit:#FF5E7A; --crit-tint:rgba(255,94,122,0.16);
+    --high:#FF9147; --high-tint:rgba(255,145,71,0.16);
+  }
+  :root[data-theme="light"] {
+    --bg-app:#F6F4F0; --bg-card:#FFFFFF; --bg-card-2:#FBFAF7; --bg-muted:#ECE8DF;
+    --text-primary:#14111C; --text-secondary:#4A4655; --text-muted:#7A7585;
+    --border:rgba(20,17,28,0.08); --border-strong:rgba(20,17,28,0.14);
+    --brand:#6E3FF3; --brand-tint:rgba(110,63,243,0.10);
+    --ok:#1F9D55; --ok-tint:rgba(31,157,85,0.12);
+    --fail:#E5484D; --fail-tint:rgba(229,72,77,0.12);
+    --info:#2A78D4; --info-tint:rgba(42,120,212,0.12);
+    --crit:#B0203A; --crit-tint:rgba(176,32,58,0.12);
+    --high:#E5731C; --high-tint:rgba(229,115,28,0.14);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg-app); color: var(--text-primary);
+    font: 14px/1.45 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    min-height: 100vh;
+  }
+  .mono { font-family: ui-monospace, "JetBrains Mono", SFMono-Regular, Menlo, Consolas, monospace; }
+  .num { font-variant-numeric: tabular-nums; }
+  button { font-family: inherit; border: none; background: none; color: inherit; cursor: pointer; }
+
+  /* ── app-chrome replica: where the tab lands ── */
+  .appbar {
+    display:flex; align-items:center; gap:18px; padding:10px 28px;
+    background:var(--bg-card); border-bottom:1px solid var(--border);
+  }
+  .appbar .logo { font-weight:800; font-size:14px; letter-spacing:0.02em; }
+  .appbar nav { display:flex; gap:4px; }
+  .appbar nav button {
+    padding:6px 14px; border-radius:8px; font-size:13px; font-weight:600; color:var(--text-muted);
+  }
+  .appbar nav button.active { background:var(--brand-tint); color:var(--brand); }
+
+  .page { max-width:1360px; margin:0 auto; padding:24px 28px 60px; display:flex; flex-direction:column; gap:16px; }
+
+  /* ── header ── */
+  .ovh { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+  .ovh-left { display:flex; align-items:center; gap:12px; }
+  .ptile {
+    width:34px; height:34px; border-radius:9px; background:var(--brand); color:#fff;
+    display:grid; place-items:center; font-weight:800; font-size:16px;
+  }
+  .ovh h1 { margin:0; font-size:21px; font-weight:700; }
+  .ovh .sub { font-size:12.5px; color:var(--text-muted); }
+  .ovh-right { display:flex; align-items:center; gap:10px; }
+  .win-label { font-size:11px; font-weight:700; letter-spacing:0.06em; color:var(--text-muted); text-transform:uppercase; }
+  .segs { display:flex; gap:3px; background:var(--bg-muted); padding:3px; border-radius:9px; }
+  .segs button { padding:5px 13px; font-size:12.5px; border-radius:7px; color:var(--text-muted); }
+  .segs button[aria-pressed="true"] {
+    background:var(--bg-card); color:var(--brand); font-weight:700;
+    box-shadow:0 1px 2px rgba(0,0,0,0.10);
+  }
+  .theme-chip {
+    display:flex; align-items:center; gap:8px; background:var(--bg-card); border:1px solid var(--border);
+    border-radius:10px; padding:8px 14px; font-size:13px; font-weight:600; color:var(--text-secondary);
+  }
+  .theme-chip .dot { width:8px; height:8px; border-radius:50%; background:var(--brand); }
+
+  /* ── stat cards ── */
+  .cards { display:grid; grid-template-columns:repeat(5,1fr); gap:14px; }
+  @media (max-width: 1100px) { .cards { grid-template-columns:repeat(3,1fr); } }
+  @media (max-width: 760px) { .cards { grid-template-columns:repeat(2,1fr); } }
+  .card {
+    background:var(--bg-card); border:1px solid var(--border); border-radius:14px;
+    padding:16px 18px; display:flex; flex-direction:column; gap:10px;
+  }
+  .card-head { display:flex; align-items:center; gap:10px; }
+  .chip { width:30px; height:30px; border-radius:8px; display:grid; place-items:center; }
+  .chip svg { width:16px; height:16px; }
+  .card-label { font-size:11.5px; font-weight:700; letter-spacing:0.05em; color:var(--text-muted); text-transform:uppercase; }
+  .bignum { font-size:34px; font-weight:800; line-height:1; letter-spacing:-0.02em; }
+  .card-value-row { display:flex; align-items:baseline; gap:10px; }
+  .delta { font-size:13px; font-weight:700; }
+  .delta.up { color:var(--ok); } .delta.down { color:var(--fail); }
+  .footnote { font-size:12px; color:var(--text-muted); }
+  .footnote b { color:var(--text-secondary); }
+  .footnote .proj { font-size:10.5px; }
+  .pill { font-size:11.5px; font-weight:700; padding:2px 8px; border-radius:6px; }
+  .pill.crit { color:var(--crit); background:var(--crit-tint); }
+  .pill.high { color:var(--high); background:var(--high-tint); }
+
+  /* ── bar chart ── */
+  .panel { background:var(--bg-card); border:1px solid var(--border); border-radius:14px; }
+  .barchart { padding:18px 20px; display:flex; flex-direction:column; gap:16px; }
+  .panel-head { display:flex; align-items:baseline; justify-content:space-between; }
+  .panel-head h2 { margin:0; font-size:14px; font-weight:700; }
+  .panel-head .hint { font-size:12px; color:var(--text-muted); }
+  .bar-row { display:grid; grid-template-columns:215px 1fr 54px; align-items:center; gap:14px; }
+  .bar-proj { display:flex; align-items:center; gap:8px; min-width:0; }
+  .sq { width:9px; height:9px; border-radius:3px; flex-shrink:0; }
+  .bar-proj span { font-size:12.5px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .track { height:22px; background:var(--bg-muted); border-radius:6px; overflow:hidden; }
+  .fill { height:100%; border-radius:6px; transition:width .3s ease; }
+  @media (prefers-reduced-motion: reduce) { .fill { transition:none; } }
+  .bar-count { font-size:13px; font-weight:700; text-align:right; }
+
+  /* ── CVE table ── */
+  .cve-title { padding:15px 20px; border-bottom:1px solid var(--border); display:flex; align-items:baseline; gap:10px; }
+  .cve-title h2 { margin:0; font-size:14px; font-weight:700; }
+  .cve-title .hint { font-size:12px; color:var(--text-muted); }
+  .cve-grid { display:grid; grid-template-columns:1fr 90px 90px 130px 130px; gap:12px; align-items:center; }
+  .cve-colhead {
+    padding:9px 20px; background:var(--bg-card-2); border-bottom:1px solid var(--border);
+    font-size:10.5px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; color:var(--text-muted);
+  }
+  .c-center { text-align:center; justify-self:center; } .c-right { text-align:right; justify-self:end; }
+  .prow { width:100%; text-align:left; padding:11px 20px; border-bottom:1px solid var(--border); }
+  .prow:focus-visible { outline:2px solid var(--brand); outline-offset:-2px; }
+  .prow[aria-expanded="true"] { background:var(--bg-card-2); }
+  .prow-name { display:flex; align-items:center; gap:8px; min-width:0; }
+  .caret { color:var(--text-muted); font-size:11px; transition:transform .15s; display:inline-block; }
+  .prow[aria-expanded="true"] .caret { transform:rotate(90deg); }
+  .prow-name .path { font-size:13.5px; font-weight:600; }
+  .prow-name .imgs { font-size:11px; color:var(--text-muted); }
+  .badge {
+    min-width:30px; text-align:center; font-size:13px; font-weight:700;
+    padding:2px 8px; border-radius:6px; justify-self:center;
+  }
+  .badge.crit { color:var(--crit); background:var(--crit-tint); }
+  .badge.high { color:var(--high); background:var(--high-tint); }
+  .badge.zero { color:var(--text-muted); background:var(--bg-muted); }
+  .age { font-weight:600; justify-self:end; }
+  .avgfix { color:var(--text-secondary); justify-self:end; }
+  .img-region { background:var(--bg-card-2); border-bottom:1px solid var(--border); }
+  .img-row { padding:9px 20px 9px 40px; border-top:1px solid var(--border); }
+  .img-row .iname { font-size:12px; color:var(--text-secondary); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .img-row .badge { font-size:12.5px; }
+  .img-row .avgfix { color:var(--text-muted); font-size:12.5px; }
+
+  .demo-note { text-align:center; font-size:11.5px; color:var(--text-muted); }
+</style>
+
+<div class="appbar">
+  <span class="logo">Percona <span style="color:var(--brand)">OBS</span></span>
+  <nav>
+    <button>Board</button>
+    <button>Artifacts</button>
+    <button class="active">Overview</button>
+  </nav>
+</div>
+
+<div class="page">
+
+  <!-- header -->
+  <div class="ovh">
+    <div class="ovh-left">
+      <div class="ptile">P</div>
+      <div>
+        <h1>Overview</h1>
+        <div class="sub">Rebuild activity &amp; CVE exposure across all Percona OBS projects</div>
+      </div>
+    </div>
+    <div class="ovh-right">
+      <span class="win-label">Window</span>
+      <div class="segs" id="segs">
+        <button data-w="24h" aria-pressed="true">24h</button>
+        <button data-w="48h" aria-pressed="false">48h</button>
+        <button data-w="7d" aria-pressed="false">7d</button>
+      </div>
+      <button class="theme-chip" id="themeChip"><span class="dot"></span><span id="themeLabel">Dark mode</span></button>
+    </div>
+  </div>
+
+  <!-- stat cards -->
+  <div class="cards">
+    <div class="card">
+      <div class="card-head">
+        <div class="chip" style="background:var(--brand-tint);color:var(--brand)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.3"/><polyline points="21 3 21 9 15 9"/></svg>
+        </div>
+        <span class="card-label">Total Rebuilds</span>
+      </div>
+      <div class="card-value-row">
+        <span class="bignum num" id="totalRebuilds">360</span>
+        <span class="delta down" id="deltaPill">▼ 10%</span>
+      </div>
+      <div class="footnote">across <b>7</b> projects · last <span id="winFoot">24h</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="chip" style="background:var(--info-tint);color:var(--info)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+        </div>
+        <span class="card-label">Most Rebuilt</span>
+      </div>
+      <div class="mono" style="font-size:16px;font-weight:700" id="topPkg">sfcgal</div>
+      <div class="footnote"><b id="topPkgCount">28</b> rebuilds · <span class="mono proj" id="topPkgProj">isv:percona:ppg:common</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="chip" style="background:var(--high-tint);color:var(--high)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5"/><path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6"/></svg>
+        </div>
+        <span class="card-label">Most Rebuilt Repo</span>
+      </div>
+      <div class="mono" style="font-size:16px;font-weight:700" id="topRepo">images</div>
+      <div class="footnote"><b id="topRepoCount">84</b> rebuilds · last <span id="winFootRepo">24h</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="chip" style="background:var(--crit-tint);color:var(--crit)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="15.5" r="0.5"/></svg>
+        </div>
+        <span class="card-label">Open CVEs</span>
+      </div>
+      <div class="card-value-row">
+        <span class="bignum num">180</span>
+        <span class="pill crit num">11 Crit</span>
+        <span class="pill high num">169 High</span>
+      </div>
+      <div class="footnote">across <b>17</b> container images</div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <div class="chip" style="background:var(--ok-tint);color:var(--ok)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5"/><path d="M9 2h6"/></svg>
+        </div>
+        <span class="card-label">Avg CVE Fix Time</span>
+      </div>
+      <div class="card-value-row">
+        <span class="bignum num">9</span>
+        <span style="font-size:14px;color:var(--text-muted)">days</span>
+      </div>
+      <div class="footnote">oldest open: <b style="color:var(--high)">52 days</b></div>
+    </div>
+  </div>
+
+  <!-- bar chart -->
+  <div class="panel barchart">
+    <div class="panel-head">
+      <h2>Rebuilds by project</h2>
+      <span class="hint">last <span id="winHint">24h</span></span>
+    </div>
+    <div id="bars" style="display:flex;flex-direction:column;gap:12px"></div>
+  </div>
+
+  <!-- CVE table -->
+  <div class="panel" style="overflow:hidden">
+    <div class="cve-title">
+      <h2>CVE exposure by project</h2>
+      <span class="hint">click a project to see per-image breakdown</span>
+    </div>
+    <div class="cve-grid cve-colhead">
+      <span>Project</span><span class="c-center">Critical</span><span class="c-center">High</span>
+      <span class="c-right">Oldest open</span><span class="c-right">Avg fix time</span>
+    </div>
+    <div id="cveRows"></div>
+  </div>
+
+  <div class="demo-note">mockup · illustrative data grounded in the live DB (sfcgal, release-container CVE counts) · window switching, row expansion, and theme are functional</div>
+</div>
+
+<script>
+  const ACCENTS = ['#6E3FF3','#2A78D4','#1F9D55','#E08A00','#B0203A'];
+
+  // Per-window rebuild datasets (illustrative; sorted desc at render time).
+  const WINDOWS = {
+    '24h': { total: 360, delta: -10, top: { name:'sfcgal', count:28, proj:'isv:percona:ppg:common' }, topRepo: { name:'images', count:84 },
+      bars: [ ['isv:percona:ppg:17',142], ['isv:percona:ppg:18',98], ['isv:percona:PR:pr-124',61],
+              ['isv:percona:ppg:16',46], ['isv:percona:ppg:common',24], ['isv:percona:ppg:16:extras',19], ['isv:percona:ppg:releases',3] ] },
+    '48h': { total: 693, delta: 8, top: { name:'percona-postgresql', count:64, proj:'isv:percona:ppg:18' }, topRepo: { name:'openSUSE_Tumbleweed', count:141 },
+      bars: [ ['isv:percona:ppg:18',231], ['isv:percona:ppg:17',198], ['isv:percona:PR:pr-124',114],
+              ['isv:percona:ppg:16',77], ['isv:percona:ppg:common',41], ['isv:percona:ppg:16:extras',29], ['isv:percona:ppg:releases',3] ] },
+    '7d':  { total: 2140, delta: 3, top: { name:'percona-postgresql', count:207, proj:'isv:percona:ppg:18' }, topRepo: { name:'images', count:486 },
+      bars: [ ['isv:percona:ppg:18',702], ['isv:percona:ppg:17',598], ['isv:percona:PR:pr-124',348],
+              ['isv:percona:ppg:16',252], ['isv:percona:ppg:common',131], ['isv:percona:ppg:16:extras',95], ['isv:percona:ppg:releases',14] ] },
+  };
+
+  // CVE exposure (window-independent, point-in-time). ages: null = "—".
+  const CVE = [
+    { proj:'isv:percona:ppg:17', images:[
+        ['percona-distribution-postgresql:17', 2, 6, 34, 9],
+        ['percona-distribution-postgresql-upgrade:17', 1, 3, 23, 11],
+        ['percona-pgbouncer:17', 0, 1, 5, 4] ] },
+    { proj:'isv:percona:ppg:18', images:[
+        ['percona-distribution-postgresql:18', 3, 8, 52, 16],
+        ['percona-pgbackrest:18', 1, 3, 12, 11] ] },
+    { proj:'isv:percona:ppg:16', images:[
+        ['percona-distribution-postgresql:16', 1, 5, 21, 9],
+        ['percona-pgbouncer:16', 0, 1, 8, 8] ] },
+    { proj:'isv:percona:ppg:16:extras', images:[
+        ['percona-postgis:16', 2, 6, 41, 13],
+        ['percona-pgvector:16', 1, 3, 23, 11],
+        ['percona-timescaledb:16', 0, 1, 5, 4] ] },
+    { proj:'isv:percona:ppg:common', images:[
+        ['percona-ubi9-base', 0, 2, 12, null],
+        ['percona-ubi8-base', 0, 1, 12, null] ] },
+    { proj:'isv:percona:PR:pr-124', images:[
+        ['percona-distribution-postgresql-with-postgis:16', 0, 0, 0, null],
+        ['percona-distribution-postgresql-with-postgis:17', 0, 0, 0, null] ] },
+    { proj:'isv:percona:ppg:releases', images:[
+        ['percona-distribution-postgresql-with-postgis:17', 0, 48, null, null],
+        ['percona-distribution-postgresql:17', 0, 43, null, null],
+        ['percona-pgbouncer:17', 0, 23, null, null],
+        ['percona-pgbackrest:17', 0, 15, null, null] ] },
+  ];
+
+  const accentOf = (proj) => {
+    const order = ['isv:percona:ppg:17','isv:percona:ppg:18','isv:percona:ppg:16','isv:percona:ppg:16:extras',
+                   'isv:percona:ppg:common','isv:percona:PR:pr-124','isv:percona:ppg:releases'];
+    return ACCENTS[Math.max(0, order.indexOf(proj)) % ACCENTS.length];
+  };
+
+  function ageColor(d) { if (d >= 45) return 'var(--crit)'; if (d >= 21) return 'var(--high)'; return 'var(--text-secondary)'; }
+  function ageLabel(d) { return (d === null || d === 0) ? '—' : d + 'd'; }
+  function badge(n, kind) {
+    const cls = n > 0 ? kind : 'zero';
+    return `<span class="badge num ${cls}">${n}</span>`;
+  }
+
+  // ── bars ──
+  function renderBars(key) {
+    const w = WINDOWS[key];
+    const max = Math.max(...w.bars.map(b => b[1]));
+    document.getElementById('bars').innerHTML = w.bars.map(([proj, count]) => `
+      <div class="bar-row">
+        <div class="bar-proj"><span class="sq" style="background:${accentOf(proj)}"></span><span class="mono">${proj}</span></div>
+        <div class="track" role="img" aria-label="${proj} — ${count} rebuilds">
+          <div class="fill" style="width:${Math.round(count / max * 100)}%;background:${accentOf(proj)}"></div>
+        </div>
+        <span class="bar-count mono num">${count}</span>
+      </div>`).join('');
+    document.getElementById('totalRebuilds').textContent = w.total;
+    const d = document.getElementById('deltaPill');
+    d.textContent = (w.delta >= 0 ? '▲ ' : '▼ ') + Math.abs(w.delta) + '%';
+    d.className = 'delta ' + (w.delta >= 0 ? 'up' : 'down');
+    document.getElementById('topPkg').textContent = w.top.name;
+    document.getElementById('topPkgCount').textContent = w.top.count;
+    document.getElementById('topPkgProj').textContent = w.top.proj;
+    document.getElementById('topRepo').textContent = w.topRepo.name;
+    document.getElementById('topRepoCount').textContent = w.topRepo.count;
+    document.getElementById('winFootRepo').textContent = key;
+    document.getElementById('winFoot').textContent = key;
+    document.getElementById('winHint').textContent = key;
+  }
+
+  // ── CVE table ──
+  const expanded = { 'isv:percona:ppg:16:extras': true };
+  function renderCve() {
+    document.getElementById('cveRows').innerHTML = CVE.map(p => {
+      const crit = p.images.reduce((s, i) => s + i[1], 0);
+      const high = p.images.reduce((s, i) => s + i[2], 0);
+      const ages = p.images.map(i => i[3]).filter(a => a !== null && a > 0);
+      const oldest = ages.length ? Math.max(...ages) : null;
+      const fixes = p.images.filter(i => i[4] !== null && (i[1] + i[2]) > 0).map(i => i[4]);
+      const avgFix = fixes.length ? Math.round(fixes.reduce((a, b) => a + b) / fixes.length) : null;
+      const isOpen = !!expanded[p.proj];
+      const rid = 'imgs-' + p.proj.replace(/[^a-z0-9]/gi, '-');
+      const imgRows = p.images.map(i => `
+        <div class="cve-grid img-row">
+          <span class="iname mono">${i[0]}</span>
+          ${badge(i[1], 'crit')} ${badge(i[2], 'high')}
+          <span class="age mono num" style="color:${i[3] ? ageColor(i[3]) : 'var(--text-muted)'}">${ageLabel(i[3])}</span>
+          <span class="avgfix mono num">${i[4] === null ? '—' : i[4] + 'd'}</span>
+        </div>`).join('');
+      return `
+        <button class="prow cve-grid" data-proj="${p.proj}" aria-expanded="${isOpen}" aria-controls="${rid}">
+          <span class="prow-name">
+            <span class="caret">▸</span>
+            <span class="sq" style="background:${accentOf(p.proj)}"></span>
+            <span class="path mono">${p.proj}</span>
+            <span class="imgs">${p.images.length} images</span>
+          </span>
+          ${badge(crit, 'crit')} ${badge(high, 'high')}
+          <span class="age mono num" style="color:${oldest ? ageColor(oldest) : 'var(--text-muted)'}">${ageLabel(oldest)}</span>
+          <span class="avgfix mono num">${avgFix === null ? '—' : avgFix + 'd'}</span>
+        </button>
+        <div class="img-region" id="${rid}" ${isOpen ? '' : 'hidden'}>${imgRows}</div>`;
+    }).join('');
+    document.querySelectorAll('.prow').forEach(btn => btn.addEventListener('click', () => {
+      expanded[btn.dataset.proj] = !expanded[btn.dataset.proj];
+      renderCve();
+    }));
+  }
+
+  // ── window selector ──
+  document.getElementById('segs').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    document.querySelectorAll('#segs button').forEach(x => x.setAttribute('aria-pressed', x === b));
+    renderBars(b.dataset.w);
+  });
+
+  // ── theme chip (same data-theme mechanism as the artifact viewer's toggle) ──
+  const chip = document.getElementById('themeChip');
+  chip.addEventListener('click', () => {
+    const root = document.documentElement;
+    const dark = root.getAttribute('data-theme') === 'dark' ||
+      (!root.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches);
+    root.setAttribute('data-theme', dark ? 'light' : 'dark');
+    document.getElementById('themeLabel').textContent = dark ? 'Dark mode' : 'Light mode';
+  });
+
+  renderBars('24h');
+  renderCve();
+</script>

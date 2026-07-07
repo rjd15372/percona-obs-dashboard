@@ -1067,7 +1067,7 @@ git commit -s -m "feat(frontend): useOverviewData composable"
 
 **Pixel authority (the implementer MUST read these):**
 - UI spec: `/home/rdias/Downloads/obs-dashboard-overview/overview-panel-spec.md` (§§6-13 — exact paddings, sizes, weights, a11y)
-- Approved mockup HTML/CSS/JS: `/tmp/claude-1000/-home-rdias-Work-percona-obs-dashboard/c91f66a5-5532-4e8f-9aaa-4949805cbf38/scratchpad/obs-overview-mockup.html` (translate its structure/classes to Vue + Tailwind arbitrary values)
+- Approved mockup HTML/CSS/JS: `docs/superpowers/specs/2026-07-07-overview-mockup.html (repo-relative)` (translate its structure/classes to Vue + Tailwind arbitrary values)
 - Reference images: `/home/rdias/Downloads/obs-dashboard-overview/spec-assets/*.png`
 
 **Token mapping (mockup → app):** `--bg-app→--bg-app`, `--bg-card→--bg-card`, `--bg-card-2→--bg-card-2`, `--bg-muted→--bg-muted`, `--text-*→--text-*`, `--border→--border`, `--brand→--brand-purple`, `--brand-tint→--brand-purple-tint`, `--ok/--fail/--info` (+tints) → same names, `--crit/--high` (+tints) → added in Task 4. Mono = the app's `font-mono` utility (`--font-mono`). Use Tailwind arbitrary values (`bg-[var(--crit-tint)]`) matching the app's existing component style.
