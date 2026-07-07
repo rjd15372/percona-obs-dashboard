@@ -42,15 +42,8 @@ function accentOf(project: string): string {
 
 <template>
   <div class="flex flex-col gap-4 max-w-[1360px] mx-auto w-full px-4 pb-10">
-    <!-- Header -->
-    <div class="flex items-center justify-between gap-4 flex-wrap">
-      <div class="flex items-center gap-3">
-        <div class="w-[34px] h-[34px] rounded-[9px] bg-[var(--brand-purple)] text-white grid place-items-center font-extrabold text-[16px]">P</div>
-        <div>
-          <h1 class="m-0 text-[21px] font-bold">Overview</h1>
-          <div class="text-[12.5px] text-text-muted">Rebuild activity &amp; CVE exposure across all Percona OBS projects</div>
-        </div>
-      </div>
+    <!-- Header: window selector only (title/subtitle removed — the app tab names the view) -->
+    <div class="flex items-center justify-end gap-4 flex-wrap">
       <div class="flex items-center gap-[10px]">
         <span class="text-[11px] font-bold uppercase tracking-[0.06em] text-text-muted">Window</span>
         <div class="flex gap-[3px] bg-bg-muted p-[3px] rounded-[9px]">
