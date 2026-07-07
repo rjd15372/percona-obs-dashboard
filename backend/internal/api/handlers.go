@@ -260,7 +260,9 @@ func reposHandlerWithPrefix(db *sql.DB, prefixFn func(*http.Request) string) htt
 }
 
 // subprojectRe validates the optional ?subproject= repos-endpoint param; the
-// value is appended to a SQL LIKE prefix, so only plain segment names pass.
+// value is appended to a SQL LIKE prefix. '_' is permitted (legitimate in
+// subproject names) even though it is a LIKE single-char wildcard — the
+// endpoint is a read-only repo listing, so an over-match is harmless.
 var subprojectRe = regexp.MustCompile(`^[a-z0-9_-]+$`)
 
 // reposHandler returns a handler for GET /api/products/{product}/{version}/repos.

@@ -75,7 +75,7 @@ Extras context fetches `/api/products/ppg/{version}/repos?subproject=extras`. Ba
 return ctx.subproject ? `${last}-${ctx.subproject}` : last   // "ppg-extras"
 ```
 
-`keyToContext` is find-by-computed-key and needs no change. Deep links (`?actx=ppg-extras&aver=18`) resolve; old `ppg` links keep resolving to PPG.
+`keyToContext` is find-by-computed-key and needs no change. Deep links (`?actx=ppg-extras&aversion=18`) resolve; old `ppg` links keep resolving to PPG.
 
 ### 6. Untouched
 
@@ -83,7 +83,7 @@ return ctx.subproject ? `${last}-${ctx.subproject}` : last   // "ppg-extras"
 
 ## Future subprojects (explicit requirement)
 
-Adding e.g. `<product>:<version>:tools` to the UI = one constant:
+Adding e.g. `<product>:<version>:tools` to the UI = one constant plus one entry in `App.vue`'s artifacts selector list:
 ```ts
 { label: 'PPG Tools', apiBase: '/api/products/ppg', prefix: 'isv:percona:ppg', subproject: 'tools' }
 ```

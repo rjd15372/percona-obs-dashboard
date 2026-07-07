@@ -4,20 +4,20 @@
     {
       "id": 25,
       "subject": "Task 1: Backend — ?subproject= on products repos endpoint",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** GET /api/products/ppg/{version}/repos?subproject=extras returns only extras repos; invalid param → 400.\n\n**Files:** backend/internal/api/handlers.go, backend/internal/api/handlers_test.go\n\n**Acceptance Criteria:** ?subproject=extras narrows prefix to :extras; absent param unchanged; invalid param → 400; existing repos tests pass.\n\n**Verify:** cd backend && go test ./internal/api/ -run TestRepos -v && go test ./...\n\n```json:metadata\n{\"files\": [\"backend/internal/api/handlers.go\", \"backend/internal/api/handlers_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/api/ -run TestRepos -v && go test ./...\", \"acceptanceCriteria\": [\"?subproject=extras narrows prefix to :extras (only extras repos)\", \"absent param unchanged\", \"invalid param -> 400\", \"existing repos tests pass\"], \"modelTier\": \"standard\"}\n```"
     },
     {
       "id": 26,
       "subject": "Task 2: Frontend — Context model + PPG Extras entry + URL key",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [25],
       "description": "**Goal:** Context carries subproject/allowedSubprojects; PPG Extras in selector; URL key ppg-extras.\n\n**Files:** frontend/src/types/api.ts, frontend/src/lib/contexts.ts, frontend/src/App.vue, frontend/src/composables/useUrlState.ts\n\n**Acceptance Criteria:** Context gains subproject/allowedSubprojects; PPG allowlist ['containers']; PPG_EXTRAS_CONTEXT subproject 'extras'; selector [PPG, PPG Extras, Releases, ...PRs]; contextToKey ppg-extras; npm run build passes.\n\n**Verify:** cd frontend && npm run build\n\n```json:metadata\n{\"files\": [\"frontend/src/types/api.ts\", \"frontend/src/lib/contexts.ts\", \"frontend/src/App.vue\", \"frontend/src/composables/useUrlState.ts\"], \"verifyCommand\": \"cd frontend && npm run build\", \"acceptanceCriteria\": [\"Context gains subproject/allowedSubprojects\", \"PPG allowlist ['containers']; PPG_EXTRAS_CONTEXT subproject 'extras'\", \"selector list [PPG, PPG Extras, Releases, ...PRs]\", \"contextToKey returns ppg-extras\", \"npm run build passes\"], \"modelTier\": \"mechanical\"}\n```"
     },
     {
       "id": 27,
       "subject": "Task 3: Frontend — subproject matching, pills, repos URL",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [26],
       "description": "**Goal:** useArtifacts/ArtifactsPanel honour subproject/allowedSubprojects: extras subtree only; PPG = main + containers; pills self-limit; repos query param.\n\n**Files:** frontend/src/composables/useArtifacts.ts, frontend/src/components/ArtifactsPanel.vue\n\n**Acceptance Criteria:** useArtifacts takes Context with matchesProject (subproject/allowlist/catch-all); containers same matching; version pills self-limit; fetchRepos appends ?subproject=; npm run build passes.\n\n**Verify:** cd frontend && npm run build && cd ../backend && go test ./...\n\n```json:metadata\n{\"files\": [\"frontend/src/composables/useArtifacts.ts\", \"frontend/src/components/ArtifactsPanel.vue\"], \"verifyCommand\": \"cd frontend && npm run build && cd ../backend && go test ./...\", \"acceptanceCriteria\": [\"useArtifacts takes Context; matchesProject implements subproject/allowlist/catch-all\", \"containers use same matching\", \"version pills self-limit for subproject contexts\", \"fetchRepos appends ?subproject=\", \"npm run build passes\"], \"modelTier\": \"standard\"}\n```"
     }
