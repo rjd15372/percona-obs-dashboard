@@ -5,7 +5,9 @@ import ContextBar from './components/ContextBar.vue'
 import HealthHeader from './components/HealthHeader.vue'
 import MainGrid from './components/MainGrid.vue'
 import ArtifactsPanel from './components/ArtifactsPanel.vue'
+import OverviewPanel from './components/OverviewPanel.vue'
 import type { Context } from './types/api'
+import type { WindowKey } from './types/overview'
 import { PPG_CONTEXT, PPG_EXTRAS_CONTEXT, RELEASES_CONTEXT } from './lib/contexts'
 import { usePackages } from './composables/usePackages'
 import { useEvents } from './composables/useEvents'
@@ -14,7 +16,7 @@ import { useRealtimeStream } from './composables/useRealtimeStream'
 import { useUrlState } from './composables/useUrlState'
 
 // Main tab
-const mainTab = ref<'board' | 'artifacts'>('board')
+const mainTab = ref<'board' | 'artifacts' | 'overview'>('board')
 
 // Theme
 // Default to the OS color scheme; a manual toggle is remembered in
@@ -135,6 +137,9 @@ const artifactsVersion = ref('')
 const artifactsTab = ref<'packages' | 'containers'>('packages')
 const artifactsContext = ref<Context>(PPG_CONTEXT)
 
+// Overview panel state (lifted for URL sync)
+const overviewWindow = ref<WindowKey>('24h')
+
 // Artifacts contexts: PPG + Releases + one context per PR (all subprojects)
 const artifactsContexts = computed<Context[]>(() => {
   const seen = new Set<string>()
@@ -176,6 +181,7 @@ useUrlState({
   artifactsTab,
   boardContexts: contexts,
   artifactsContexts,
+  overviewWindow,
 })
 
 const filteredPackages = computed(() => filterByTags(activeTags.value))
@@ -246,7 +252,7 @@ watch([windowMin, customFrom, customTo], () => refresh())
         />
       </template>
       <ArtifactsPanel
-        v-else
+        v-else-if="mainTab === 'artifacts'"
         :artifacts-contexts="artifactsContexts"
         :artifacts-version="artifactsVersion"
         :artifacts-context="artifactsContext"
@@ -254,6 +260,11 @@ watch([windowMin, customFrom, customTo], () => refresh())
         @update:artifacts-version="artifactsVersion = $event"
         @update:artifacts-context="artifactsContext = $event"
         @update:artifacts-tab="artifactsTab = $event"
+      />
+      <OverviewPanel
+        v-else-if="mainTab === 'overview'"
+        :overview-window="overviewWindow"
+        @update:overview-window="overviewWindow = $event"
       />
     </div>
   </div>

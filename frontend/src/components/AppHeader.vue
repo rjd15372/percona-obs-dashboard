@@ -1,11 +1,11 @@
 <script setup lang="ts">
 defineProps<{
   theme: 'light' | 'dark'
-  mainTab: 'board' | 'artifacts'
+  mainTab: 'board' | 'artifacts' | 'overview'
 }>()
 const emit = defineEmits<{
   'toggle-theme': []
-  'update:main-tab': [tab: 'board' | 'artifacts']
+  'update:main-tab': [tab: 'board' | 'artifacts' | 'overview']
 }>()
 </script>
 
@@ -31,6 +31,13 @@ const emit = defineEmits<{
         @click="emit('update:main-tab', 'artifacts')"
       >
         Artifacts
+      </button>
+      <button
+        class="tab-pill"
+        :class="{ active: mainTab === 'overview' }"
+        @click="emit('update:main-tab', 'overview')"
+      >
+        Overview
       </button>
     </div>
     <button
