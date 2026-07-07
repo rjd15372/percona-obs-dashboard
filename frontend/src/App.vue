@@ -6,7 +6,7 @@ import HealthHeader from './components/HealthHeader.vue'
 import MainGrid from './components/MainGrid.vue'
 import ArtifactsPanel from './components/ArtifactsPanel.vue'
 import type { Context } from './types/api'
-import { PPG_CONTEXT, RELEASES_CONTEXT } from './lib/contexts'
+import { PPG_CONTEXT, PPG_EXTRAS_CONTEXT, RELEASES_CONTEXT } from './lib/contexts'
 import { usePackages } from './composables/usePackages'
 import { useEvents } from './composables/useEvents'
 import { usePRPackages } from './composables/usePRPackages'
@@ -163,7 +163,7 @@ const artifactsContexts = computed<Context[]>(() => {
     return nb - na
   })
 
-  return [PPG_CONTEXT, RELEASES_CONTEXT, ...prContexts]
+  return [PPG_CONTEXT, PPG_EXTRAS_CONTEXT, RELEASES_CONTEXT, ...prContexts]
 })
 
 useUrlState({

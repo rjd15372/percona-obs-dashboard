@@ -5,6 +5,11 @@ export interface Context {
   label: string
   apiBase: string  // e.g. "/api/products/ppg" or "/api/pr/pr-92"
   prefix: string   // e.g. "isv:percona:ppg" or "isv:percona:PR:pr-92"
+  /** This context views only prefix:ver:<subproject> and beneath (e.g. "extras"). */
+  subproject?: string
+  /** Without subproject: which direct subprojects of prefix:ver belong to this
+   *  context (allowlist). Undefined = catch-all (PR/Releases contexts). */
+  allowedSubprojects?: string[]
 }
 
 export interface Trigger {

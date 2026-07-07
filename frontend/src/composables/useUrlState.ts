@@ -8,7 +8,8 @@ export function contextToKey(ctx: Context): string {
   if (prIdx >= 0) {
     return parts[prIdx + 1] // e.g. "pr-106"
   }
-  return parts[parts.length - 1] // "ppg" or "releases"
+  const last = parts[parts.length - 1] // "ppg" or "releases"
+  return ctx.subproject ? `${last}-${ctx.subproject}` : last // "ppg-extras"
 }
 
 export function keyToContext(key: string, contexts: Context[]): Context | undefined {
