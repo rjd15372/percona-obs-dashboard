@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Context } from '../types/api'
+import { contextToKey } from '../composables/useUrlState'
 
 defineProps<{
   version: string
@@ -26,16 +27,19 @@ const emit = defineEmits<{
       <code v-if="contexts.length <= 1" class="font-mono text-[12.5px] text-text-secondary bg-bg-muted px-[10px] py-[5px] rounded-[7px]">
         {{ selectedContext.prefix }}:{{ version }}
       </code>
+      <!-- Options are identified by contextToKey, not apiBase: contexts can
+           share an apiBase (PPG and PPG Extras both use /api/products/ppg),
+           and duplicate <option> values would make the first one win. -->
       <select
         v-else
         class="font-mono text-[12.5px] text-text-secondary bg-bg-muted px-[10px] py-[5px] rounded-[7px] border-none cursor-pointer [appearance:auto]"
-        :value="selectedContext.apiBase"
-        @change="emit('update:context', contexts.find(c => c.apiBase === ($event.target as HTMLSelectElement).value)!)"
+        :value="contextToKey(selectedContext)"
+        @change="emit('update:context', contexts.find(c => contextToKey(c) === ($event.target as HTMLSelectElement).value)!)"
       >
         <option
           v-for="ctx in contexts"
-          :key="ctx.apiBase"
-          :value="ctx.apiBase"
+          :key="contextToKey(ctx)"
+          :value="contextToKey(ctx)"
         >{{ ctx.label }}</option>
       </select>
 
