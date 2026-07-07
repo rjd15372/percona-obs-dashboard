@@ -108,7 +108,7 @@ export function useUrlState(state: UrlStateOptions): void {
     if (!hydrated.value) return
     const params = new URLSearchParams()
 
-    if (mainTab.value !== 'board') params.set('tab', mainTab.value)
+    if (mainTab.value !== 'overview') params.set('tab', mainTab.value) // overview is the default tab
 
     const boardKey = contextToKey(boardCtx.value)
     if (boardKey !== 'ppg') params.set('ctx', boardKey)

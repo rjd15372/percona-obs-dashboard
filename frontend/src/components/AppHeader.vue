@@ -20,6 +20,13 @@ const emit = defineEmits<{
     <div class="tab-switcher">
       <button
         class="tab-pill"
+        :class="{ active: mainTab === 'overview' }"
+        @click="emit('update:main-tab', 'overview')"
+      >
+        Overview
+      </button>
+      <button
+        class="tab-pill"
         :class="{ active: mainTab === 'board' }"
         @click="emit('update:main-tab', 'board')"
       >
@@ -31,13 +38,6 @@ const emit = defineEmits<{
         @click="emit('update:main-tab', 'artifacts')"
       >
         Artifacts
-      </button>
-      <button
-        class="tab-pill"
-        :class="{ active: mainTab === 'overview' }"
-        @click="emit('update:main-tab', 'overview')"
-      >
-        Overview
       </button>
     </div>
     <button

@@ -15,8 +15,8 @@ import { usePRPackages } from './composables/usePRPackages'
 import { useRealtimeStream } from './composables/useRealtimeStream'
 import { useUrlState } from './composables/useUrlState'
 
-// Main tab
-const mainTab = ref<'board' | 'artifacts' | 'overview'>('board')
+// Main tab (Overview is the default landing view)
+const mainTab = ref<'board' | 'artifacts' | 'overview'>('overview')
 
 // Theme
 // Default to the OS color scheme; a manual toggle is remembered in
