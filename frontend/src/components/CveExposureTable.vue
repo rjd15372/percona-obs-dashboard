@@ -52,6 +52,24 @@ function aggregate(project: string): Aggregate {
   return aggregates.value[project] ?? { critical: 0, high: 0, oldest: 0, avgFix: null }
 }
 
+// Names that appear more than once within a project row's images, so we can
+// disambiguate them with a muted project-remainder suffix in the template.
+const dupNamesByProject = computed<Record<string, Set<string>>>(() => {
+  const map: Record<string, Set<string>> = {}
+  for (const p of projectsWithImages.value) {
+    const counts = new Map<string, number>()
+    for (const img of p.images) counts.set(img.name, (counts.get(img.name) ?? 0) + 1)
+    map[p.project] = new Set([...counts.entries()].filter(([, n]) => n > 1).map(([name]) => name))
+  }
+  return map
+})
+
+function dupSuffix(rowProject: string, img: { project: string; name: string }): string | null {
+  if (!dupNamesByProject.value[rowProject]?.has(img.name)) return null
+  const prefix = rowProject + ':'
+  return img.project.startsWith(prefix) ? img.project.slice(prefix.length) : img.project
+}
+
 function badgeClass(n: number, kind: 'crit' | 'high'): string {
   if (n > 0) {
     return kind === 'crit' ? 'text-crit bg-crit-tint' : 'text-high bg-high-tint'
@@ -117,11 +135,14 @@ function badgeClass(n: number, kind: 'crit' | 'high'): string {
       >
         <div
           v-for="(img, idx) in p.images"
-          :key="img.name"
+          :key="img.project + '/' + img.name"
           class="pl-10 p-[9px_20px] grid grid-cols-[1fr_90px_90px_130px_130px] gap-3 items-center"
           :class="idx > 0 ? 'border-t border-border' : ''"
         >
-          <span class="font-mono text-[12px] text-text-secondary truncate">{{ img.name }}</span>
+          <span class="font-mono text-[12px] text-text-secondary truncate">
+            {{ img.name }}
+            <span v-if="dupSuffix(p.project, img)" class="text-text-muted text-[10.5px]"> · {{ dupSuffix(p.project, img) }}</span>
+          </span>
           <span
             class="min-w-[30px] text-center text-[12.5px] font-bold px-2 py-0.5 rounded-md justify-self-center font-mono"
             :class="badgeClass(img.critical, 'crit')"

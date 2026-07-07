@@ -13,15 +13,19 @@ export function useOverviewData(window: Ref<WindowKey>) {
   const error = ref<string | null>(null)
 
   async function fetchSnapshot() {
+    const requested = window.value
     try {
-      const res = await fetch(`/api/overview?window=${window.value}`)
+      const res = await fetch(`/api/overview?window=${requested}`)
       if (!res.ok) throw new Error(res.statusText)
-      snapshot.value = await res.json() as OverviewSnapshot
+      const snap = await res.json() as OverviewSnapshot
+      if (requested !== window.value) return // stale response for a previous window
+      snapshot.value = snap
       error.value = null
     } catch (e) {
+      if (requested !== window.value) return
       error.value = e instanceof Error ? e.message : 'failed to load overview'
     } finally {
-      loading.value = false
+      if (requested === window.value) loading.value = false
     }
   }
 

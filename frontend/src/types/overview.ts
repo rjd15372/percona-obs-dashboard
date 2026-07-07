@@ -3,6 +3,7 @@ export type WindowKey = '24h' | '48h' | '7d'
 export interface OverviewCount { name: string; count: number }
 
 export interface OverviewImage {
+  project: string
   name: string
   critical: number
   high: number

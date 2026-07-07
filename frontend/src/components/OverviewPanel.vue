@@ -29,15 +29,10 @@ const {
 
 const WINDOWS: WindowKey[] = ['24h', '48h', '7d']
 
-// Accent by the project's index within the current snapshot's ordering
-// (first appearance across `projects`), cycling through PROJECT_ACCENTS.
-const accentOrder = computed(() => {
-  const order: string[] = []
-  for (const p of projects.value) {
-    if (!order.includes(p.project)) order.push(p.project)
-  }
-  return order
-})
+// Accent by the project's NAME-sorted position (not snapshot ordering, which
+// is rebuild-sorted and would shuffle colors between windows/refetches), so
+// a given project keeps its color across windows within the same project set.
+const accentOrder = computed(() => [...projects.value].map(p => p.project).sort())
 
 function accentOf(project: string): string {
   const idx = accentOrder.value.indexOf(project)
