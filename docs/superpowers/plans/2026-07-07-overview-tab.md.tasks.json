@@ -1,0 +1,54 @@
+{
+  "planPath": "docs/superpowers/plans/2026-07-07-overview-tab.md",
+  "tasks": [
+    {
+      "id": 28,
+      "subject": "Task 1: Branch + logical-project grouping",
+      "status": "pending",
+      "description": "**Goal:** feature/overview-tab branch off origin/main + logicalProject grouping fn.\n\n**Files:** backend/internal/api/overview.go (new), backend/internal/api/overview_test.go (new)\n\n**Acceptance Criteria:** branch created, baseline green; logicalProject implements the spec grouping table.\n\n**Verify:** cd backend && go test ./internal/api/ -run TestLogicalProject -v\n\n```json:metadata\n{\"files\": [\"backend/internal/api/overview.go\", \"backend/internal/api/overview_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/api/ -run TestLogicalProject -v\", \"acceptanceCriteria\": [\"branch feature/overview-tab created from origin/main, baseline green\", \"logicalProject implements the spec grouping table incl. extras/PR/common/releases and exclusion cases\"], \"modelTier\": \"mechanical\"}\n```"
+    },
+    {
+      "id": 29,
+      "subject": "Task 2: Store queries for overview",
+      "status": "pending",
+      "blockedBy": [28],
+      "description": "**Goal:** QueryBuildingEntries / QueryAllCveScans / QueryAllCvePeriods.\n\n**Files:** backend/internal/store/overview.go (new), backend/internal/store/overview_test.go (new)\n\n**Acceptance Criteria:** window boundaries [since,until) + state filter; cve_since nullability; closed episodes.\n\n**Verify:** cd backend && go test ./internal/store/ -run TestOverview -v && go test ./...\n\n```json:metadata\n{\"files\": [\"backend/internal/store/overview.go\", \"backend/internal/store/overview_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/store/ -run TestOverview -v && go test ./...\", \"acceptanceCriteria\": [\"QueryBuildingEntries respects [since,until) and state filter\", \"QueryAllCveScans preserves cve_since nullability\", \"QueryAllCvePeriods returns closed episodes\"], \"modelTier\": \"standard\"}\n```"
+    },
+    {
+      "id": 30,
+      "subject": "Task 3: Overview snapshot endpoint with cache",
+      "status": "pending",
+      "blockedBy": [29],
+      "description": "**Goal:** GET /api/overview?window= serves a cached OverviewSnapshot.\n\n**Files:** backend/internal/api/overview.go, backend/internal/api/overview_test.go, backend/internal/api/server.go\n\n**Acceptance Criteria:** builder matches all aggregation rules; 400 on invalid window; 60s TTL+singleflight cache; route registered.\n\n**Verify:** cd backend && go test ./internal/api/ -run TestOverview -v && go test ./...\n\n```json:metadata\n{\"files\": [\"backend/internal/api/overview.go\", \"backend/internal/api/overview_test.go\", \"backend/internal/api/server.go\"], \"verifyCommand\": \"cd backend && go test ./internal/api/ -run TestOverview -v && go test ./...\", \"acceptanceCriteria\": [\"snapshot builder matches all aggregation rules incl. max-across-archs, oldest-open, avg-fix, inclusion + sorting\", \"window validation 400\", \"60s TTL+singleflight cache proven by DB-mutation test\", \"route registered\"], \"modelTier\": \"standard\"}\n```"
+    },
+    {
+      "id": 31,
+      "subject": "Task 4: Frontend tokens + overview types",
+      "status": "pending",
+      "blockedBy": [30],
+      "description": "**Goal:** --crit/--high tokens in both themes; snake_case types/overview.ts.\n\n**Files:** frontend/src/assets/theme.css, frontend/tailwind.config.ts, frontend/src/types/overview.ts (new)\n\n**Acceptance Criteria:** UI-spec token values in both blocks; types compile; npm run build passes.\n\n**Verify:** cd frontend && npm run build\n\n```json:metadata\n{\"files\": [\"frontend/src/assets/theme.css\", \"frontend/src/types/overview.ts\", \"frontend/tailwind.config.ts\"], \"verifyCommand\": \"cd frontend && npm run build\", \"acceptanceCriteria\": [\"crit/high + tints in both theme blocks with UI-spec values\", \"snake_case overview types compile\", \"npm run build passes\"], \"modelTier\": \"mechanical\"}\n```"
+    },
+    {
+      "id": 32,
+      "subject": "Task 5: useOverviewData composable",
+      "status": "pending",
+      "blockedBy": [31],
+      "description": "**Goal:** Fetch + realtime-refetch + derived aggregates.\n\n**Files:** frontend/src/composables/useOverviewData.ts (new)\n\n**Acceptance Criteria:** fetch on mount/window change; own EventSource on /api/stream, 2s debounce, closed on unmount; all UI-spec §11 aggregates; build passes.\n\n**Verify:** cd frontend && npm run build\n\n```json:metadata\n{\"files\": [\"frontend/src/composables/useOverviewData.ts\"], \"verifyCommand\": \"cd frontend && npm run build\", \"acceptanceCriteria\": [\"fetch on mount/window change with loading/error\", \"own EventSource on /api/stream with 2s debounce refetch, closed on unmount\", \"all derived aggregates per UI spec §11\", \"npm run build passes\"], \"modelTier\": \"standard\"}\n```"
+    },
+    {
+      "id": 33,
+      "subject": "Task 6: Overview components",
+      "status": "pending",
+      "blockedBy": [32],
+      "description": "**Goal:** StatCard, RebuildBarChart, CveExposureTable, OverviewPanel per the pixel authorities (UI spec §§6-13, approved mockup, reference PNGs) with app tokens.\n\n**Files:** frontend/src/components/{StatCard,RebuildBarChart,CveExposureTable,OverviewPanel}.vue (new)\n\n**Acceptance Criteria:** contracts + behavioural rules from plan Task 6 (accents, ageColor, badge muting, bar grid, expansion, a11y, skeletons, no theme toggle, brand-purple mapping); build passes.\n\n**Verify:** cd frontend && npm run build\n\n```json:metadata\n{\"files\": [\"frontend/src/components/StatCard.vue\", \"frontend/src/components/RebuildBarChart.vue\", \"frontend/src/components/CveExposureTable.vue\", \"frontend/src/components/OverviewPanel.vue\"], \"verifyCommand\": \"cd frontend && npm run build\", \"acceptanceCriteria\": [\"four components per contracts composing header/cards/chart/table\", \"age colors, badge muting, bar normalization, expansion, a11y per UI spec\", \"tokens only (accents are data)\", \"npm run build passes\"], \"modelTier\": \"standard\"}\n```"
+    },
+    {
+      "id": 34,
+      "subject": "Task 7: Overview tab integration",
+      "status": "pending",
+      "blockedBy": [33],
+      "description": "**Goal:** Overview as third main tab with ?tab=overview&owin= URL state.\n\n**Files:** frontend/src/App.vue, frontend/src/components/AppHeader.vue, frontend/src/composables/useUrlState.ts\n\n**Acceptance Criteria:** mainTab union extended everywhere; Overview pill; OverviewPanel wired with window v-model; owin hydrate/persist; build + backend suite green.\n\n**Verify:** cd frontend && npm run build && cd ../backend && go test ./...\n\n```json:metadata\n{\"files\": [\"frontend/src/App.vue\", \"frontend/src/components/AppHeader.vue\", \"frontend/src/composables/useUrlState.ts\"], \"verifyCommand\": \"cd frontend && npm run build && cd ../backend && go test ./...\", \"acceptanceCriteria\": [\"mainTab union extended in all three files\", \"Overview pill added\", \"OverviewPanel wired with window v-model\", \"owin URL param hydrates+persists\", \"build + backend suite green\"], \"modelTier\": \"standard\"}\n```"
+    }
+  ],
+  "lastUpdated": "2026-07-07T19:00:00Z"
+}
