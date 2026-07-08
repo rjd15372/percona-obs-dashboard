@@ -827,10 +827,10 @@ func TestPoolParksAllBuildingPackage(t *testing.T) {
 	}
 }
 
-// A succeeded-unpublished target in a publishing repo (zero-value flags →
-// publishes) must keep the package polling — publish detection has no
-// MQ-with-poller-fallback path.
-func TestPoolDoesNotParkWithUnpublishedPublishingTarget(t *testing.T) {
+// A package with building-with-reason and succeeded-unpublished targets
+// should be parked: both state transitions (build result and repo.published)
+// are announced by MQ with poller fallback.
+func TestPoolParksMixedBuildingAndSucceeded(t *testing.T) {
 	db := openDB(t)
 	h := hubpkg.New()
 	ws := workingset.New(10)
@@ -847,7 +847,7 @@ func TestPoolDoesNotParkWithUnpublishedPublishingTarget(t *testing.T) {
 		IsContainer: &isContainer,
 		Targets: []model.Target{
 			{Repo: "repo", Arch: "x86_64", State: "building", BuildReason: "meta change"},
-			{Repo: "repo", Arch: "aarch64", State: "succeeded"}, // unpublished, publishing repo
+			{Repo: "repo", Arch: "aarch64", State: "succeeded"}, // unpublished, will be woken by repo.published or poller
 		},
 		UpdatedAt: time.Now().UTC(),
 	}
@@ -856,12 +856,13 @@ func TestPoolDoesNotParkWithUnpublishedPublishingTarget(t *testing.T) {
 	cancel()
 	time.Sleep(10 * time.Millisecond)
 
-	ws.Add(pkg) // still present → Add is a no-op → no dispatch
+	// Parked → removed → Add re-dispatches.
+	ws.Add(pkg)
 	select {
 	case <-ws.Dispatch():
-		t.Fatal("package with unpublished publishing target was wrongly parked")
+		// correct — package was parked (removed)
 	case <-time.After(100 * time.Millisecond):
-		// correct — retained
+		t.Fatal("package should have been parked and removed from working set")
 	}
 }
 
