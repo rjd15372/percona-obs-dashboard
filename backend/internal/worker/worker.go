@@ -98,10 +98,18 @@ func (p *Pool) ProcessOnce(ctx context.Context, pkg *model.Package) {
 		}
 	}
 
+	// flagsKnown gates parking below: on a fetch error the zero-value flags
+	// treat every repo as publishing, which blocks Settled — and parking
+	// instead would strand an all-succeeded package in a never-publishing
+	// repo with no wake source. Keep polling until the flags resolve
+	// (success is cached per project). A nil client (tests, no OBS) has no
+	// flags to fetch; the zero value decides as before.
 	var flags obs.PublishFlags
+	flagsKnown := p.client == nil
 	if p.client != nil {
 		if f, err := p.client.ProjectPublishFlags(ctx, pkg.Project); err == nil {
-			flags = f // on error: zero value → everything publishes → keep polling
+			flags = f
+			flagsKnown = true
 		}
 	}
 	pkg.Settled = obs.Settled(pkg, flags) && pkg.IsContainer != nil
@@ -139,9 +147,10 @@ func (p *Pool) ProcessOnce(ctx context.Context, pkg *model.Package) {
 	// Remove from the working set when there is nothing left to poll for:
 	// settled (terminal) or parked (waiting only on completions that MQ
 	// announces — build results or repo publication — with the poller as
-	// fallback). Parking is in-memory only — settled stays 0, so a restart
-	// re-seeds the package and re-parks it.
-	if pkg.Settled || (pkg.IsContainer != nil && obs.Parkable(pkg)) {
+	// fallback). Parking requires known publish flags (see flagsKnown above);
+	// it is in-memory only — settled stays 0, so a restart re-seeds the
+	// package and re-parks it.
+	if pkg.Settled || (flagsKnown && pkg.IsContainer != nil && obs.Parkable(pkg)) {
 		p.ws.Remove(pkg.Project + "/" + pkg.Name)
 	}
 }

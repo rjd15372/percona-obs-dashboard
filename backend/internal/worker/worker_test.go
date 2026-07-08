@@ -866,6 +866,50 @@ func TestPoolParksMixedBuildingAndSucceeded(t *testing.T) {
 	}
 }
 
+// A publish-flags fetch error must not park: an all-succeeded package whose
+// repo may never publish would have no wake source. It keeps polling until
+// the flags resolve, so Settled (non-publishing repo) or parking (publishing
+// repo, repo.published wake) can claim it on a later pass.
+func TestPoolDoesNotParkWhenPublishFlagsUnknown(t *testing.T) {
+	db := openDB(t)
+	h := hubpkg.New()
+	ws := workingset.New(10)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "OBS unavailable", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	p := worker.NewPool(1, nil, nil, obs.NewClient(srv.URL, "u", "p"), db, h, ws, nil)
+	p.Start(ctx)
+
+	isContainer := false
+	pkg := &model.Package{
+		Project: "isv:percona:ppg:17", Name: "pkg-flags-unknown",
+		RollupState: model.RollupSucceeded, OKTargets: 1, TotalTargets: 1,
+		IsContainer: &isContainer,
+		Targets: []model.Target{
+			{Repo: "repo", Arch: "x86_64", State: "succeeded"}, // unpublished, publish flags unknowable
+		},
+		UpdatedAt: time.Now().UTC(),
+	}
+	ws.Signal(pkg)
+	time.Sleep(200 * time.Millisecond)
+	cancel()
+	time.Sleep(10 * time.Millisecond)
+
+	// Not parked → still in the working set → Add is a dedup no-op.
+	ws.Add(pkg)
+	select {
+	case <-ws.Dispatch():
+		t.Fatal("package with unknown publish flags must not be parked")
+	case <-time.After(100 * time.Millisecond):
+		// correct — package kept polling
+	}
+}
+
 // A building target whose BuildReason has not been fetched yet keeps polling.
 func TestPoolDoesNotParkWithoutBuildReason(t *testing.T) {
 	db := openDB(t)
