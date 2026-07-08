@@ -14,6 +14,22 @@ export function ageLabel(days: number): string {
   return days === 0 ? '—' : `${days}d`
 }
 
+// "Oldest open" cell rendering. The backend floors the age to whole days, so a
+// CVE opened under 24h ago arrives as 0 — but that is NOT the same as "nothing
+// open". Because UpsertCveScan always stamps cve_since when a scan records
+// vulns, `days === 0` while there ARE open CVEs unambiguously means "less than
+// a day tracked", shown as "<1d". Only genuinely-clean rows (no open CVEs) show "—".
+export function oldestOpenLabel(days: number, hasOpen: boolean): string {
+  if (!hasOpen) return '—'
+  return days < 1 ? '<1d' : `${days}d`
+}
+
+// Muted when nothing is open; otherwise the age-escalation color (a "<1d" age
+// falls in the neutral secondary band via ageColor(0)).
+export function oldestOpenColor(days: number, hasOpen: boolean): string {
+  return hasOpen ? ageColor(days) : 'var(--text-muted)'
+}
+
 // Category grouping for the overview tables: logical projects are grouped
 // into Devel / Releases / PRs sections, in that order.
 export type ProjectCategory = 'Devel' | 'Releases' | 'PRs'

@@ -161,6 +161,9 @@ function accentOf(project: string): string {
             <template v-if="oldestOpenDays > 0">
               oldest open: <b class="text-high">{{ oldestOpenDays }} days</b>
             </template>
+            <template v-else-if="totalCritical + totalHigh > 0">
+              oldest open: <b class="text-high">&lt;1 day</b>
+            </template>
             <template v-else>no open CVEs</template>
           </template>
         </StatCard>

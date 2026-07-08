@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive } from 'vue'
 import type { OverviewProject } from '../types/overview'
-import { ageColor, ageLabel, groupByCategory } from '../lib/overview'
+import { oldestOpenLabel, oldestOpenColor, groupByCategory } from '../lib/overview'
 
 const props = defineProps<{
   projects: OverviewProject[]
@@ -132,8 +132,8 @@ function badgeClass(n: number, kind: 'crit' | 'high'): string {
         >{{ aggregate(p.project).high }}</span>
         <span
           class="font-mono font-semibold justify-self-end"
-          :style="{ color: aggregate(p.project).oldest ? ageColor(aggregate(p.project).oldest) : 'var(--text-muted)' }"
-        >{{ ageLabel(aggregate(p.project).oldest) }}</span>
+          :style="{ color: oldestOpenColor(aggregate(p.project).oldest, aggregate(p.project).critical + aggregate(p.project).high > 0) }"
+        >{{ oldestOpenLabel(aggregate(p.project).oldest, aggregate(p.project).critical + aggregate(p.project).high > 0) }}</span>
         <span class="font-mono text-text-secondary justify-self-end">
           {{ aggregate(p.project).avgFix === null ? '—' : `${aggregate(p.project).avgFix}d` }}
         </span>
@@ -164,8 +164,8 @@ function badgeClass(n: number, kind: 'crit' | 'high'): string {
           >{{ img.high }}</span>
           <span
             class="font-mono text-[12.5px] font-semibold justify-self-end"
-            :style="{ color: img.oldest_open_days ? ageColor(img.oldest_open_days) : 'var(--text-muted)' }"
-          >{{ ageLabel(img.oldest_open_days) }}</span>
+            :style="{ color: oldestOpenColor(img.oldest_open_days, img.critical + img.high > 0) }"
+          >{{ oldestOpenLabel(img.oldest_open_days, img.critical + img.high > 0) }}</span>
           <span class="font-mono text-[12.5px] text-text-muted justify-self-end">
             {{ img.avg_fix_days === 0 ? '—' : `${img.avg_fix_days}d` }}
           </span>
