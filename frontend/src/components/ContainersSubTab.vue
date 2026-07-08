@@ -2,6 +2,8 @@
 import { computed, ref, watch } from 'vue'
 import type { ContainerImage } from '../composables/useArtifacts'
 import type { CveScan } from '../types/api'
+import CveFindingsTable from './CveFindingsTable.vue'
+import { formatArtifactTime, cveDuration, latestScanTime } from '../lib/cve'
 
 const props = defineProps<{
   containerImages: ContainerImage[]
@@ -39,16 +41,6 @@ function rebuildBadge(img: ContainerImage): { label: string; cls: string } | nul
   }
 }
 
-function formatArtifactTime(value?: string): string {
-  if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(date)
-}
-
 function cveTotals(scans: CveScan[]): { critical: number; high: number } {
   return scans.reduce(
     (acc, s) => ({ critical: acc.critical + s.critical_count, high: acc.high + s.high_count }),
@@ -64,22 +56,6 @@ function cveBadgeInfo(scans: CveScan[]): { text: string | null; cls: string } {
   if (critical > 0) parts.push(`${critical} CRITICAL`)
   if (high > 0) parts.push(`${high} HIGH`)
   return { text: parts.join(' · '), cls: 'cve-vuln' }
-}
-
-function latestScanTime(scans: CveScan[]): string {
-  if (scans.length === 0) return ''
-  const latest = scans.reduce((a, b) => (a.scanned_at > b.scanned_at ? a : b))
-  return formatArtifactTime(latest.scanned_at)
-}
-
-function cveDuration(since: string): string {
-  const diffMs = Date.now() - new Date(since).getTime()
-  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-  if (days < 1) return '< 1d'
-  if (days < 7) return `${days}d`
-  const weeks = Math.floor(days / 7)
-  const remainder = days % 7
-  return remainder === 0 ? `${weeks}w` : `${weeks}w ${remainder}d`
 }
 
 function worstCveDuration(scans: CveScan[]): string | null {
@@ -223,54 +199,8 @@ function toggleCvePanel(imageId: string) {
                   :class="{ 'rotate-90': openCvePanels.has(image.id) }"
                 >›</span>
               </div>
-              <div v-if="openCvePanels.has(image.id)" class="px-[18px] pb-3 flex flex-col gap-3">
-                <div v-for="scan in image.cveScans" :key="scan.arch" class="cve-arch-block">
-                  <div class="text-[11px] font-bold text-text-muted uppercase [letter-spacing:0.06em] mb-[6px]">{{ scan.arch }}</div>
-                  <div v-if="scan.cve_since" class="text-[11px] text-warn mb-[6px]">
-                    CVEs present for {{ cveDuration(scan.cve_since) }}
-                  </div>
-                  <div v-if="(scan.findings ?? []).length === 0" class="text-[12px] text-ok py-1">No fixable CVEs found</div>
-                  <div v-else class="overflow-x-auto">
-                    <table class="cve-table hidden sm:table w-full border-collapse text-[11px]">
-                      <thead>
-                        <tr>
-                          <th>Severity</th>
-                          <th>CVE ID</th>
-                          <th>Package</th>
-                          <th>Installed → Fixed</th>
-                          <th>Title</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr v-for="f in (scan.findings ?? [])" :key="f.id">
-                          <td :class="{ 'sev-critical': f.severity === 'CRITICAL', 'sev-high': f.severity === 'HIGH' }">{{ f.severity }}</td>
-                          <td class="mono">{{ f.id }}</td>
-                          <td class="mono">{{ f.pkg }}</td>
-                          <td class="mono">{{ f.installed }} → {{ f.fixed }}</td>
-                          <td>{{ f.title }}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                    <div class="sm:hidden flex flex-col gap-2">
-                      <div
-                        v-for="f in (scan.findings ?? [])"
-                        :key="f.id"
-                        class="border border-border rounded-lg p-2.5 flex flex-col gap-1"
-                      >
-                        <div class="flex items-center justify-between gap-2">
-                          <span class="font-mono text-[11px] font-bold text-text-primary">{{ f.id }}</span>
-                          <span
-                            class="text-[10px] font-bold uppercase whitespace-nowrap"
-                            :class="{ 'sev-critical': f.severity === 'CRITICAL', 'sev-high': f.severity === 'HIGH' }"
-                          >{{ f.severity }}</span>
-                        </div>
-                        <div class="font-mono text-[11px] text-text-secondary">{{ f.pkg }}</div>
-                        <div class="font-mono text-[11px] text-text-muted">{{ f.installed }} → {{ f.fixed }}</div>
-                        <div class="text-[11px] text-text-secondary">{{ f.title }}</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              <div v-if="openCvePanels.has(image.id)" class="px-[18px] pb-3">
+                <CveFindingsTable :scans="image.cveScans" />
               </div>
             </div>
           </div>
@@ -358,34 +288,4 @@ function toggleCvePanel(imageId: string) {
   color: var(--warn, #e08a00);
 }
 
-/* CVE table cell styles */
-.cve-table th {
-  text-align: left;
-  font-weight: 600;
-  color: var(--text-muted);
-  padding: 4px 6px 4px 0;
-  border-bottom: 1px solid var(--border);
-  white-space: nowrap;
-}
-
-.cve-table td {
-  padding: 4px 6px 4px 0;
-  vertical-align: top;
-  border-bottom: 1px solid var(--border);
-  color: var(--text-secondary);
-}
-
-.sev-critical {
-  color: var(--fail, #dc2626);
-  font-weight: 700;
-}
-
-.sev-high {
-  color: var(--warn, #d97706);
-  font-weight: 700;
-}
-
-.mono {
-  font-family: var(--font-mono);
-}
 </style>
