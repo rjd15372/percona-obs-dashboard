@@ -2,6 +2,7 @@
 import { computed, reactive } from 'vue'
 import type { ArtifactBinary, PackageRow, RepoInfo } from '../composables/useArtifacts'
 import { distroGroup } from '../composables/useArtifacts'
+import { formatArtifactTime } from '../lib/cve'
 
 const props = defineProps<{
   packageRows: PackageRow[]
@@ -116,16 +117,6 @@ async function toggleRow(row: PackageRow) {
 function downloadUrl(row: PackageRow, filename: string): string {
   const obsProjectUrl = row.project.split(':').join(':/')
   return `https://download.opensuse.org/repositories/${obsProjectUrl}/${row.repo.obs}/${row.arch}/${filename}`
-}
-
-function formatArtifactTime(value?: string): string {
-  if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(date)
 }
 
 // ----- labels -----

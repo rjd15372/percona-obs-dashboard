@@ -115,6 +115,7 @@ function toggleReport(img: { project: string; name: string }) {
   if (!reportOpen[key]) return
   const entry = reportCache.get(key)
   if (entry && Date.now() - entry.fetchedAt < FINDINGS_TTL_MS) return
+  if (reportLoading[key]) return // a fetch is already in flight for this key
   reportCache.delete(key) // stale entry must shimmer, not flash old data
   void fetchReport(img)
 }
