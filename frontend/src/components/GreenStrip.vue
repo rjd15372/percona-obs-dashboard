@@ -16,6 +16,14 @@ const groups = computed(() => {
     .map(([project, pkgs]) => ({ project, pkgs }))
 })
 
+// A succeeded package that is not settled still has at least one target
+// awaiting publication in a publishing repo — its pill turns yellow until
+// the publisher catches up. settled covers the never-publishing-repo case,
+// so those packages stay green (nothing will ever flip them to published).
+function fullyPublished(pkg: Package): boolean {
+  return pkg.rollup_state === 'published' || pkg.settled === true
+}
+
 function projectUrl(project: string): string {
   return `https://build.opensuse.org/project/show/${project}`
 }
@@ -54,9 +62,14 @@ function packageUrl(project: string, name: string): string {
           :href="packageUrl(group.project, pkg.name)"
           target="_blank"
           rel="noopener"
-          class="pkg-pill inline-flex items-center gap-[6px] py-[4px] px-[10px] rounded-[7px] bg-ok-tint no-underline"
+          class="pkg-pill inline-flex items-center gap-[6px] py-[4px] px-[10px] rounded-[7px] no-underline"
+          :class="fullyPublished(pkg) ? 'bg-ok-tint' : 'bg-warn-tint'"
+          :title="fullyPublished(pkg) ? undefined : 'built — publication pending'"
         >
-          <span class="w-[6px] h-[6px] rounded-full bg-ok flex-shrink-0"></span>
+          <span
+            class="w-[6px] h-[6px] rounded-full flex-shrink-0"
+            :class="fullyPublished(pkg) ? 'bg-ok' : 'bg-warn'"
+          ></span>
           <code class="font-mono text-[11px] text-text-secondary">{{ pkg.name }}</code>
         </a>
       </div>

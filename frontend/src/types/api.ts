@@ -59,6 +59,7 @@ export interface Package {
   ok_targets: number
   total_targets: number
   is_container?: boolean
+  settled?: boolean // nothing awaits publication: all targets published or in never-publishing repos
   version?: string
   trigger?: Trigger // optional
   targets: Target[]
