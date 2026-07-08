@@ -117,3 +117,37 @@ func TestEvictPublishFlagsRefetches(t *testing.T) {
 		t.Fatalf("expected refetch after evict, calls=%d", calls)
 	}
 }
+
+func TestAwaitingPublishReady(t *testing.T) {
+	stored := func(targets ...model.Target) *model.Package {
+		return &model.Package{Targets: targets}
+	}
+	succ := func(repo, arch string, published bool) model.Target {
+		return model.Target{Repo: repo, Arch: arch, State: "succeeded", Published: published}
+	}
+	repoStates := map[string]string{
+		"images/x86_64":  "published",
+		"images/aarch64": "building",
+	}
+
+	cases := []struct {
+		name string
+		pkg  *model.Package
+		want bool
+	}{
+		{"unpublished target, repo now published", stored(succ("images", "x86_64", false)), true},
+		{"unpublished target, repo still building", stored(succ("images", "aarch64", false)), false},
+		{"already published", stored(succ("images", "x86_64", true)), false},
+		{"building target ignored", stored(model.Target{Repo: "images", Arch: "x86_64", State: "building"}), false},
+		{"repo/arch missing from map", stored(succ("other", "x86_64", false)), false},
+		{"one ready among several", stored(succ("images", "aarch64", false), succ("images", "x86_64", false)), true},
+		{"nil package", nil, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := awaitingPublishReady(tc.pkg, repoStates); got != tc.want {
+				t.Fatalf("awaitingPublishReady = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

@@ -74,7 +74,7 @@ func (p *Poller) tick(ctx context.Context) {
 			continue
 		}
 
-		results, _, err := p.client.BuildResults(ctx, project)
+		results, repoStates, err := p.client.BuildResults(ctx, project)
 		if err != nil {
 			slog.Warn("poller: build results", "project", project, "err", err)
 			continue
@@ -114,6 +114,8 @@ func (p *Poller) tick(ctx context.Context) {
 					}
 					p.hub.Notify(hubpkg.PackageUpdate(pkg))
 					p.ws.Add(pkg)
+				} else if awaitingPublishReady(prev, repoStates) {
+					p.ws.Add(prev)
 				}
 			} else {
 				// Release project: upsert silently — no SSE broadcast, no events.
@@ -301,6 +303,26 @@ func skipState(state string) bool {
 	switch state {
 	case "disabled", "excluded", "locked":
 		return true
+	}
+	return false
+}
+
+// awaitingPublishReady reports whether stored has a succeeded target not yet
+// observed as published whose repo·arch has reached the "published" state in
+// the current _result response. Publication is invisible to the build-state
+// diff (OBS reports "succeeded" forever), so this is the loss-tolerant
+// fallback that re-adds parked awaiting-publish packages when the
+// repo.published MQ event was missed — or never fired ("nothing changed"
+// publish runs skip it). The wake pass lets PublishStateTask confirm and
+// promote.
+func awaitingPublishReady(stored *model.Package, repoStates map[string]string) bool {
+	if stored == nil {
+		return false
+	}
+	for _, t := range stored.Targets {
+		if t.State == "succeeded" && !t.Published && repoStates[t.Repo+"/"+t.Arch] == "published" {
+			return true
+		}
 	}
 	return false
 }
