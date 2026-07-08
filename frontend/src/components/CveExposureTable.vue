@@ -119,8 +119,14 @@ function toggleReport(img: { project: string; name: string }) {
   void fetchReport(img)
 }
 
+// Per-key request sequence: an overlapping fetch for the same image (retry
+// double-click, close/reopen mid-flight) supersedes the older one, whose
+// settlement must not clobber the newer result. Plain object — never rendered.
+const reportSeq: Record<string, number> = {}
+
 async function fetchReport(img: { project: string; name: string }) {
   const key = imgKey(img)
+  const seq = (reportSeq[key] = (reportSeq[key] ?? 0) + 1)
   reportLoading[key] = true
   reportError[key] = false
   try {
@@ -129,11 +135,13 @@ async function fetchReport(img: { project: string; name: string }) {
     )
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const scans: CveScan[] = await res.json()
+    if (seq !== reportSeq[key]) return // superseded by a newer request
     reportCache.set(key, { scans, fetchedAt: Date.now() })
   } catch {
+    if (seq !== reportSeq[key]) return
     reportError[key] = true
   } finally {
-    reportLoading[key] = false
+    if (seq === reportSeq[key]) reportLoading[key] = false
   }
 }
 
@@ -255,10 +263,11 @@ function reportScans(key: string): CveScan[] | null {
               failed to load report —
               <button type="button" class="underline text-text-secondary" @click="fetchReport(img)">retry</button>
             </div>
-            <template v-else-if="reportScans(imgKey(img))">
+            <template v-else-if="reportScans(imgKey(img))?.length">
               <div class="text-[11px] text-text-muted mb-2">Scanned {{ latestScanTime(reportScans(imgKey(img))!) }}</div>
               <CveFindingsTable :scans="reportScans(imgKey(img))!" />
             </template>
+            <div v-else-if="reportScans(imgKey(img))" class="text-[12px] text-text-muted">no scan data for this image</div>
           </div>
         </template>
       </div>
