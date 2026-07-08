@@ -189,6 +189,12 @@ func DeletePackagesByProject(db *sql.DB, project string) error {
 	if _, err := db.Exec(`DELETE FROM events WHERE project = ?`, project); err != nil {
 		return err
 	}
+	if _, err := db.Exec(`DELETE FROM cve_scans WHERE project = ?`, project); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`DELETE FROM cve_periods WHERE project = ?`, project); err != nil {
+		return err
+	}
 	res, err := db.Exec(`DELETE FROM packages WHERE project = ?`, project)
 	if err != nil {
 		return err
@@ -206,6 +212,12 @@ func DeletePackage(db *sql.DB, project, name string) error {
 		return err
 	}
 	if _, err := db.Exec(`DELETE FROM events WHERE project = ? AND package = ?`, project, name); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`DELETE FROM cve_scans WHERE project = ? AND package = ?`, project, name); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`DELETE FROM cve_periods WHERE project = ? AND package = ?`, project, name); err != nil {
 		return err
 	}
 	res, err := db.Exec(`DELETE FROM packages WHERE project = ? AND name = ?`, project, name)

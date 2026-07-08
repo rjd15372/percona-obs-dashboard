@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	_ "modernc.org/sqlite"
 )
@@ -160,7 +161,36 @@ func Open(path string) (*sql.DB, error) {
 	// avoids re-seeding the entire published backlog on the first restart.
 	db.Exec(`UPDATE packages SET settled = 1 WHERE rollup_state = 'published' AND is_container IS NOT NULL`)
 
+	// Cleanup: CVE rows whose package no longer exists. Package deletion now
+	// removes cve_scans/cve_periods alongside, but rows orphaned before that
+	// fix (deleted PR projects) — or by a scan racing a deletion — linger and
+	// would surface in the Overview CVE table. Idempotent; runs every startup.
+	if err := cleanupOrphanedCveRows(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("cleanup orphaned cve rows: %w", err)
+	}
+
 	return db, nil
+}
+
+// cleanupOrphanedCveRows deletes cve_scans and cve_periods rows that reference
+// a (project, package) with no corresponding packages row.
+func cleanupOrphanedCveRows(db *sql.DB) error {
+	for _, table := range []string{"cve_scans", "cve_periods"} {
+		res, err := db.Exec(`
+			DELETE FROM ` + table + ` WHERE NOT EXISTS (
+				SELECT 1 FROM packages
+				WHERE packages.project = ` + table + `.project
+				  AND packages.name = ` + table + `.package
+			)`)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			slog.Info("store: removed orphaned cve rows", "table", table, "count", n)
+		}
+	}
+	return nil
 }
 
 // migrateIsContainerNullable recreates the packages table without the NOT NULL

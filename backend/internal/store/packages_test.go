@@ -961,3 +961,110 @@ func TestGetActivePackagesExcludesSettled(t *testing.T) {
 		t.Fatalf("GetActivePackages = %+v, want only 'active'", got)
 	}
 }
+
+// seedCveRows inserts one cve_scans row and one cve_periods row for (project, pkg).
+func seedCveRows(t *testing.T, db *sql.DB, project, pkg string) {
+	t.Helper()
+	now := time.Now().UTC()
+	if _, err := db.Exec(`INSERT INTO cve_scans
+		(project, package, arch, image_ref, scanned_at, critical_count, high_count, findings_json, cve_since)
+		VALUES (?,?,?,?,?,?,?,?,?)`,
+		project, pkg, "x86_64", "ref", now.Format(time.RFC3339),
+		1, 2, "[]", now.Add(-24*time.Hour).Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO cve_periods (project, package, arch, cve_since, clean_since)
+		VALUES (?,?,?,?,?)`,
+		project, pkg, "x86_64",
+		now.Add(-72*time.Hour).Format(time.RFC3339Nano), now.Add(-48*time.Hour).Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func countCveRows(t *testing.T, db *sql.DB, project string) (scans, periods int) {
+	t.Helper()
+	if err := db.QueryRow(`SELECT COUNT(*) FROM cve_scans WHERE project = ?`, project).Scan(&scans); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT COUNT(*) FROM cve_periods WHERE project = ?`, project).Scan(&periods); err != nil {
+		t.Fatal(err)
+	}
+	return scans, periods
+}
+
+// Deleting a package must remove its CVE rows — otherwise deleted PR projects'
+// images linger in the Overview CVE table.
+func TestDeletePackageRemovesCveRows(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	proj := "isv:percona:PR:pr-9:ppg:18:containers:ubi9"
+	seedCveRows(t, db, proj, "img-a")
+	seedCveRows(t, db, proj, "img-b")
+
+	if err := DeletePackage(db, proj, "img-a"); err != nil {
+		t.Fatal(err)
+	}
+	scans, periods := countCveRows(t, db, proj)
+	if scans != 1 || periods != 1 {
+		t.Fatalf("expected only img-b rows to remain, got scans=%d periods=%d", scans, periods)
+	}
+}
+
+func TestDeletePackagesByProjectRemovesCveRows(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	proj := "isv:percona:PR:pr-9:ppg:18:containers:ubi9"
+	other := "isv:percona:ppg:18:containers:ubi9"
+	seedCveRows(t, db, proj, "img-a")
+	seedCveRows(t, db, other, "img-keep")
+
+	if err := DeletePackagesByProject(db, proj); err != nil {
+		t.Fatal(err)
+	}
+	scans, periods := countCveRows(t, db, proj)
+	if scans != 0 || periods != 0 {
+		t.Fatalf("deleted project still has cve rows: scans=%d periods=%d", scans, periods)
+	}
+	scans, periods = countCveRows(t, db, other)
+	if scans != 1 || periods != 1 {
+		t.Fatalf("unrelated project's cve rows were removed: scans=%d periods=%d", scans, periods)
+	}
+}
+
+// Rows orphaned before the delete-path fix are swept on startup.
+func TestCleanupOrphanedCveRows(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	now := time.Now().UTC()
+
+	// Live package with CVE rows — must survive.
+	live := &model.Package{Project: "isv:percona:ppg:18:containers:ubi9", Name: "img-live",
+		RollupState: model.RollupPublished, UpdatedAt: now}
+	if err := UpsertPackageState(db, live, now); err != nil {
+		t.Fatal(err)
+	}
+	seedCveRows(t, db, live.Project, live.Name)
+	// Orphan: no packages row.
+	seedCveRows(t, db, "isv:percona:PR:pr-999:ppg:17:containers:ubi9", "img-gone")
+
+	if err := cleanupOrphanedCveRows(db); err != nil {
+		t.Fatal(err)
+	}
+	scans, periods := countCveRows(t, db, "isv:percona:PR:pr-999:ppg:17:containers:ubi9")
+	if scans != 0 || periods != 0 {
+		t.Fatalf("orphaned cve rows survived cleanup: scans=%d periods=%d", scans, periods)
+	}
+	scans, periods = countCveRows(t, db, live.Project)
+	if scans != 1 || periods != 1 {
+		t.Fatalf("live package's cve rows were removed: scans=%d periods=%d", scans, periods)
+	}
+}
