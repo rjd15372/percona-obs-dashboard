@@ -28,14 +28,15 @@ const (
 // mqMessage is the JSON structure of OBS MQ events.
 // Fields are a union of all event payloads; unused fields are zero for any given event type.
 type mqMessage struct {
-	Project string `json:"project"`
-	Package string `json:"package"`
-	Repo    string `json:"repository"`
-	Arch    string `json:"arch"`
-	Reason  string `json:"reason"`
-	Sender  string `json:"sender"`
-	User    string `json:"user"`
-	Comment string `json:"comment"`
+	Project  string `json:"project"`
+	Package  string `json:"package"`
+	Repo     string `json:"repository"` // package.* events
+	RepoName string `json:"repo"`       // repo.* events (repo.published payload: project, repo, buildid)
+	Arch     string `json:"arch"`
+	Reason   string `json:"reason"`
+	Sender   string `json:"sender"`
+	User     string `json:"user"`
+	Comment  string `json:"comment"`
 }
 
 // Consumer subscribes to the OBS AMQP bus and updates the store on build events.
@@ -189,7 +190,9 @@ func (c *Consumer) handle(ctx context.Context, msg amqp.Delivery) {
 			slog.Warn("mq: get finished packages for publish signal", "project", m.Project, "err", err)
 		} else {
 			for _, pkg := range finished {
-				c.ws.Signal(pkg)
+				if awaitingPublishIn(pkg, m.RepoName) {
+					c.ws.Signal(pkg)
+				}
 			}
 		}
 
@@ -410,4 +413,19 @@ func mqStateToRollup(key string) model.RollupState {
 		// state (and its events) from OBS instead of jumping to succeeded.
 		return model.RollupFinished
 	}
+}
+
+// awaitingPublishIn reports whether pkg has a succeeded target in repo that
+// has not been observed as published yet — the packages a repo.published
+// event for that repo can actually progress. Packages waiting on other repos
+// (or already fully observed) are skipped to avoid needless chain passes.
+// An empty repo (malformed event) matches nothing; the poller fallback
+// covers that case.
+func awaitingPublishIn(pkg *model.Package, repo string) bool {
+	for _, t := range pkg.Targets {
+		if t.Repo == repo && t.State == "succeeded" && !t.Published {
+			return true
+		}
+	}
+	return false
 }

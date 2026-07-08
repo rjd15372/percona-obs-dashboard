@@ -104,3 +104,53 @@ func TestBuildUnchangedWakesWorkingSet(t *testing.T) {
 		t.Fatal("build_unchanged did not signal the working set")
 	}
 }
+
+// repo.published must wake only packages actually waiting on that repo's
+// publication: at least one succeeded-unpublished target in the event's repo.
+// Note the payload key is "repo" (unlike package events' "repository").
+func TestRepoPublishedWakesOnlyMatchingRepo(t *testing.T) {
+	db, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ws := workingset.New(4)
+	c := NewConsumer("", db, hubpkg.New(), nil, ws, "isv:percona")
+
+	seed := func(name, repo string, published bool) {
+		pkg := &model.Package{
+			Project: "isv:percona:ppg:17", Name: name,
+			RollupState: model.RollupSucceeded,
+			Targets:     []model.Target{{Repo: repo, Arch: "x86_64", State: "succeeded", Published: published}},
+			UpdatedAt:   time.Now().UTC(),
+		}
+		if err := store.UpsertPackageState(db, pkg, time.Now().UTC()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seed("waiting-a", "repo-a", false) // in the published repo → must wake
+	seed("waiting-b", "repo-b", false) // other repo → must not wake
+	seed("done-a", "repo-a", true)     // already observed published → must not wake
+
+	body, _ := json.Marshal(map[string]string{
+		"project": "isv:percona:ppg:17", "repo": "repo-a",
+	})
+	c.handle(context.Background(), amqp.Delivery{
+		RoutingKey: "opensuse.obs.repo.published",
+		Body:       body,
+	})
+
+	select {
+	case got := <-ws.Dispatch():
+		if got.Name != "waiting-a" {
+			t.Fatalf("dispatched %q, want waiting-a", got.Name)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("repo.published did not wake the awaiting package")
+	}
+	select {
+	case got := <-ws.Dispatch():
+		t.Fatalf("unexpected extra dispatch: %s", got.Name)
+	case <-time.After(100 * time.Millisecond):
+	}
+}
