@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, reactive } from 'vue'
 import type { OverviewProject } from '../types/overview'
+import type { CveScan } from '../types/api'
 import { oldestOpenLabel, oldestOpenColor, groupByCategory } from '../lib/overview'
+import { latestScanTime } from '../lib/cve'
+import CveFindingsTable from './CveFindingsTable.vue'
 
 const props = defineProps<{
   projects: OverviewProject[]
@@ -78,6 +81,65 @@ function badgeClass(n: number, kind: 'crit' | 'high'): string {
   }
   return 'text-text-muted bg-bg-muted'
 }
+
+// --- Third-level expansion: per-image CVE report ---------------------------
+// Reports are fetched lazily on first expand and cached for 5 minutes. An
+// entry older than the TTL is treated as absent (dropped → shimmer + refetch);
+// SSE snapshot refetches never touch this cache — expiry alone governs
+// freshness (user decision).
+const FINDINGS_TTL_MS = 5 * 60_000
+
+interface ReportEntry {
+  scans: CveScan[]
+  fetchedAt: number
+}
+
+// All keyed by img.project + '/' + img.name so state survives snapshot
+// replacement, independent of project-row expansion.
+const reportOpen = reactive<Record<string, boolean>>({})
+const reportCache = reactive(new Map<string, ReportEntry>())
+const reportLoading = reactive<Record<string, boolean>>({})
+const reportError = reactive<Record<string, boolean>>({})
+
+function imgKey(img: { project: string; name: string }): string {
+  return img.project + '/' + img.name
+}
+
+function reportRegionId(key: string): string {
+  return `cve-report-${key.replace(/[^a-z0-9]/gi, '-')}`
+}
+
+function toggleReport(img: { project: string; name: string }) {
+  const key = imgKey(img)
+  reportOpen[key] = !reportOpen[key]
+  if (!reportOpen[key]) return
+  const entry = reportCache.get(key)
+  if (entry && Date.now() - entry.fetchedAt < FINDINGS_TTL_MS) return
+  reportCache.delete(key) // stale entry must shimmer, not flash old data
+  void fetchReport(img)
+}
+
+async function fetchReport(img: { project: string; name: string }) {
+  const key = imgKey(img)
+  reportLoading[key] = true
+  reportError[key] = false
+  try {
+    const res = await fetch(
+      `/api/cve/scans?project=${encodeURIComponent(img.project)}&package=${encodeURIComponent(img.name)}`,
+    )
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const scans: CveScan[] = await res.json()
+    reportCache.set(key, { scans, fetchedAt: Date.now() })
+  } catch {
+    reportError[key] = true
+  } finally {
+    reportLoading[key] = false
+  }
+}
+
+function reportScans(key: string): CveScan[] | null {
+  return reportCache.get(key)?.scans ?? null
+}
 </script>
 
 <template>
@@ -143,32 +205,62 @@ function badgeClass(n: number, kind: 'crit' | 'high'): string {
         :id="regionId(p.project)"
         class="bg-bg-card-2 border-b border-border"
       >
-        <div
-          v-for="(img, idx) in p.images"
-          :key="img.project + '/' + img.name"
-          class="pl-10 p-[9px_20px] grid grid-cols-[1fr_90px_90px_130px_130px] gap-3 items-center"
-          :class="idx > 0 ? 'border-t border-border' : ''"
-        >
-          <span class="font-mono text-[12px] text-text-secondary truncate">
-            {{ img.name }}
-            <span v-if="imageSuffix(p.project, img)" class="text-text-muted text-[10.5px]"> · {{ imageSuffix(p.project, img) }}</span>
-          </span>
-          <span
-            class="min-w-[30px] text-center text-[12.5px] font-bold px-2 py-0.5 rounded-md justify-self-center font-mono"
-            :class="badgeClass(img.critical, 'crit')"
-          >{{ img.critical }}</span>
-          <span
-            class="min-w-[30px] text-center text-[12.5px] font-bold px-2 py-0.5 rounded-md justify-self-center font-mono"
-            :class="badgeClass(img.high, 'high')"
-          >{{ img.high }}</span>
-          <span
-            class="font-mono text-[12.5px] font-semibold justify-self-end"
-            :style="{ color: oldestOpenColor(img.oldest_open_days, img.critical + img.high > 0) }"
-          >{{ oldestOpenLabel(img.oldest_open_days, img.critical + img.high > 0) }}</span>
-          <span class="font-mono text-[12.5px] text-text-muted justify-self-end">
-            {{ img.avg_fix_days === 0 ? '—' : `${img.avg_fix_days}d` }}
-          </span>
-        </div>
+        <template v-for="(img, idx) in p.images" :key="img.project + '/' + img.name">
+          <button
+            type="button"
+            class="w-full text-left pl-10 p-[9px_20px] grid grid-cols-[1fr_90px_90px_130px_130px] gap-3 items-center"
+            :class="idx > 0 ? 'border-t border-border' : ''"
+            :aria-expanded="!!reportOpen[imgKey(img)]"
+            :aria-controls="reportRegionId(imgKey(img))"
+            @click="toggleReport(img)"
+          >
+            <span class="flex items-center gap-2 min-w-0">
+              <span
+                class="text-text-muted text-[10px] transition-transform inline-block"
+                :class="reportOpen[imgKey(img)] ? 'rotate-90' : ''"
+              >▸</span>
+              <span class="font-mono text-[12px] text-text-secondary truncate">
+                {{ img.name }}
+                <span v-if="imageSuffix(p.project, img)" class="text-text-muted text-[10.5px]"> · {{ imageSuffix(p.project, img) }}</span>
+              </span>
+            </span>
+            <span
+              class="min-w-[30px] text-center text-[12.5px] font-bold px-2 py-0.5 rounded-md justify-self-center font-mono"
+              :class="badgeClass(img.critical, 'crit')"
+            >{{ img.critical }}</span>
+            <span
+              class="min-w-[30px] text-center text-[12.5px] font-bold px-2 py-0.5 rounded-md justify-self-center font-mono"
+              :class="badgeClass(img.high, 'high')"
+            >{{ img.high }}</span>
+            <span
+              class="font-mono text-[12.5px] font-semibold justify-self-end"
+              :style="{ color: oldestOpenColor(img.oldest_open_days, img.critical + img.high > 0) }"
+            >{{ oldestOpenLabel(img.oldest_open_days, img.critical + img.high > 0) }}</span>
+            <span class="font-mono text-[12.5px] text-text-muted justify-self-end">
+              {{ img.avg_fix_days === 0 ? '—' : `${img.avg_fix_days}d` }}
+            </span>
+          </button>
+
+          <div
+            v-show="reportOpen[imgKey(img)]"
+            :id="reportRegionId(imgKey(img))"
+            class="border-t border-border pl-14 pr-5 py-3"
+          >
+            <div v-if="reportLoading[imgKey(img)]" class="animate-pulse flex flex-col gap-2" aria-hidden="true">
+              <div class="h-3 w-40 rounded bg-bg-muted"></div>
+              <div class="h-3 w-full rounded bg-bg-muted"></div>
+              <div class="h-3 w-3/4 rounded bg-bg-muted"></div>
+            </div>
+            <div v-else-if="reportError[imgKey(img)]" class="text-[12px] text-text-muted">
+              failed to load report —
+              <button type="button" class="underline text-text-secondary" @click="fetchReport(img)">retry</button>
+            </div>
+            <template v-else-if="reportScans(imgKey(img))">
+              <div class="text-[11px] text-text-muted mb-2">Scanned {{ latestScanTime(reportScans(imgKey(img))!) }}</div>
+              <CveFindingsTable :scans="reportScans(imgKey(img))!" />
+            </template>
+          </div>
+        </template>
       </div>
       </template>
     </template>
