@@ -74,7 +74,7 @@ func (p *Poller) tick(ctx context.Context) {
 			continue
 		}
 
-		results, err := p.client.BuildResults(ctx, project)
+		results, _, err := p.client.BuildResults(ctx, project)
 		if err != nil {
 			slog.Warn("poller: build results", "project", project, "err", err)
 			continue

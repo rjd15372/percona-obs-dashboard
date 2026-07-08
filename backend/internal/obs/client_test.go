@@ -655,10 +655,10 @@ func TestClientMetrics(t *testing.T) {
 
 	c := NewClient(srv.URL, "u", "p")
 	ctx := context.Background()
-	if _, err := c.BuildResults(ctx, "isv:percona:ppg:17"); err != nil {
+	if _, _, err := c.BuildResults(ctx, "isv:percona:ppg:17"); err != nil {
 		t.Fatalf("BuildResults: %v", err)
 	}
-	if _, err := c.BuildResults(ctx, "isv:percona:ppg:17"); err != nil {
+	if _, _, err := c.BuildResults(ctx, "isv:percona:ppg:17"); err != nil {
 		t.Fatalf("BuildResults: %v", err)
 	}
 	snap := c.MetricsSnapshot()
@@ -668,5 +668,37 @@ func TestClientMetrics(t *testing.T) {
 	snap["build_results"] = 99
 	if c.MetricsSnapshot()["build_results"] != 2 {
 		t.Fatalf("snapshot is not a copy")
+	}
+}
+
+func TestBuildResultsRepoStates(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<resultlist state="x">
+  <result project="p" repository="images" arch="x86_64" state="published">
+    <status package="pkg-a" code="succeeded"/>
+  </result>
+  <result project="p" repository="images" arch="aarch64" state="building">
+    <status package="pkg-a" code="building"/>
+  </result>
+</resultlist>`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "u", "p")
+	states, repoStates, err := c.BuildResults(context.Background(), "p")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(states) != 2 {
+		t.Fatalf("want 2 package states, got %d", len(states))
+	}
+	if states[0].Package != "pkg-a" || states[0].State != "succeeded" {
+		t.Fatalf("unexpected first package state: %+v", states[0])
+	}
+	if got := repoStates["images/x86_64"]; got != "published" {
+		t.Fatalf("images/x86_64 state = %q, want published", got)
+	}
+	if got := repoStates["images/aarch64"]; got != "building" {
+		t.Fatalf("images/aarch64 state = %q, want building", got)
 	}
 }

@@ -351,21 +351,26 @@ func (c *Client) SearchProjects(ctx context.Context, prefix string) ([]string, e
 	return names, nil
 }
 
-// BuildResults fetches all package build states for a project.
-func (c *Client) BuildResults(ctx context.Context, project string) ([]PackageBuildState, error) {
+// BuildResults fetches all package build states for a project, plus the
+// repo-level state per "repo/arch" — the same publish state PublishStateTask
+// reads ("published" once the publisher has synced that repo·arch). Both come
+// from the single _result response.
+func (c *Client) BuildResults(ctx context.Context, project string) ([]PackageBuildState, map[string]string, error) {
 	resp, err := c.get(ctx, "build_results", "/build/"+project+"/_result")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer resp.Body.Close()
 
 	var rl resultList
 	if err := xml.NewDecoder(resp.Body).Decode(&rl); err != nil {
-		return nil, fmt.Errorf("parse /build/%s/_result: %w", project, err)
+		return nil, nil, fmt.Errorf("parse /build/%s/_result: %w", project, err)
 	}
 
 	var out []PackageBuildState
+	repoStates := make(map[string]string, len(rl.Results))
 	for _, r := range rl.Results {
+		repoStates[r.Repository+"/"+r.Arch] = r.State
 		for _, s := range r.Statuses {
 			out = append(out, PackageBuildState{
 				Project: project,
@@ -376,7 +381,7 @@ func (c *Client) BuildResults(ctx context.Context, project string) ([]PackageBui
 			})
 		}
 	}
-	return out, nil
+	return out, repoStates, nil
 }
 
 // projectDir fetches a /build/… directory listing and returns the entry names.
