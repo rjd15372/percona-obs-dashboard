@@ -466,3 +466,97 @@ func TestTelemetryEndpoint(t *testing.T) {
 		t.Fatalf("missing enabled: code=%d, want 400", w.Code)
 	}
 }
+
+func TestCveScansHandler(t *testing.T) {
+	db, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	// Seed one scan with a finding; UpsertCveScan sets cve_since itself.
+	scan := model.CveScan{
+		Arch:          "x86_64",
+		ImageRef:      "registry.example/percona-postgresql17:latest",
+		ScannedAt:     time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC),
+		CriticalCount: 1,
+		HighCount:     0,
+		Findings: []model.CveFinding{{
+			ID:               "CVE-2026-0001",
+			PkgName:          "openssl",
+			InstalledVersion: "3.0.1",
+			FixedVersion:     "3.0.2",
+			Severity:         "CRITICAL",
+			Title:            "test vulnerability",
+		}},
+	}
+	if err := store.UpsertCveScan(db, "isv:percona:ppg:17:containers", "percona-postgresql17", scan); err != nil {
+		t.Fatalf("UpsertCveScan: %v", err)
+	}
+
+	h := cveScansHandler(db)
+
+	t.Run("seeded rows returned with findings", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		h(rec, httptest.NewRequest(http.MethodGet,
+			"/api/cve/scans?project=isv:percona:ppg:17:containers&package=percona-postgresql17", nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rec.Code)
+		}
+		var scans []model.CveScan
+		if err := json.NewDecoder(rec.Body).Decode(&scans); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if len(scans) != 1 {
+			t.Fatalf("expected 1 scan, got %d", len(scans))
+		}
+		got := scans[0]
+		if got.Arch != "x86_64" || got.CriticalCount != 1 {
+			t.Fatalf("unexpected scan: %+v", got)
+		}
+		if got.CveSince == nil {
+			t.Fatal("expected cve_since to be set for a vulnerable scan")
+		}
+		if len(got.Findings) != 1 || got.Findings[0].ID != "CVE-2026-0001" {
+			t.Fatalf("unexpected findings: %+v", got.Findings)
+		}
+	})
+
+	t.Run("missing params rejected", func(t *testing.T) {
+		for _, url := range []string{
+			"/api/cve/scans",
+			"/api/cve/scans?project=isv:percona:ppg:17:containers",
+			"/api/cve/scans?package=percona-postgresql17",
+			"/api/cve/scans?project=&package=percona-postgresql17",
+			"/api/cve/scans?project=isv:percona:ppg:17:containers&package=",
+		} {
+			rec := httptest.NewRecorder()
+			h(rec, httptest.NewRequest(http.MethodGet, url, nil))
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("%s: expected 400, got %d", url, rec.Code)
+			}
+		}
+	})
+
+	t.Run("unknown pair returns empty array", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		h(rec, httptest.NewRequest(http.MethodGet,
+			"/api/cve/scans?project=isv:percona:nope&package=missing", nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", rec.Code)
+		}
+		if body := strings.TrimSpace(rec.Body.String()); body != "[]" {
+			t.Fatalf("expected [], got %q", body)
+		}
+	})
+}
+
+func TestCveScansRoute(t *testing.T) {
+	router := setupTestServer(t)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet,
+		"/api/cve/scans?project=p&package=k", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("route not registered or failing: expected 200, got %d", rec.Code)
+	}
+}

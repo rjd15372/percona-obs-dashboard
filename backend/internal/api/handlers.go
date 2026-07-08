@@ -494,3 +494,33 @@ func telemetrySetHandler(enabled *atomic.Bool) http.HandlerFunc {
 		_ = json.NewEncoder(w).Encode(map[string]any{"enabled": b})
 	}
 }
+
+// cveScansHandler returns a handler for GET /api/cve/scans.
+// Query params (both required, non-empty): project, package.
+// Returns all per-arch CVE scan rows for one image, including parsed findings —
+// the same shape as the cve_scans field attached to packages elsewhere.
+// Unknown (project, package) pairs return an empty array, not 404.
+func cveScansHandler(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		project := r.URL.Query().Get("project")
+		pkg := r.URL.Query().Get("package")
+		if project == "" || pkg == "" {
+			http.Error(w, "project and package are required", http.StatusBadRequest)
+			return
+		}
+
+		scans, err := store.QueryCveScans(db, project, pkg)
+		if err != nil {
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+		if scans == nil {
+			scans = []model.CveScan{}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(scans); err != nil {
+			return
+		}
+	}
+}

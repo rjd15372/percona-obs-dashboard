@@ -51,6 +51,7 @@ func NewRouter(db *sql.DB, h *hub.Hub, obsClient *obs.Client, root string, telem
 	r.Post("/api/telemetry", telemetrySetHandler(telemetryEnabled))
 
 	r.Get("/api/overview", overviewHandler(db, root, overview))
+	r.Get("/api/cve/scans", cveScansHandler(db))
 
 	return r
 }
