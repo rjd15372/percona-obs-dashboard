@@ -8,10 +8,16 @@ const props = defineProps<{
   accentOf: (project: string) => string
 }>()
 
-const projectsWithImages = computed(() => props.projects.filter(p => p.images.length > 0))
+// Only images that actually carry CVEs are shown, and only projects that have
+// at least one such image get a row — clean images/projects are noise here.
+const projectsWithCves = computed(() =>
+  props.projects
+    .map(p => ({ ...p, images: p.images.filter(i => i.critical + i.high > 0) }))
+    .filter(p => p.images.length > 0),
+)
 
 // Devel / Releases / PRs sections, preserving snapshot order within each.
-const groups = computed(() => groupByCategory(projectsWithImages.value, p => p.project))
+const groups = computed(() => groupByCategory(projectsWithCves.value, p => p.project))
 
 // Keyed by project path (not array index) so expansion survives snapshot
 // replacement from SSE updates. Multiple rows may be open at once.
@@ -47,7 +53,7 @@ function computeAggregate(p: OverviewProject): Aggregate {
 // recompute the same reduce()s on every access within a render.
 const aggregates = computed<Record<string, Aggregate>>(() => {
   const map: Record<string, Aggregate> = {}
-  for (const p of projectsWithImages.value) map[p.project] = computeAggregate(p)
+  for (const p of projectsWithCves.value) map[p.project] = computeAggregate(p)
   return map
 })
 
@@ -59,7 +65,7 @@ function aggregate(project: string): Aggregate {
 // disambiguate them with a muted project-remainder suffix in the template.
 const dupNamesByProject = computed<Record<string, Set<string>>>(() => {
   const map: Record<string, Set<string>> = {}
-  for (const p of projectsWithImages.value) {
+  for (const p of projectsWithCves.value) {
     const counts = new Map<string, number>()
     for (const img of p.images) counts.set(img.name, (counts.get(img.name) ?? 0) + 1)
     map[p.project] = new Set([...counts.entries()].filter(([, n]) => n > 1).map(([name]) => name))
