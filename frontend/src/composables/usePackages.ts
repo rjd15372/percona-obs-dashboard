@@ -1,6 +1,7 @@
 import { ref, computed, toValue } from 'vue'
 import type { MaybeRef, ComputedRef } from 'vue'
-import type { Package } from '../types/api'
+import type { Context, Package } from '../types/api'
+import { deriveVersionKeys, matchesVersionKey } from '../lib/versions'
 
 const SEVERITY: Record<string, number> = {
   broken: 5,
@@ -14,26 +15,10 @@ const SEVERITY: Record<string, number> = {
   published: -1,
 }
 
-// matchesVersion returns true if pkg belongs to the selected version.
-// An empty version string means "all versions" — every package passes.
-// A package is a "common" package (always shown) when the segment at prefixDepth
-// in its project path is absent or not a known version number.
-function matchesVersion(
-  pkg: Package,
-  version: string,
-  prefixDepth: number,
-  knownVersions: Set<string>,
-): boolean {
-  if (!version) return true
-  const seg = pkg.project.split(':')[prefixDepth]
-  if (!seg || !knownVersions.has(seg)) return true
-  return seg === version
-}
-
 export function usePackages(
   apiBase: MaybeRef<string>,
   version: MaybeRef<string>,
-  prefixDepth: MaybeRef<number>,
+  context: MaybeRef<Context>,
 ) {
   const data = ref<Package[]>([])
   const loading = ref(false)
@@ -56,25 +41,30 @@ export function usePackages(
     }
   }
 
-  // availableVersions: unique version segments found at prefixDepth in project paths,
-  // sorted descending (newest first). Purely numeric segments are versions; anything
-  // else (e.g. "common", "containers") is not.
+  // availableVersions: version keys (plain + extensions) derived from the
+  // fetched corpus at the context's prefix depth.
   const availableVersions: ComputedRef<string[]> = computed(() => {
-    const depth = toValue(prefixDepth)
-    const found = new Set<string>()
-    for (const pkg of data.value) {
-      const seg = pkg.project.split(':')[depth]
-      if (seg && /^\d+$/.test(seg)) found.add(seg)
-    }
-    return [...found].sort((a, b) => parseInt(b) - parseInt(a))
+    const ctx = toValue(context)
+    return deriveVersionKeys(
+      data.value.map(p => p.project),
+      ctx.prefix.split(':').length,
+      ctx.allowedSubprojects,
+    )
   })
 
   const sorted = computed(() => {
     const ver = toValue(version)
-    const depth = toValue(prefixDepth)
-    const knownVersions = new Set(availableVersions.value)
+    const ctx = toValue(context)
+    const depth = ctx.prefix.split(':').length
     return [...data.value]
-      .filter(pkg => !pkg.is_release && matchesVersion(pkg, ver, depth, knownVersions))
+      .filter(pkg => {
+        if (pkg.is_release) return false
+        if (!ver) return true
+        const seg = pkg.project.split(':')[depth]
+        // Common packages (non-numeric segment at depth) are always shown.
+        if (!seg || !/^\d+$/.test(seg)) return true
+        return matchesVersionKey(pkg.project, ctx.prefix, ver, ctx.allowedSubprojects)
+      })
       .sort((a, b) => (SEVERITY[b.rollup_state] ?? 0) - (SEVERITY[a.rollup_state] ?? 0))
   })
 

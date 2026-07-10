@@ -1,6 +1,7 @@
 import { computed, toValue } from 'vue'
 import type { MaybeRef } from 'vue'
 import type { Package, Target, CveScan, Context } from '../types/api'
+import { matchesVersionKey } from '../lib/versions'
 
 export interface RepoInfo {
   obs: string
@@ -78,24 +79,13 @@ export function useArtifacts(
   artArch: MaybeRef<string>,
   context: MaybeRef<Context>,
 ) {
-  // matchesProject: does an OBS project belong to this context at this version?
-  //  - subproject contexts (e.g. PPG Extras) own prefix:ver:<subproject> and
-  //    everything beneath it (including its :containers:* subprojects).
-  //  - allowlist contexts (PPG) own prefix:ver plus only the listed direct
-  //    subprojects — future subprojects stay hidden until given an entry.
-  //  - contexts with neither field (PR, Releases) keep the historical
-  //    catch-all: prefix:ver and everything beneath.
+  // matchesProject: does an OBS project belong to this context at the
+  // selected version key? Plain keys own the version root + absorbed
+  // subprojects; extension keys ("17:extras") own that subtree; contexts
+  // without allowedSubprojects (PR, Releases) keep the historical catch-all.
   const matchesProject = (project: string, ver: string): boolean => {
     const ctx = toValue(context)
-    const root = ctx.subproject
-      ? `${ctx.prefix}:${ver}:${ctx.subproject}`
-      : `${ctx.prefix}:${ver}`
-    if (project === root) return true
-    if (!project.startsWith(root + ':')) return false
-    if (ctx.subproject) return true
-    if (!ctx.allowedSubprojects) return true
-    const first = project.slice(root.length + 1).split(':')[0]
-    return ctx.allowedSubprojects.includes(first)
+    return matchesVersionKey(project, ctx.prefix, ver, ctx.allowedSubprojects)
   }
 
   const packageRows = computed<PackageRow[]>(() => {

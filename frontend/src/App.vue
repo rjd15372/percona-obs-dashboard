@@ -8,7 +8,7 @@ import ArtifactsPanel from './components/ArtifactsPanel.vue'
 import OverviewPanel from './components/OverviewPanel.vue'
 import type { Context } from './types/api'
 import type { WindowKey } from './types/overview'
-import { PPG_CONTEXT, PPG_EXTRAS_CONTEXT, RELEASES_CONTEXT } from './lib/contexts'
+import { PPG_DEVEL_CONTEXT, PPG_STAGING_CONTEXT, RELEASES_CONTEXT } from './lib/contexts'
 import { usePackages } from './composables/usePackages'
 import { useEvents } from './composables/useEvents'
 import { usePRPackages } from './composables/usePRPackages'
@@ -49,9 +49,8 @@ function toggleTheme() {
 }
 
 // Context
-const selectedContext = ref<Context>(PPG_CONTEXT)
+const selectedContext = ref<Context>(PPG_STAGING_CONTEXT)
 const selectedPrefix = computed(() => selectedContext.value.prefix)
-const prefixDepth = computed(() => selectedContext.value.prefix.split(':').length)
 
 // Navigation state
 const version = ref('')
@@ -89,7 +88,7 @@ const customTo = ref<string | null>(null)
 
 // Data fetching
 const apiBase = computed(() => selectedContext.value.apiBase)
-const { data: allPackages, rawData: rawPackages, availableVersions, refresh: refreshPackages, filterByTags } = usePackages(apiBase, version, prefixDepth)
+const { data: allPackages, rawData: rawPackages, availableVersions, refresh: refreshPackages, filterByTags } = usePackages(apiBase, version, selectedContext)
 const { data: events, refresh: refreshEvents, filterEvents } = useEvents(apiBase, version)
 const { data: prGroups, refresh: refreshPR } = usePRPackages()
 
@@ -129,13 +128,13 @@ const contexts = computed<Context[]>(() => {
     return nb - na
   })
 
-  return [PPG_CONTEXT, ...prContexts]
+  return [PPG_DEVEL_CONTEXT, PPG_STAGING_CONTEXT, ...prContexts]
 })
 
 // Artifacts panel state (lifted for URL sync)
 const artifactsVersion = ref('')
 const artifactsTab = ref<'packages' | 'containers'>('packages')
-const artifactsContext = ref<Context>(PPG_CONTEXT)
+const artifactsContext = ref<Context>(PPG_STAGING_CONTEXT)
 
 // Overview panel state (lifted for URL sync)
 const overviewWindow = ref<WindowKey>('24h')
@@ -168,7 +167,7 @@ const artifactsContexts = computed<Context[]>(() => {
     return nb - na
   })
 
-  return [PPG_CONTEXT, PPG_EXTRAS_CONTEXT, RELEASES_CONTEXT, ...prContexts]
+  return [PPG_DEVEL_CONTEXT, PPG_STAGING_CONTEXT, RELEASES_CONTEXT, ...prContexts]
 })
 
 useUrlState({
@@ -185,7 +184,7 @@ useUrlState({
 })
 
 const filteredPackages = computed(() => filterByTags(activeTags.value))
-const filteredEvents = computed(() => filterEvents(activeTags.value, version.value, prefixDepth.value, selectedContext.value.prefix))
+const filteredEvents = computed(() => filterEvents(activeTags.value, version.value, selectedContext.value))
 const updatedAt = ref<string | null>(null)
 const refreshing = ref(false)
 

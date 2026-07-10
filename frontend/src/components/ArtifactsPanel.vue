@@ -41,6 +41,7 @@ import type { Context, CveScan } from '../types/api'
 import type { ArtifactBinary, ContainerImage, PackageRow, RepoInfo } from '../composables/useArtifacts'
 import { useArtifacts } from '../composables/useArtifacts'
 import { useArtifactMetadata } from '../composables/useArtifactMetadata'
+import { deriveVersionKeys, splitVersionKey } from '../lib/versions'
 import ArtifactsVersionBar from './ArtifactsVersionBar.vue'
 import PackagesSubTab from './PackagesSubTab.vue'
 import ContainersSubTab from './ContainersSubTab.vue'
@@ -69,17 +70,11 @@ const pendingFetches = ref(0)
 // Version derived from fetched packages
 const availableVersions = computed<string[]>(() => {
   const ctx = props.artifactsContext
-  const depth = ctx.prefix.split(':').length
-  const versions = new Set<string>()
-  for (const pkg of artifactsPackages.value) {
-    const parts = pkg.project.split(':')
-    const seg = parts[depth]
-    if (!seg || !/^\d+$/.test(seg)) continue
-    // Subproject contexts only offer versions that actually have the subproject.
-    if (ctx.subproject && parts[depth + 1] !== ctx.subproject) continue
-    versions.add(seg)
-  }
-  return [...versions].sort((a, b) => parseInt(b) - parseInt(a))
+  return deriveVersionKeys(
+    artifactsPackages.value.map(p => p.project),
+    ctx.prefix.split(':').length,
+    ctx.allowedSubprojects,
+  )
 })
 
 const artRepoObs = ref<string>('')
@@ -109,16 +104,12 @@ async function fetchPackages(ctx: Context) {
   }
 }
 
-async function fetchRepos(version: string) {
+async function fetchRepos(versionKey: string) {
   const ctx = props.artifactsContext
-  let url: string
-  if (ctx.apiBase.startsWith('/api/products/')) {
-    url = `/api/products/ppg/${version}/repos`
-    if (ctx.subproject) {
-      url += `?subproject=${encodeURIComponent(ctx.subproject)}`
-    }
-  } else {
-    url = `${ctx.apiBase}/${version}/repos`
+  const [ver, sub] = splitVersionKey(versionKey)
+  let url = `${ctx.apiBase}/${ver}/repos`
+  if (sub) {
+    url += `?subproject=${encodeURIComponent(sub)}`
   }
   pendingFetches.value++
   try {

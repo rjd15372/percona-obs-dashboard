@@ -3,12 +3,11 @@ export type EventType = 'triggered' | 'started' | 'succeeded' | 'failed' | 'unre
 
 export interface Context {
   label: string
-  apiBase: string  // e.g. "/api/products/ppg" or "/api/pr/pr-92"
-  prefix: string   // e.g. "isv:percona:ppg" or "isv:percona:PR:pr-92"
-  /** This context views only prefix:ver:<subproject> and beneath (e.g. "extras"). */
-  subproject?: string
-  /** Without subproject: which direct subprojects of prefix:ver belong to this
-   *  context (allowlist). Undefined = catch-all (PR/Releases contexts). */
+  apiBase: string  // e.g. "/api/products/ppg/staging" or "/api/pr/pr-92"
+  prefix: string   // e.g. "isv:percona:ppg:staging" or "isv:percona:PR:pr-92"
+  /** Direct subprojects of prefix:ver absorbed into the plain version entry
+   *  (e.g. "containers"); all others become <ver>:<sub> version-extension
+   *  entries. Undefined = catch-all (PR/Releases contexts). */
   allowedSubprojects?: string[]
 }
 

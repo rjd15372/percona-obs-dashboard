@@ -1,6 +1,6 @@
 import { watch, watchEffect, onMounted, ref, type Ref } from 'vue'
 import type { Context } from '../types/api'
-import { PPG_CONTEXT } from '../lib/contexts'
+import { PPG_STAGING_CONTEXT } from '../lib/contexts'
 import type { WindowKey } from '../types/overview'
 
 export function contextToKey(ctx: Context): string {
@@ -9,8 +9,7 @@ export function contextToKey(ctx: Context): string {
   if (prIdx >= 0) {
     return parts[prIdx + 1] // e.g. "pr-106"
   }
-  const last = parts[parts.length - 1] // "ppg" or "releases"
-  return ctx.subproject ? `${last}-${ctx.subproject}` : last // "ppg-extras"
+  return parts[parts.length - 1] // "devel" | "staging" | "releases"
 }
 
 export function keyToContext(key: string, contexts: Context[]): Context | undefined {
@@ -91,7 +90,7 @@ export function useUrlState(state: UrlStateOptions): void {
   watch(boardContexts, (contexts) => {
     if (!pendingBoardKey || contexts.length === 0) return
     const resolved = keyToContext(pendingBoardKey, contexts)
-    boardCtx.value = resolved ?? PPG_CONTEXT
+    boardCtx.value = resolved ?? PPG_STAGING_CONTEXT
     pendingBoardKey = null
   }, { immediate: true })
 
@@ -99,7 +98,7 @@ export function useUrlState(state: UrlStateOptions): void {
   watch(artifactsContexts, (contexts) => {
     if (!pendingArtifactsKey || contexts.length === 0) return
     const resolved = keyToContext(pendingArtifactsKey, contexts)
-    artifactsCtx.value = resolved ?? PPG_CONTEXT
+    artifactsCtx.value = resolved ?? PPG_STAGING_CONTEXT
     pendingArtifactsKey = null
   }, { immediate: true })
 
@@ -111,14 +110,14 @@ export function useUrlState(state: UrlStateOptions): void {
     if (mainTab.value !== 'overview') params.set('tab', mainTab.value) // overview is the default tab
 
     const boardKey = contextToKey(boardCtx.value)
-    if (boardKey !== 'ppg') params.set('ctx', boardKey)
+    if (boardKey !== 'staging') params.set('ctx', boardKey)
 
     if (version.value) params.set('version', version.value)
 
     if (activeTags.value.length > 0) params.set('tags', activeTags.value.join(','))
 
     const artKey = contextToKey(artifactsCtx.value)
-    if (artKey !== 'ppg') params.set('actx', artKey)
+    if (artKey !== 'staging') params.set('actx', artKey)
 
     if (artifactsVersion.value) params.set('aversion', artifactsVersion.value)
 

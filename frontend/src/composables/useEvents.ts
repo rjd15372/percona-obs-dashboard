@@ -1,6 +1,7 @@
 import { ref, toValue } from 'vue'
 import type { MaybeRef } from 'vue'
-import type { Event } from '../types/api'
+import type { Context, Event } from '../types/api'
+import { matchesVersionKey } from '../lib/versions'
 
 export function useEvents(apiBase: MaybeRef<string>, version: MaybeRef<string>) {
   const data = ref<Event[]>([])
@@ -29,12 +30,12 @@ export function useEvents(apiBase: MaybeRef<string>, version: MaybeRef<string>) 
     }
   }
 
-  function matchesEventVersion(event: Event, version: string, prefixDepth: number): boolean {
-    if (!version) return true
-    const seg = event.project.split(':')[prefixDepth]
-    // Non-numeric segment (common, ppgcommon, project events) always passes
+  function matchesEventVersion(event: Event, key: string, ctx: Context): boolean {
+    if (!key) return true
+    const seg = event.project.split(':')[ctx.prefix.split(':').length]
+    // Non-numeric segment (common, project events) always passes.
     if (!seg || !/^\d+$/.test(seg)) return true
-    return seg === version
+    return matchesVersionKey(event.project, ctx.prefix, key, ctx.allowedSubprojects)
   }
 
   function matchesContext(project: string, prefix: string): boolean {
@@ -46,11 +47,11 @@ export function useEvents(apiBase: MaybeRef<string>, version: MaybeRef<string>) 
     return project === commonPrefix || project.startsWith(`${commonPrefix}:`)
   }
 
-  function filterEvents(tags: string[], version: string, prefixDepth: number, prefix: string): Event[] {
+  function filterEvents(tags: string[], version: string, ctx: Context): Event[] {
     return data.value.filter(e => {
-      if (!matchesContext(e.project, prefix)) return false
+      if (!matchesContext(e.project, ctx.prefix)) return false
       if (tags.length > 0 && !tags.every(t => (e.tags ?? []).includes(t))) return false
-      return matchesEventVersion(e, version, prefixDepth)
+      return matchesEventVersion(e, version, ctx)
     })
   }
 
