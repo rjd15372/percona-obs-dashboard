@@ -13,8 +13,8 @@ was >200k OBS API requests since midnight, which SUSE IT flagged.
 ## Goal
 
 Cut background OBS API traffic by roughly two orders of magnitude during build
-storms, and guarantee a hard hourly ceiling (~86k requests/day budget, enforced
-hourly) that no storm or bug can exceed — without degrading the dashboard's
+storms, and guarantee a hard per-minute ceiling (~86k requests/day budget, enforced
+per minute) that no storm or bug can exceed — without degrading the dashboard's
 real-time feel beyond an agreed ~5 minute worst-case staleness for
 intermediate build states.
 
@@ -96,14 +96,14 @@ Effect: during a storm, the up-to-two per-pass calls per package (`_result`,
 plus `_result?view=status` when the package has succeeded-but-unpublished
 targets) collapse into one call per project per tick.
 
-## 3. Hourly rate limiter (obs.Client)
+## 3. Per-minute rate limiter (obs.Client)
 
-A fixed-window hourly counter in `Client`, enforced in the existing `get` /
+A fixed-window per-minute counter in `Client`, enforced in the existing `get` /
 `getFile` / `post` choke points (every OBS call funnels through these):
 
-- Budget: `obs.hourly_request_budget` (default 3600 ≈ 86k/day). Within a
+- Budget: `obs.minute_request_budget` (default 60 ≈ 86k/day). Within a
   window requests flow at full speed; once exhausted, background requests
-  block until the next hour window opens. Blocking is context-aware (respects
+  block until the next minute window opens. Blocking is context-aware (respects
   cancellation); requests are delayed, never dropped.
 - **Interactive bypass:** API handlers serving real users (rebuild, build log,
   binaries, artifact metadata, release artifacts) tag their context via
@@ -113,9 +113,11 @@ A fixed-window hourly counter in `Client`, enforced in the existing `get` /
   `remaining_budget` through the existing `MetricsSnapshot()` so telemetry
   shows when the cap is being approached.
 
-With backoff + batching, normal load is expected around 200–500 req/hour; the
-limiter is the contractual guarantee to SUSE that no future storm exceeds the
-budget.
+With backoff + batching, normal load is expected around 200–500 req/hour
+(well under 60/minute); the limiter is the contractual guarantee to SUSE that
+no future storm exceeds the budget. The per-minute window also smooths bursts:
+a storm can never spend more than one minute's budget at once, so load spreads
+evenly instead of front-loading a large window.
 
 ## 4. Configuration
 
@@ -125,7 +127,7 @@ New keys, all defaulted so existing prod config keeps working:
 |---|---|---|
 | `worker_pool.backoff_max` | `5m` | Cap of the per-package backoff ladder |
 | `worker_pool.batch_threshold` | `4` | Min due packages per project to use one project-level `_result` call |
-| `obs.hourly_request_budget` | `3600` | Hourly OBS request cap for background traffic |
+| `obs.minute_request_budget` | `60` | Per-minute OBS request cap for background traffic |
 
 ## Error handling
 
@@ -156,4 +158,4 @@ New keys, all defaulted so existing prod config keeps working:
 |---|---|---|
 | Scheduled passes | ~89k | ~9k (backoff) |
 | Build-state + publish-state calls | ~110k+ | ~2–4k (batching folds waves into per-project calls) |
-| Hard ceiling | none | 3,600/hour |
+| Hard ceiling | none | 60/minute |
