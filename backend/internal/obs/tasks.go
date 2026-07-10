@@ -43,9 +43,15 @@ const blockedByTTL = 5 * time.Minute
 type BuildStateTask struct{}
 
 func (t BuildStateTask) Run(ctx context.Context, client *Client, pkg *model.Package, env *Env) error {
-	results, err := client.PackageBuildResults(ctx, pkg.Project, pkg.Name)
-	if err != nil {
-		return err
+	var results []PackageBuildState
+	if env != nil && env.BuildStates != nil {
+		results = env.BuildStates
+	} else {
+		var err error
+		results, err = client.PackageBuildResults(ctx, pkg.Project, pkg.Name)
+		if err != nil {
+			return err
+		}
 	}
 	updated := buildPackage(pkg.Project, pkg.Name, pkg.Tags, results)
 	// Preserve per-target enrichment from prior passes only while the target's
@@ -116,10 +122,16 @@ func (t PublishStateTask) Run(ctx context.Context, client *Client, pkg *model.Pa
 		return nil
 	}
 
-	states, err := client.RepoPublishStates(ctx, pkg.Project, pkg.Name)
-	if err != nil {
-		slog.Warn("obs: repo publish states", "pkg", pkg.Name, "err", err)
-		return nil
+	var states map[string]string
+	if env != nil && env.RepoStates != nil {
+		states = env.RepoStates
+	} else {
+		var err error
+		states, err = client.RepoPublishStates(ctx, pkg.Project, pkg.Name)
+		if err != nil {
+			slog.Warn("obs: repo publish states", "pkg", pkg.Name, "err", err)
+			return nil
+		}
 	}
 
 	for i, target := range pkg.Targets {
@@ -160,10 +172,16 @@ func (t BinariesCheckTask) Run(ctx context.Context, client *Client, pkg *model.P
 	if len(pkg.Targets) == 0 {
 		return nil
 	}
-	states, err := client.RepoPublishStates(ctx, pkg.Project, pkg.Name)
-	if err != nil {
-		slog.Warn("obs: binaries check repo states", "pkg", pkg.Name, "err", err)
-		return nil
+	var states map[string]string
+	if env != nil && env.RepoStates != nil {
+		states = env.RepoStates
+	} else {
+		var err error
+		states, err = client.RepoPublishStates(ctx, pkg.Project, pkg.Name)
+		if err != nil {
+			slog.Warn("obs: binaries check repo states", "pkg", pkg.Name, "err", err)
+			return nil
+		}
 	}
 
 	for i, target := range pkg.Targets {

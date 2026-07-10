@@ -890,3 +890,88 @@ func TestVersionTaskSkipsEmptyVersionWhenStable(t *testing.T) {
 		t.Fatalf("expected no OBS call for empty version under stable targets, got %d", calls)
 	}
 }
+
+func TestBuildStateTaskUsesPrefetchedEnv(t *testing.T) {
+	var hits atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		http.Error(w, "must not be called", http.StatusInternalServerError)
+	}))
+	defer ts.Close()
+
+	c := obs.NewClient(ts.URL, "u", "p")
+	pkg := &model.Package{
+		Project:     "isv:percona",
+		Name:        "mypkg",
+		RollupState: model.RollupFailed,
+		Targets:     []model.Target{{Repo: "repo", Arch: "x86_64", State: "failed"}},
+	}
+	env := &obs.Env{BuildStates: []obs.PackageBuildState{
+		{Project: "isv:percona", Repo: "repo", Arch: "x86_64", Package: "mypkg", State: "succeeded"},
+	}}
+
+	if err := (obs.BuildStateTask{}).Run(context.Background(), c, pkg, env); err != nil {
+		t.Fatal(err)
+	}
+	if hits.Load() != 0 {
+		t.Errorf("expected no HTTP requests, got %d", hits.Load())
+	}
+	if pkg.RollupState != model.RollupSucceeded {
+		t.Errorf("expected succeeded rollup, got %s", pkg.RollupState)
+	}
+}
+
+func TestPublishStateTaskUsesPrefetchedEnv(t *testing.T) {
+	// Serve only the _meta publish-flags request; _result must not be hit.
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/_meta") {
+			fmt.Fprint(w, `<project name="isv:percona"/>`)
+			return
+		}
+		http.Error(w, "must not be called: "+r.URL.Path, http.StatusInternalServerError)
+	}))
+	defer ts.Close()
+
+	c := obs.NewClient(ts.URL, "u", "p")
+	pkg := &model.Package{
+		Project:     "isv:percona",
+		Name:        "mypkg",
+		RollupState: model.RollupSucceeded,
+		Targets:     []model.Target{{Repo: "repo", Arch: "x86_64", State: "succeeded"}},
+	}
+	env := &obs.Env{RepoStates: map[string]string{"repo/x86_64": "published"}}
+
+	if err := (obs.PublishStateTask{}).Run(context.Background(), c, pkg, env); err != nil {
+		t.Fatal(err)
+	}
+	if !pkg.Targets[0].Published {
+		t.Error("expected target published from prefetched repo states")
+	}
+	if pkg.RollupState != model.RollupPublished {
+		t.Errorf("expected published rollup, got %s", pkg.RollupState)
+	}
+}
+
+func TestBinariesCheckTaskUsesPrefetchedEnv(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "must not be called", http.StatusInternalServerError)
+	}))
+	defer ts.Close()
+
+	c := obs.NewClient(ts.URL, "u", "p")
+	pkg := &model.Package{
+		Project:     "isv:percona:ppg:releases:17",
+		Name:        "mypkg",
+		IsRelease:   true,
+		RollupState: model.RollupBuilding,
+		Targets:     []model.Target{{Repo: "repo", Arch: "x86_64", State: "succeeded"}},
+	}
+	env := &obs.Env{RepoStates: map[string]string{"repo/x86_64": "published"}}
+
+	if err := (obs.BinariesCheckTask{}).Run(context.Background(), c, pkg, env); err != nil {
+		t.Fatal(err)
+	}
+	if pkg.RollupState != model.RollupPublished {
+		t.Errorf("expected published rollup, got %s", pkg.RollupState)
+	}
+}
