@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/percona/obs-dashboard/internal/model"
@@ -43,7 +44,44 @@ func QueryEvents(db *sql.DB, projectPrefix string, from, to time.Time) ([]*model
 		return nil, err
 	}
 	defer rows.Close()
+	return scanEventRows(rows)
+}
 
+// QueryEventsAny returns events whose project falls under any of the given
+// prefixes — same contract as QueryEvents (newest first, capped at 500) with
+// an OR across prefixes. Used by the products events endpoint to include the
+// shared common trees alongside the tier subtree.
+func QueryEventsAny(db *sql.DB, prefixes []string, from, to time.Time) ([]*model.Event, error) {
+	if len(prefixes) == 0 {
+		return []*model.Event{}, nil
+	}
+	conds := make([]string, len(prefixes))
+	args := make([]any, 0, len(prefixes)+2)
+	for i, p := range prefixes {
+		conds[i] = "project LIKE ?"
+		args = append(args, p+"%")
+	}
+	args = append(args, from, to)
+	rows, err := db.Query(`
+		SELECT id, type, tags, project, package,
+		       COALESCE(repo,''), COALESCE(arch,''),
+		       what, why, url, at, COALESCE(version,'')
+		FROM events
+		WHERE (`+strings.Join(conds, " OR ")+`) AND at >= ? AND at <= ?
+		ORDER BY at DESC
+		LIMIT 500`,
+		args...,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanEventRows(rows)
+}
+
+// scanEventRows scans the shared event-row shape used by QueryEvents and
+// QueryEventsAny into model.Event values.
+func scanEventRows(rows *sql.Rows) ([]*model.Event, error) {
 	events := make([]*model.Event, 0)
 	for rows.Next() {
 		e := &model.Event{}

@@ -31,7 +31,7 @@ export function oldestOpenColor(days: number, hasOpen: boolean): string {
 }
 
 // Category grouping for the overview tables: logical projects are grouped
-// into Devel / Releases / PRs sections, in that order.
+// into Devel / Staging / Releases / PRs sections, in that order.
 export type ProjectCategory = 'Devel' | 'Staging' | 'Releases' | 'PRs'
 
 export const CATEGORY_ORDER: ProjectCategory[] = ['Devel', 'Staging', 'Releases', 'PRs']

@@ -40,11 +40,22 @@ export function useEvents(apiBase: MaybeRef<string>, version: MaybeRef<string>) 
 
   function matchesContext(project: string, prefix: string): boolean {
     if (!prefix || project === prefix || project.startsWith(prefix + ':')) return true
-    if (!prefix.includes(':PR:')) return false
 
+    if (prefix.includes(':PR:')) {
+      const parts = prefix.split(':')
+      const commonPrefix = `${parts.slice(0, 4).join(':')}:common`
+      return project === commonPrefix || project.startsWith(`${commonPrefix}:`)
+    }
+    if (prefix.includes(':releases')) return false
+
+    // Product (devel/staging) boards include product-family and global
+    // common events, mirroring the packages query (root:product:common +
+    // root:common).
     const parts = prefix.split(':')
-    const commonPrefix = `${parts.slice(0, 4).join(':')}:common`
-    return project === commonPrefix || project.startsWith(`${commonPrefix}:`)
+    const family = parts.slice(0, -1).join(':')
+    const root = parts.slice(0, -2).join(':')
+    return project === `${family}:common` || project.startsWith(`${family}:common:`) ||
+      project === `${root}:common` || project.startsWith(`${root}:common:`)
   }
 
   function filterEvents(tags: string[], version: string, ctx: Context): Event[] {

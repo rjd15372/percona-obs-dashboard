@@ -27,9 +27,8 @@ const emit = defineEmits<{
       <code v-if="contexts.length <= 1" class="font-mono text-[12.5px] text-text-secondary bg-bg-muted px-[10px] py-[5px] rounded-[7px]">
         {{ selectedContext.prefix }}:{{ version }}
       </code>
-      <!-- Options are identified by contextToKey, not apiBase: contexts can
-           share an apiBase (PPG and PPG Extras both use /api/products/ppg),
-           and duplicate <option> values would make the first one win. -->
+      <!-- Key options by contextToKey — stable, unique per context (labels
+           and apiBases may change). -->
       <select
         v-else
         class="font-mono text-[12.5px] text-text-secondary bg-bg-muted px-[10px] py-[5px] rounded-[7px] border-none cursor-pointer [appearance:auto]"

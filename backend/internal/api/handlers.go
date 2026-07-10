@@ -102,7 +102,13 @@ func eventsHandler(db *sql.DB) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		prefix := "isv:percona:" + product + ":" + tier
+		// The tier subtree plus the shared common trees: common packages appear
+		// in both tier views, so their events do too.
+		prefixes := []string{
+			"isv:percona:" + product + ":" + tier,
+			"isv:percona:" + product + ":common",
+			"isv:percona:common",
+		}
 
 		from, to, err := parseTimeWindow(r)
 		if err != nil {
@@ -110,7 +116,7 @@ func eventsHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		events, err := store.QueryEvents(db, prefix, from, to)
+		events, err := store.QueryEventsAny(db, prefixes, from, to)
 		if err != nil {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return

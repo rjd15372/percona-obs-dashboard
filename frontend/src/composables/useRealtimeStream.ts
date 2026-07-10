@@ -24,12 +24,14 @@ function projectInContext(project: string, prefix: string): boolean {
     return project === commonPrefix || project.startsWith(`${commonPrefix}:`)
   }
 
-  // The main PPG board includes product packages plus product/global common
-  // packages. Release contexts are exact subtrees.
-  if (prefix.endsWith(':ppg') && !prefix.includes(':PR:') && !prefix.includes(':releases')) {
-    const root = prefix.slice(0, -':ppg'.length)
-    return project === `${prefix}:common` ||
-      project.startsWith(`${prefix}:common:`) ||
+  // Product (devel/staging) boards include product-family and global common
+  // packages alongside the tier subtree. Release contexts are exact subtrees.
+  if (!prefix.includes(':PR:') && !prefix.includes(':releases')) {
+    const parts = prefix.split(':')             // e.g. isv:percona:ppg:staging
+    const family = parts.slice(0, -1).join(':') // isv:percona:ppg
+    const root = parts.slice(0, -2).join(':')   // isv:percona
+    return project === `${family}:common` ||
+      project.startsWith(`${family}:common:`) ||
       project === `${root}:common` ||
       project.startsWith(`${root}:common:`)
   }

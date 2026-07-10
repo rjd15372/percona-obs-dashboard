@@ -592,3 +592,57 @@ func TestProductsTierRoutes(t *testing.T) {
 		}
 	}
 }
+
+// The board events feed must include the shared common trees alongside the
+// tier subtree — common packages appear in both tier views, so do their events.
+func TestEventsHandlerIncludesCommonTrees(t *testing.T) {
+	db, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	obsSrv := stubOBSServer(t)
+	obsClient := obs.NewClient(obsSrv.URL, "user", "pass")
+	router := NewRouter(db, hub.New(), obsClient, "isv:percona", new(atomic.Bool), time.Duration(0))
+
+	now := time.Now().UTC()
+	seed := func(id, project string) {
+		if err := store.AppendEvent(db, &model.Event{
+			ID: id, Type: model.EventBuildStarted, Project: project,
+			Package: "p", What: "w", At: now,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seed("evt_staging", "isv:percona:ppg:staging:17")
+	seed("evt_ppg_common", "isv:percona:ppg:common")
+	seed("evt_global_common", "isv:percona:common")
+	seed("evt_devel", "isv:percona:ppg:devel:17")
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/products/ppg/staging/17/events?window=60", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	var events []model.Event
+	if err := json.NewDecoder(rec.Body).Decode(&events); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	ids := make(map[string]bool, len(events))
+	for _, e := range events {
+		ids[e.ID] = true
+	}
+
+	for _, want := range []string{"evt_staging", "evt_ppg_common", "evt_global_common"} {
+		if !ids[want] {
+			t.Errorf("expected event %q in response, got ids %v", want, ids)
+		}
+	}
+	if ids["evt_devel"] {
+		t.Errorf("did not expect evt_devel in staging tier response, got ids %v", ids)
+	}
+}
