@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import type { Event } from '../types/api'
 import { GLYPH, GLYPH_COLOR, GLYPH_BG, TAG_STYLE, TAG_LABEL, eventTitle, timeStr, showReason, displayVersion } from '../composables/useEventDisplay'
+import { shortProject } from '../lib/project'
 
 const props = defineProps<{
   project: string
@@ -88,7 +89,7 @@ function reasonCanExpand(event: Event): boolean {
               flexShrink: '0',
             }"
           >{{ displayVersion(head.version, tags.includes('container')) }}</span>
-          <code class="font-mono text-[10px] text-text-muted">{{ project }}</code>
+          <code class="font-mono text-[10px] text-text-muted">{{ shortProject(project) }}</code>
         </div>
       </div>
     </div>

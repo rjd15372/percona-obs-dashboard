@@ -6,6 +6,7 @@ import { PROJECT_ACCENTS } from '../lib/overview'
 import StatCard from './StatCard.vue'
 import RebuildBarChart from './RebuildBarChart.vue'
 import CveExposureTable from './CveExposureTable.vue'
+import { shortProject } from '../lib/project'
 
 const props = defineProps<{
   overviewWindow: WindowKey
@@ -110,7 +111,7 @@ function accentOf(project: string): string {
           </template>
           <template #footnote>
             <template v-if="topPackage">
-              <b class="text-text-secondary">{{ topPackage.count }}</b> rebuilds · <span class="font-mono text-[10.5px]">{{ topPackage.project }}</span>
+              <b class="text-text-secondary">{{ topPackage.count }}</b> rebuilds · <span class="font-mono text-[10.5px]">{{ shortProject(topPackage.project) }}</span>
             </template>
             <template v-else>no rebuilds in this window</template>
           </template>

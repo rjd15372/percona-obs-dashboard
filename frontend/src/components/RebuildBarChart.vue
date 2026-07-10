@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { RebuildBar } from '../composables/useOverviewData'
 import { groupByCategory } from '../lib/overview'
+import { shortProject } from '../lib/project'
 
 const props = defineProps<{
   bars: RebuildBar[]
@@ -38,12 +39,12 @@ const groups = computed(() => groupByCategory(props.bars, b => b.project))
         >
           <div class="flex items-center gap-2 min-w-0">
             <span class="w-[9px] h-[9px] rounded-[3px] shrink-0" :style="{ background: accentOf(bar.project) }" />
-            <span class="font-mono text-[12.5px] font-semibold truncate">{{ bar.project }}</span>
+            <span class="font-mono text-[12.5px] font-semibold truncate">{{ shortProject(bar.project) }}</span>
           </div>
           <div
             class="h-[22px] bg-bg-muted rounded-md overflow-hidden"
             role="img"
-            :aria-label="`${bar.project} — ${bar.count} rebuilds`"
+            :aria-label="`${shortProject(bar.project)} — ${bar.count} rebuilds`"
           >
             <div
               class="h-full rounded-md transition-[width] duration-300"

@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import type { Package, Target } from '../types/api'
 import { displayVersion, TAG_LABEL } from '../composables/useEventDisplay'
 import { useRebuild } from '../composables/useRebuild'
+import { shortProject } from '../lib/project'
 
 const props = defineProps<{ pkg: Package; spotlightStates?: string[] }>()
 
@@ -226,7 +227,7 @@ const isDimmed = computed(() => !!props.spotlightStates?.length && !props.spotli
 
     <!-- Row 4: project path -->
     <div class="flex">
-      <code class="font-mono text-[10.5px] text-text-muted overflow-hidden text-ellipsis whitespace-nowrap">{{ pkg.project }}</code>
+      <code class="font-mono text-[10.5px] text-text-muted overflow-hidden text-ellipsis whitespace-nowrap">{{ shortProject(pkg.project) }}</code>
     </div>
 
     <!-- Row 5: failing targets -->

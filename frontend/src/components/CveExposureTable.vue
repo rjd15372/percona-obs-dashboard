@@ -5,6 +5,7 @@ import type { CveScan } from '../types/api'
 import { oldestOpenLabel, oldestOpenColor, groupByCategory } from '../lib/overview'
 import { latestScanTime } from '../lib/cve'
 import CveFindingsTable from './CveFindingsTable.vue'
+import { shortProject } from '../lib/project'
 
 const props = defineProps<{
   projects: OverviewProject[]
@@ -189,7 +190,7 @@ function reportScans(key: string): CveScan[] | null {
             :class="expanded[p.project] ? 'rotate-90' : ''"
           >▸</span>
           <span class="w-[9px] h-[9px] rounded-[3px] shrink-0" :style="{ background: accentOf(p.project) }" />
-          <span class="font-mono text-[13.5px] font-semibold truncate">{{ p.project }}</span>
+          <span class="font-mono text-[13.5px] font-semibold truncate">{{ shortProject(p.project) }}</span>
           <span class="text-[11px] text-text-muted whitespace-nowrap">{{ p.images.length }} images</span>
         </span>
         <span
