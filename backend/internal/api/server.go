@@ -18,6 +18,13 @@ func NewRouter(db *sql.DB, h *hub.Hub, obsClient *obs.Client, root string, telem
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	// All API requests are user-initiated: they bypass the OBS client's
+	// background rate limiter so users never queue behind polling traffic.
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			next.ServeHTTP(w, req.WithContext(obs.Interactive(req.Context())))
+		})
+	})
 	releaseArtifacts := newReleaseArtifactsCache(10 * time.Minute)
 	metadataCache := newBinaryListCache(5 * time.Minute)
 	overview := newOverviewCache(60 * time.Second)

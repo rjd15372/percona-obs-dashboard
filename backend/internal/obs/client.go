@@ -42,6 +42,7 @@ type Client struct {
 	password string
 	http     *http.Client
 	metrics  *obsMetrics
+	limiter  *minuteLimiter
 
 	pubMu    sync.Mutex
 	pubCache map[string]PublishFlags
@@ -54,12 +55,31 @@ func NewClient(base, username, password string) *Client {
 		password: password,
 		http:     &http.Client{Timeout: 30 * time.Second},
 		metrics:  &obsMetrics{counts: make(map[string]int64)},
+		limiter:  newMinuteLimiter(0),
 		pubCache: make(map[string]PublishFlags),
 	}
 }
 
-// MetricsSnapshot returns a copy of the per-operation OBS request counts.
-func (c *Client) MetricsSnapshot() map[string]int64 { return c.metrics.snapshot() }
+// SetMinuteBudget enables the background request limiter: at most n requests
+// per clock minute; further background requests block until the next window.
+// Interactive-tagged contexts (see Interactive) bypass the limiter.
+// n <= 0 disables limiting. Not safe to call concurrently with requests —
+// wire it at startup.
+func (c *Client) SetMinuteBudget(n int) {
+	c.limiter = newMinuteLimiter(n)
+}
+
+// MetricsSnapshot returns a copy of the per-operation OBS request counts,
+// plus limiter gauges when rate limiting is enabled.
+func (c *Client) MetricsSnapshot() map[string]int64 {
+	out := c.metrics.snapshot()
+	if c.limiter.budget > 0 {
+		waits, remaining := c.limiter.stats()
+		out["limiter_waits"] = waits
+		out["limiter_remaining"] = remaining
+	}
+	return out
+}
 
 func (c *Client) get(ctx context.Context, op, path string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil)
@@ -68,6 +88,11 @@ func (c *Client) get(ctx context.Context, op, path string) (*http.Response, erro
 	}
 	req.SetBasicAuth(c.username, c.password)
 	req.Header.Set("Accept", "application/xml")
+	if !isInteractive(ctx) {
+		if err := c.limiter.acquire(ctx); err != nil {
+			return nil, err
+		}
+	}
 	c.metrics.inc(op)
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -89,6 +114,11 @@ func (c *Client) getFile(ctx context.Context, op, path string) (*http.Response, 
 		return nil, err
 	}
 	req.SetBasicAuth(c.username, c.password)
+	if !isInteractive(ctx) {
+		if err := c.limiter.acquire(ctx); err != nil {
+			return nil, err
+		}
+	}
 	c.metrics.inc(op)
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -110,6 +140,11 @@ func (c *Client) post(ctx context.Context, op, path string) error {
 		return err
 	}
 	req.SetBasicAuth(c.username, c.password)
+	if !isInteractive(ctx) {
+		if err := c.limiter.acquire(ctx); err != nil {
+			return err
+		}
+	}
 	c.metrics.inc(op)
 	resp, err := c.http.Do(req)
 	if err != nil {

@@ -47,6 +47,7 @@ func run() error {
 	defer cancel()
 
 	obsClient := obs.NewClient(cfg.OBS.BaseURL, cfg.OBS.Username, cfg.OBS.Password)
+	obsClient.SetMinuteBudget(cfg.OBS.MinuteRequestBudget)
 	h := hub.New()
 
 	scanner := cve.NewScanner(db, h, 2)
