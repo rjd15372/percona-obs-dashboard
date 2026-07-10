@@ -13,16 +13,42 @@ import (
 	"time"
 )
 
-// obsMetrics counts OBS requests by operation label.
+// obsMetrics counts OBS requests by operation label, and into a ring of
+// per-second buckets for the trailing-minute request rate.
 type obsMetrics struct {
 	mu     sync.Mutex
 	counts map[string]int64
+	now    func() time.Time
+
+	ringSec  [60]int64 // unix second each bucket currently holds
+	ringHits [60]int64 // request count observed within that second
 }
 
 func (m *obsMetrics) inc(op string) {
 	m.mu.Lock()
 	m.counts[op]++
+	sec := m.now().Unix()
+	i := sec % 60
+	if m.ringSec[i] != sec {
+		m.ringSec[i] = sec
+		m.ringHits[i] = 0
+	}
+	m.ringHits[i]++
 	m.mu.Unlock()
+}
+
+// ratePerSecond returns requests/second over the trailing 60 seconds.
+func (m *obsMetrics) ratePerSecond() float64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cutoff := m.now().Unix() - 60
+	var total int64
+	for i := range m.ringSec {
+		if m.ringSec[i] > cutoff {
+			total += m.ringHits[i]
+		}
+	}
+	return float64(total) / 60
 }
 
 func (m *obsMetrics) snapshot() map[string]int64 {
@@ -54,7 +80,7 @@ func NewClient(base, username, password string) *Client {
 		username: username,
 		password: password,
 		http:     &http.Client{Timeout: 30 * time.Second},
-		metrics:  &obsMetrics{counts: make(map[string]int64)},
+		metrics:  &obsMetrics{counts: make(map[string]int64), now: time.Now},
 		limiter:  newMinuteLimiter(0),
 		pubCache: make(map[string]PublishFlags),
 	}
@@ -90,6 +116,12 @@ func (c *Client) LimiterStats() LimiterStats {
 	}
 	waits, remaining := c.limiter.stats()
 	return LimiterStats{Enabled: true, Budget: c.limiter.budget, Remaining: remaining, Waits: waits}
+}
+
+// RatePerSecond returns OBS requests per second over the trailing minute,
+// counting both background and interactive requests.
+func (c *Client) RatePerSecond() float64 {
+	return c.metrics.ratePerSecond()
 }
 
 func (c *Client) get(ctx context.Context, op, path string) (*http.Response, error) {

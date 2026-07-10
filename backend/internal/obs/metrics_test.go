@@ -3,6 +3,7 @@ package obs
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 func TestMetricsSnapshotExcludesLimiterKeys(t *testing.T) {
@@ -39,5 +40,47 @@ func TestLimiterStatsEnabled(t *testing.T) {
 	ls := c.LimiterStats()
 	if !ls.Enabled || ls.Budget != 5 || ls.Remaining != 4 || ls.Waits != 0 {
 		t.Fatalf("stats = %+v, want {Enabled:true Budget:5 Remaining:4 Waits:0}", ls)
+	}
+}
+
+func TestRatePerSecondWindow(t *testing.T) {
+	base := time.Unix(1_000_000, 0)
+	cur := base
+	m := &obsMetrics{counts: make(map[string]int64), now: func() time.Time { return cur }}
+
+	if got := m.ratePerSecond(); got != 0 {
+		t.Fatalf("rate with no traffic = %v, want 0", got)
+	}
+
+	for i := 0; i < 120; i++ {
+		m.inc("build_results")
+	}
+	if got := m.ratePerSecond(); got != 2.0 {
+		t.Fatalf("rate = %v, want 2.0 (120 reqs / 60s)", got)
+	}
+
+	cur = base.Add(30 * time.Second)
+	if got := m.ratePerSecond(); got != 2.0 {
+		t.Fatalf("rate at +30s = %v, want 2.0 (still in window)", got)
+	}
+
+	cur = base.Add(61 * time.Second)
+	if got := m.ratePerSecond(); got != 0 {
+		t.Fatalf("rate at +61s = %v, want 0 (window slid past)", got)
+	}
+}
+
+func TestRatePerSecondBucketReuse(t *testing.T) {
+	base := time.Unix(2_000_000, 0)
+	cur := base
+	m := &obsMetrics{counts: make(map[string]int64), now: func() time.Time { return cur }}
+
+	m.inc("build_results")
+	cur = base.Add(60 * time.Second) // same ring slot, different second
+	m.inc("build_results")
+
+	want := float64(1) / 60
+	if got := m.ratePerSecond(); got != want {
+		t.Fatalf("rate = %v, want %v (stale bucket must be zeroed on reuse)", got, want)
 	}
 }
