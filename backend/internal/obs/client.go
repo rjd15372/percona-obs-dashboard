@@ -413,6 +413,7 @@ func (c *Client) BuildResults(ctx context.Context, project string) ([]PackageBui
 				Arch:    r.Arch,
 				Package: s.Package,
 				State:   s.Code,
+				Details: s.Details,
 			})
 		}
 	}

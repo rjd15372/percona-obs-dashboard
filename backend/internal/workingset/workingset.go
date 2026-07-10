@@ -24,11 +24,20 @@ type entry struct {
 	nextDue  time.Time
 }
 
+// Job is a unit of work for the worker pool: one or more packages of the
+// same project. ProjectFetch marks that the worker should make a single
+// project-level _result call and process every package with the result.
+type Job struct {
+	Project      string
+	ProjectFetch bool
+	Pkgs         []*model.Package
+}
+
 type WorkingSet struct {
 	mu       sync.Mutex
 	entries  map[string]*entry
 	inflight map[string]bool
-	dispatch chan *model.Package
+	dispatch chan Job
 
 	base           time.Duration
 	max            time.Duration
@@ -44,7 +53,7 @@ func New(queueSize int, base, max time.Duration, batchThreshold int) *WorkingSet
 	return &WorkingSet{
 		entries:        make(map[string]*entry),
 		inflight:       make(map[string]bool),
-		dispatch:       make(chan *model.Package, queueSize),
+		dispatch:       make(chan Job, queueSize),
 		base:           base,
 		max:            max,
 		batchThreshold: batchThreshold,
@@ -85,7 +94,9 @@ func (ws *WorkingSet) Add(pkg *model.Package) {
 		return
 	}
 	ws.entries[key] = &entry{pkg: pkg, interval: ws.base, nextDue: ws.now()}
-	ws.send(key, pkg)
+	if !ws.inflight[key] {
+		ws.sendJob(Job{Pkgs: []*model.Package{pkg}})
+	}
 }
 
 // Signal replaces the stored package, resets its schedule, and dispatches
@@ -96,7 +107,9 @@ func (ws *WorkingSet) Signal(pkg *model.Package) {
 	ws.mu.Lock()
 	defer ws.mu.Unlock()
 	ws.entries[key] = &entry{pkg: pkg, interval: ws.base, nextDue: ws.now()}
-	ws.send(key, pkg)
+	if !ws.inflight[key] {
+		ws.sendJob(Job{Pkgs: []*model.Package{pkg}})
+	}
 }
 
 func (ws *WorkingSet) Remove(key string) {
@@ -128,7 +141,7 @@ func (ws *WorkingSet) Done(key string, changed bool) {
 	e.nextDue = ws.now().Add(e.interval)
 }
 
-func (ws *WorkingSet) Dispatch() <-chan *model.Package {
+func (ws *WorkingSet) Dispatch() <-chan Job {
 	return ws.dispatch
 }
 
@@ -144,16 +157,29 @@ func (ws *WorkingSet) Stats() Stats {
 }
 
 // DispatchDue enqueues every entry whose nextDue has passed and that is not
-// already in-flight. Called by the scheduler tick; exported for tests.
+// already in-flight. Due packages of the same project are batched into one
+// project-fetch job when the group reaches batchThreshold; below that,
+// per-package fetches are cheaper than a project-level _result. Called by
+// the scheduler tick; exported for tests.
 func (ws *WorkingSet) DispatchDue() {
 	ws.mu.Lock()
 	defer ws.mu.Unlock()
 	now := ws.now()
+	byProject := make(map[string][]*model.Package)
 	for key, e := range ws.entries {
-		if e.nextDue.After(now) {
+		if e.nextDue.After(now) || ws.inflight[key] {
 			continue
 		}
-		ws.send(key, e.pkg)
+		byProject[e.pkg.Project] = append(byProject[e.pkg.Project], e.pkg)
+	}
+	for project, pkgs := range byProject {
+		if ws.batchThreshold > 0 && len(pkgs) >= ws.batchThreshold {
+			ws.sendJob(Job{Project: project, ProjectFetch: true, Pkgs: pkgs})
+			continue
+		}
+		for _, p := range pkgs {
+			ws.sendJob(Job{Pkgs: []*model.Package{p}})
+		}
 	}
 }
 
@@ -173,16 +199,16 @@ func (ws *WorkingSet) StartScheduler(ctx context.Context) {
 	}()
 }
 
-// send attempts a non-blocking enqueue. Drops the send if the package is
-// already in-flight (being processed by a worker) or if the channel is full
-// (retried on the next tick). Must be called with ws.mu held.
-func (ws *WorkingSet) send(key string, pkg *model.Package) {
-	if ws.inflight[key] {
-		return
-	}
+// sendJob attempts a non-blocking enqueue and marks every package in the job
+// as in-flight on success. Drops the job if the channel is full — the
+// packages stay due and are retried on the next tick. Must be called with
+// ws.mu held. Callers must ensure no package in the job is already in-flight.
+func (ws *WorkingSet) sendJob(job Job) {
 	select {
-	case ws.dispatch <- pkg:
-		ws.inflight[key] = true
+	case ws.dispatch <- job:
+		for _, p := range job.Pkgs {
+			ws.inflight[p.Project+"/"+p.Name] = true
+		}
 	default:
 	}
 }

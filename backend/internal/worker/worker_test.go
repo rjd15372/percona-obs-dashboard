@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -989,5 +991,96 @@ func TestPoolRoutesDevVsReleaseTasks(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 	if len(notifyCh) > 0 {
 		t.Errorf("expected no hub notifications for release package, got %d", len(notifyCh))
+	}
+}
+
+func TestProcessJobBatchFetchesProjectOnce(t *testing.T) {
+	var resultHits atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/_meta"):
+			fmt.Fprint(w, `<project name="proj"/>`)
+		case strings.HasSuffix(r.URL.Path, "/_result"):
+			resultHits.Add(1)
+			fmt.Fprint(w, `<resultlist>
+              <result project="proj" repository="repo" arch="x86_64" state="published">
+                <status package="pkg-a" code="succeeded"/>
+                <status package="pkg-b" code="succeeded"/>
+              </result>
+            </resultlist>`)
+		default:
+			http.Error(w, "unexpected: "+r.URL.Path, http.StatusInternalServerError)
+		}
+	}))
+	defer ts.Close()
+
+	db := openDB(t)
+	h := hubpkg.New()
+	ws := workingset.New(10, 30*time.Second, 5*time.Minute, 2)
+	c := obs.NewClient(ts.URL, "u", "p")
+
+	pkgA := &model.Package{Project: "proj", Name: "pkg-a", RollupState: model.RollupBuilding,
+		Targets: []model.Target{{Repo: "repo", Arch: "x86_64", State: "building"}}}
+	pkgB := &model.Package{Project: "proj", Name: "pkg-b", RollupState: model.RollupBuilding,
+		Targets: []model.Target{{Repo: "repo", Arch: "x86_64", State: "building"}}}
+
+	p := worker.NewPool(1, []worker.Task{obs.BuildStateTask{}}, nil, c, db, h, ws, nil)
+	p.ProcessJob(context.Background(), workingset.Job{
+		Project: "proj", ProjectFetch: true, Pkgs: []*model.Package{pkgA, pkgB},
+	})
+
+	if got := resultHits.Load(); got != 1 {
+		t.Errorf("_result requests = %d, want exactly 1 for the whole batch", got)
+	}
+	if pkgA.RollupState != model.RollupSucceeded || pkgB.RollupState != model.RollupSucceeded {
+		t.Errorf("rollups = %s/%s, want succeeded/succeeded", pkgA.RollupState, pkgB.RollupState)
+	}
+}
+
+func TestProcessJobBatchFallsBackPerPackageOnFetchError(t *testing.T) {
+	var projectResultHits, packageResultHits atomic.Int32
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/_meta"):
+			fmt.Fprint(w, `<project name="proj"/>`)
+		case strings.HasSuffix(r.URL.Path, "/_result") && r.URL.Query().Get("package") == "":
+			projectResultHits.Add(1)
+			http.Error(w, "boom", http.StatusInternalServerError)
+		case strings.HasSuffix(r.URL.Path, "/_result"):
+			packageResultHits.Add(1)
+			fmt.Fprintf(w, `<resultlist>
+              <result project="proj" repository="repo" arch="x86_64" state="published">
+                <status package="%s" code="succeeded"/>
+              </result>
+            </resultlist>`, r.URL.Query().Get("package"))
+		default:
+			http.Error(w, "unexpected: "+r.URL.Path, http.StatusInternalServerError)
+		}
+	}))
+	defer ts.Close()
+
+	db := openDB(t)
+	h := hubpkg.New()
+	ws := workingset.New(10, 30*time.Second, 5*time.Minute, 2)
+	c := obs.NewClient(ts.URL, "u", "p")
+
+	pkgA := &model.Package{Project: "proj", Name: "pkg-a", RollupState: model.RollupBuilding,
+		Targets: []model.Target{{Repo: "repo", Arch: "x86_64", State: "building"}}}
+	pkgB := &model.Package{Project: "proj", Name: "pkg-b", RollupState: model.RollupBuilding,
+		Targets: []model.Target{{Repo: "repo", Arch: "x86_64", State: "building"}}}
+
+	p := worker.NewPool(1, []worker.Task{obs.BuildStateTask{}}, nil, c, db, h, ws, nil)
+	p.ProcessJob(context.Background(), workingset.Job{
+		Project: "proj", ProjectFetch: true, Pkgs: []*model.Package{pkgA, pkgB},
+	})
+
+	if projectResultHits.Load() != 1 {
+		t.Errorf("project _result hits = %d, want 1", projectResultHits.Load())
+	}
+	if packageResultHits.Load() != 2 {
+		t.Errorf("per-package _result hits = %d, want 2 (fallback)", packageResultHits.Load())
+	}
+	if pkgA.RollupState != model.RollupSucceeded || pkgB.RollupState != model.RollupSucceeded {
+		t.Errorf("rollups = %s/%s, want succeeded/succeeded", pkgA.RollupState, pkgB.RollupState)
 	}
 }

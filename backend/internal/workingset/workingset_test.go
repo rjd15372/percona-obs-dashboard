@@ -31,33 +31,67 @@ func (c *fakeClock) Advance(d time.Duration) {
 	c.mu.Unlock()
 }
 
-func drain(t *testing.T, ws *workingset.WorkingSet) *model.Package {
+func drain(t *testing.T, ws *workingset.WorkingSet) workingset.Job {
 	t.Helper()
 	select {
-	case p := <-ws.Dispatch():
-		return p
+	case j := <-ws.Dispatch():
+		return j
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("expected dispatch but nothing received")
-		return nil
+		return workingset.Job{}
 	}
 }
 
 func expectNoDispatch(t *testing.T, ws *workingset.WorkingSet) {
 	t.Helper()
 	select {
-	case p := <-ws.Dispatch():
-		t.Fatalf("unexpected dispatch of %s", p.Name)
+	case j := <-ws.Dispatch():
+		t.Fatalf("unexpected dispatch of job with %d pkgs", len(j.Pkgs))
 	case <-time.After(50 * time.Millisecond):
 	}
+}
+
+func TestDispatchDueBatchesByProject(t *testing.T) {
+	clock := &fakeClock{t: time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)}
+	ws := workingset.NewWithClock(10, 30*time.Second, 5*time.Minute, 3, clock.Now)
+
+	ws.Seed([]*model.Package{
+		pkg("proj-a", "p1", model.RollupBuilding),
+		pkg("proj-a", "p2", model.RollupBuilding),
+		pkg("proj-a", "p3", model.RollupBuilding),
+		pkg("proj-b", "q1", model.RollupBuilding),
+	})
+	ws.DispatchDue()
+
+	var batch *workingset.Job
+	var singles []workingset.Job
+	for i := 0; i < 2; i++ {
+		j := drain(t, ws)
+		if j.ProjectFetch {
+			batch = &j
+		} else {
+			singles = append(singles, j)
+		}
+	}
+	if batch == nil {
+		t.Fatal("expected one batch job for proj-a")
+	}
+	if batch.Project != "proj-a" || len(batch.Pkgs) != 3 {
+		t.Errorf("batch = %s/%d pkgs, want proj-a/3", batch.Project, len(batch.Pkgs))
+	}
+	if len(singles) != 1 || len(singles[0].Pkgs) != 1 || singles[0].Pkgs[0].Project != "proj-b" {
+		t.Errorf("expected one single-package job for proj-b, got %+v", singles)
+	}
+	expectNoDispatch(t, ws) // everything dispatched exactly once
 }
 
 func TestAddNewPackage(t *testing.T) {
 	ws := workingset.New(10, 30*time.Second, 5*time.Minute, 4)
 	ws.Add(pkg("proj", "pkg-a", model.RollupFailed))
 	select {
-	case p := <-ws.Dispatch():
-		if p.Name != "pkg-a" {
-			t.Errorf("unexpected package %s", p.Name)
+	case j := <-ws.Dispatch():
+		if j.Pkgs[0].Name != "pkg-a" {
+			t.Errorf("unexpected package %s", j.Pkgs[0].Name)
 		}
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("expected dispatch but nothing received")
@@ -84,9 +118,9 @@ func TestSignalDispatchesAfterDone(t *testing.T) {
 	ws.Done("proj/pkg-a", false)                          // simulate worker completion
 	ws.Signal(pkg("proj", "pkg-a", model.RollupBuilding)) // should dispatch now
 	select {
-	case p := <-ws.Dispatch():
-		if p.Name != "pkg-a" {
-			t.Errorf("unexpected package %s", p.Name)
+	case j := <-ws.Dispatch():
+		if j.Pkgs[0].Name != "pkg-a" {
+			t.Errorf("unexpected package %s", j.Pkgs[0].Name)
 		}
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("Signal did not dispatch after Done")
@@ -143,9 +177,9 @@ func TestStartScheduler(t *testing.T) {
 	defer cancel()
 	ws.StartScheduler(ctx)
 	select {
-	case p := <-ws.Dispatch():
-		if p.Name != "pkg-a" {
-			t.Errorf("unexpected package %s", p.Name)
+	case j := <-ws.Dispatch():
+		if j.Pkgs[0].Name != "pkg-a" {
+			t.Errorf("unexpected package %s", j.Pkgs[0].Name)
 		}
 	case <-time.After(200 * time.Millisecond):
 		t.Fatal("scheduler did not dispatch seeded package")

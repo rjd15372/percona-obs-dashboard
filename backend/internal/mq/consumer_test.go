@@ -91,7 +91,8 @@ func TestBuildUnchangedWakesWorkingSet(t *testing.T) {
 	})
 
 	select {
-	case got := <-ws.Dispatch():
+	case job := <-ws.Dispatch():
+		got := job.Pkgs[0]
 		if got.Name != "pkg-a" {
 			t.Fatalf("dispatched %q, want pkg-a", got.Name)
 		}
@@ -141,16 +142,16 @@ func TestRepoPublishedWakesOnlyMatchingRepo(t *testing.T) {
 	})
 
 	select {
-	case got := <-ws.Dispatch():
-		if got.Name != "waiting-a" {
+	case job := <-ws.Dispatch():
+		if got := job.Pkgs[0]; got.Name != "waiting-a" {
 			t.Fatalf("dispatched %q, want waiting-a", got.Name)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("repo.published did not wake the awaiting package")
 	}
 	select {
-	case got := <-ws.Dispatch():
-		t.Fatalf("unexpected extra dispatch: %s", got.Name)
+	case job := <-ws.Dispatch():
+		t.Fatalf("unexpected extra dispatch: %s", job.Pkgs[0].Name)
 	case <-time.After(100 * time.Millisecond):
 	}
 }

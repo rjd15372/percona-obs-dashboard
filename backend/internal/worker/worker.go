@@ -50,14 +50,47 @@ func (p *Pool) run(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case pkg, ok := <-p.ws.Dispatch():
+		case job, ok := <-p.ws.Dispatch():
 			if !ok {
 				return
 			}
-			key := pkg.Project + "/" + pkg.Name
-			changed := p.ProcessOnce(ctx, pkg, nil)
-			p.ws.Done(key, changed)
+			p.ProcessJob(ctx, job)
 		}
+	}
+}
+
+// ProcessJob runs the task chain for every package in job. For project-fetch
+// jobs it makes one project-level _result call and injects the response into
+// each package's pass; if that fetch fails, every package falls back to
+// per-package fetches. Exported for testing.
+func (p *Pool) ProcessJob(ctx context.Context, job workingset.Job) {
+	var envs map[string]*obs.Env
+	if job.ProjectFetch && p.client != nil {
+		results, repoStates, err := p.client.BuildResults(ctx, job.Project)
+		if err != nil {
+			slog.Warn("worker: project batch fetch, falling back to per-package",
+				"project", job.Project, "err", err)
+		} else {
+			byPkg := make(map[string][]obs.PackageBuildState)
+			for _, r := range results {
+				byPkg[r.Package] = append(byPkg[r.Package], r)
+			}
+			envs = make(map[string]*obs.Env, len(job.Pkgs))
+			for _, pkg := range job.Pkgs {
+				if states, ok := byPkg[pkg.Name]; ok {
+					envs[pkg.Name] = &obs.Env{BuildStates: states, RepoStates: repoStates}
+				}
+			}
+		}
+	}
+	for _, pkg := range job.Pkgs {
+		key := pkg.Project + "/" + pkg.Name
+		if ctx.Err() != nil {
+			p.ws.Done(key, false) // shutdown: release in-flight without processing
+			continue
+		}
+		changed := p.ProcessOnce(ctx, pkg, envs[pkg.Name])
+		p.ws.Done(key, changed)
 	}
 }
 
