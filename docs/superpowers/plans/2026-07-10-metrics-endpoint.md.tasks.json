@@ -5,14 +5,14 @@
       "id": 1,
       "nativeTaskId": 19,
       "subject": "Task 1: obs.LimiterStats accessor + pure MetricsSnapshot()",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** Limiter gauges move out of the metrics snapshot into a typed accessor.\n\n**Files:**\n- Create: `internal/obs/metrics_test.go`\n- Modify: `internal/obs/client.go:72-82` (`MetricsSnapshot`), plus new type/method after it\n\n**Acceptance Criteria:**\n- [ ] `MetricsSnapshot()` never contains `limiter_remaining`/`limiter_waits` keys, even with a budget set\n- [ ] `LimiterStats()` with no budget returns the zero value (`Enabled: false`)\n- [ ] `LimiterStats()` with budget 5 and one acquired slot returns `{Enabled: true, Budget: 5, Remaining: 4, Waits: 0}`\n- [ ] `go test ./internal/obs/ -run 'TestMetricsSnapshot|TestLimiterStats' -v` passes\n\n**Verify:** `cd backend && go test ./internal/obs/ -v` -> all PASS\n\n**Steps:** TDD per plan Task 1 (full code in docs/superpowers/plans/2026-07-10-metrics-endpoint.md). Commit: git commit -s, never Co-Authored-By.\n\n```json:metadata\n{\"files\": [\"backend/internal/obs/client.go\", \"backend/internal/obs/metrics_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/obs/ -v\", \"acceptanceCriteria\": [\"MetricsSnapshot() contains no limiter_* keys with budget set\", \"LimiterStats() zero value when disabled\", \"LimiterStats() {true,5,4,0} after one acquire on budget 5\", \"go test ./internal/obs/ passes\"], \"modelTier\": \"mechanical\"}\n```"
     },
     {
       "id": 2,
       "nativeTaskId": 20,
       "subject": "Task 2: trailing-minute request rate (RatePerSecond)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         1
       ],
@@ -22,7 +22,7 @@
       "id": 3,
       "nativeTaskId": 21,
       "subject": "Task 3: telemetry log line - top-level limiter fields",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         1
       ],
@@ -32,7 +32,7 @@
       "id": 4,
       "nativeTaskId": 22,
       "subject": "Task 4: GET /api/metrics handler + wiring",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         1,
         2,
@@ -41,5 +41,5 @@
       "description": "**Goal:** New endpoint composing OBS counts, rate, limiter gauges, and working-set stats into the agreed JSON shape.\n\n**Files:**\n- Create: `internal/api/metrics.go`\n- Create: `internal/api/metrics_test.go`\n- Modify: `internal/api/server.go:17,57-58` (signature + route)\n- Modify: `internal/api/handlers_test.go:41,274,606` (existing NewRouter calls gain the ws arg)\n- Modify: `cmd/obsboard/main.go:102` (NewRouter call)\n\n**Acceptance Criteria:**\n- [ ] `GET /api/metrics` returns 200 with `Content-Type: application/json`\n- [ ] Response has `obs.total`, `obs.by_endpoint`, `obs.req_per_s`, `limiter.{enabled,budget,remaining,waits}`, `working_set.{packages,inflight,by_state}`\n- [ ] With budget 60 and no traffic: `limiter` = `{enabled:true, budget:60, remaining:60, waits:0}`, `obs.total` = 0, `obs.req_per_s` = 0\n- [ ] Working-set fields mirror the stub Statter's values\n- [ ] `go test ./...` passes and `go build ./...` succeeds\n\n**Verify:** `cd backend && go test ./internal/api/ -run TestMetricsHandler -v && go test ./... && go build ./...` -> all PASS\n\n**Steps:** TDD per plan Task 4 (full code in docs/superpowers/plans/2026-07-10-metrics-endpoint.md). Commit: git commit -s, never Co-Authored-By.\n\n```json:metadata\n{\"files\": [\"backend/internal/api/metrics.go\", \"backend/internal/api/metrics_test.go\", \"backend/internal/api/server.go\", \"backend/internal/api/handlers_test.go\", \"backend/cmd/obsboard/main.go\"], \"verifyCommand\": \"cd backend && go test ./internal/api/ -run TestMetricsHandler -v && go test ./... && go build ./...\", \"acceptanceCriteria\": [\"200 + application/json from GET /api/metrics\", \"JSON shape has obs/limiter/working_set sections per spec\", \"budget 60 no traffic -> limiter {true,60,60,0}, obs.total 0, req_per_s 0\", \"working_set mirrors stub Statter\", \"full go test + build pass\"], \"modelTier\": \"standard\"}\n```"
     }
   ],
-  "lastUpdated": "2026-07-10T15:23:05Z"
+  "lastUpdated": "2026-07-10T15:42:11Z"
 }
