@@ -1,0 +1,71 @@
+package api
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/percona/obs-dashboard/internal/obs"
+	"github.com/percona/obs-dashboard/internal/workingset"
+)
+
+// Statter provides working-set stats for the metrics endpoint.
+type Statter interface{ Stats() workingset.Stats }
+
+type metricsResponse struct {
+	OBS        obsSection     `json:"obs"`
+	Limiter    limiterSection `json:"limiter"`
+	WorkingSet wsSection      `json:"working_set"`
+}
+
+type obsSection struct {
+	Total      int64            `json:"total"`
+	ByEndpoint map[string]int64 `json:"by_endpoint"`
+	ReqPerS    float64          `json:"req_per_s"`
+}
+
+type limiterSection struct {
+	Enabled   bool  `json:"enabled"`
+	Budget    int   `json:"budget"`
+	Remaining int64 `json:"remaining"`
+	Waits     int64 `json:"waits"`
+}
+
+type wsSection struct {
+	Packages int            `json:"packages"`
+	Inflight int            `json:"inflight"`
+	ByState  map[string]int `json:"by_state"`
+}
+
+// metricsHandler handles GET /api/metrics: absolute OBS request counts,
+// the trailing-minute request rate, limiter gauges, and working-set stats.
+func metricsHandler(obsClient *obs.Client, ws Statter) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		byEndpoint := obsClient.MetricsSnapshot()
+		var total int64
+		for _, v := range byEndpoint {
+			total += v
+		}
+		ls := obsClient.LimiterStats()
+		s := ws.Stats()
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(metricsResponse{
+			OBS: obsSection{
+				Total:      total,
+				ByEndpoint: byEndpoint,
+				ReqPerS:    obsClient.RatePerSecond(),
+			},
+			Limiter: limiterSection{
+				Enabled:   ls.Enabled,
+				Budget:    ls.Budget,
+				Remaining: ls.Remaining,
+				Waits:     ls.Waits,
+			},
+			WorkingSet: wsSection{
+				Packages: s.Total,
+				Inflight: s.Inflight,
+				ByState:  s.ByState,
+			},
+		})
+	}
+}

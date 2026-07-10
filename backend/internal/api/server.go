@@ -14,7 +14,7 @@ import (
 )
 
 // NewRouter creates the chi router with all API routes registered.
-func NewRouter(db *sql.DB, h *hub.Hub, obsClient *obs.Client, root string, telemetryEnabled *atomic.Bool, telemetryInterval time.Duration) http.Handler {
+func NewRouter(db *sql.DB, h *hub.Hub, obsClient *obs.Client, root string, ws Statter, telemetryEnabled *atomic.Bool, telemetryInterval time.Duration) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
@@ -56,6 +56,8 @@ func NewRouter(db *sql.DB, h *hub.Hub, obsClient *obs.Client, root string, telem
 
 	r.Get("/api/telemetry", telemetryStatusHandler(telemetryEnabled, telemetryInterval))
 	r.Post("/api/telemetry", telemetrySetHandler(telemetryEnabled))
+
+	r.Get("/api/metrics", metricsHandler(obsClient, ws))
 
 	r.Get("/api/overview", overviewHandler(db, root, overview))
 	r.Get("/api/cve/scans", cveScansHandler(db))
