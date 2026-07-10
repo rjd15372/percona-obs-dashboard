@@ -1,0 +1,13 @@
+{
+  "planPath": "docs/superpowers/plans/2026-07-10-strip-root-project-prefix.md",
+  "tasks": [
+    {
+      "id": 1,
+      "nativeTaskId": 10,
+      "subject": "Task 1: shortProject() helper + apply to all display sites",
+      "status": "pending",
+      "description": "**Goal:** Create the `shortProject()` helper and wrap the seven visible-text display sites so project labels render without `isv:percona:`.\n\n**Files:**\n- Create: `frontend/src/lib/project.ts`\n- Modify: `frontend/src/components/PackageCard.vue:229`\n- Modify: `frontend/src/components/EventRow.vue:57`\n- Modify: `frontend/src/components/PackageEventGroup.vue:91`\n- Modify: `frontend/src/components/GreenStrip.vue:56`\n- Modify: `frontend/src/components/RebuildBarChart.vue:41,46`\n- Modify: `frontend/src/components/CveExposureTable.vue:192`\n- Modify: `frontend/src/components/OverviewPanel.vue:113`\n\n**Acceptance Criteria:**\n- [ ] `frontend/src/lib/project.ts` exports `shortProject`; `shortProject('isv:percona:ppg:staging')` returns `'ppg:staging'` and `shortProject('other:proj')` returns `'other:proj'` unchanged\n- [ ] All seven listed template interpolations render through `shortProject(...)`\n- [ ] No `href`, `projectUrl`/`packageUrl` argument, or non-display logic is wrapped — `grep -rn \"shortProject\" frontend/src` shows only the helper file and the seven display sites (plus imports)\n- [ ] `cd frontend && npm run build` exits 0\n\n**Verify:** `cd frontend && npm run build` → `vue-tsc` reports no errors and `vite build` completes with exit code 0\n\n**Steps:** see plan doc Task 1 (Steps 1-12, full code included).\n\n```json:metadata\n{\"files\": [\"frontend/src/lib/project.ts\", \"frontend/src/components/PackageCard.vue\", \"frontend/src/components/EventRow.vue\", \"frontend/src/components/PackageEventGroup.vue\", \"frontend/src/components/GreenStrip.vue\", \"frontend/src/components/RebuildBarChart.vue\", \"frontend/src/components/CveExposureTable.vue\", \"frontend/src/components/OverviewPanel.vue\"], \"verifyCommand\": \"cd frontend && npm run build\", \"acceptanceCriteria\": [\"shortProject('isv:percona:ppg:staging') === 'ppg:staging' and non-prefixed strings pass through unchanged\", \"all seven display interpolations wrapped with shortProject(...)\", \"no href or logic call wrapped (grep scope check)\", \"npm run build exits 0\"], \"modelTier\": \"mechanical\"}\n```"
+    }
+  ],
+  "lastUpdated": "2026-07-10T14:33:30Z"
+}
