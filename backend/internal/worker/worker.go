@@ -20,7 +20,7 @@ import (
 // Task is implemented by types that enrich a package's state from OBS.
 // Implementations live in obs/tasks.go to avoid circular imports.
 type Task interface {
-	Run(ctx context.Context, client *obs.Client, pkg *model.Package) error
+	Run(ctx context.Context, client *obs.Client, pkg *model.Package, env *obs.Env) error
 }
 
 type Pool struct {
@@ -55,7 +55,7 @@ func (p *Pool) run(ctx context.Context) {
 				return
 			}
 			key := pkg.Project + "/" + pkg.Name
-			p.ProcessOnce(ctx, pkg)
+			p.ProcessOnce(ctx, pkg, nil)
 			p.ws.Done(key)
 		}
 	}
@@ -65,7 +65,7 @@ func (p *Pool) run(ctx context.Context) {
 // pkg.IsRelease), upserts to DB, emits build events and SSE for real-time
 // packages only, and removes pkg from the working set when rollup reaches published.
 // Exported for testing.
-func (p *Pool) ProcessOnce(ctx context.Context, pkg *model.Package) {
+func (p *Pool) ProcessOnce(ctx context.Context, pkg *model.Package, env *obs.Env) {
 	// Capture now before tasks run so state_changed_at reflects when the state
 	// was observed, not when the (potentially slow) task chain finished.
 	now := time.Now().UTC()
@@ -90,7 +90,7 @@ func (p *Pool) ProcessOnce(ctx context.Context, pkg *model.Package) {
 		tasks = p.releaseTasks
 	}
 	for _, t := range tasks {
-		if err := t.Run(ctx, p.client, pkg); err != nil {
+		if err := t.Run(ctx, p.client, pkg, env); err != nil {
 			slog.Warn("worker: task error",
 				"task", fmt.Sprintf("%T", t),
 				"pkg", pkg.Project+"/"+pkg.Name,

@@ -24,7 +24,7 @@ type captureTask struct {
 	seen []*model.Package
 }
 
-func (t *captureTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package) error {
+func (t *captureTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package, _ *obs.Env) error {
 	t.mu.Lock()
 	t.seen = append(t.seen, pkg)
 	t.mu.Unlock()
@@ -33,20 +33,20 @@ func (t *captureTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package) 
 
 type errorTask struct{}
 
-func (t errorTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package) error {
+func (t errorTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package, _ *obs.Env) error {
 	return errors.New("task error")
 }
 
 type succeedingTask struct{}
 
-func (t succeedingTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package) error {
+func (t succeedingTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package, _ *obs.Env) error {
 	pkg.RollupState = model.RollupSucceeded
 	return nil
 }
 
 type publishedTask struct{}
 
-func (t publishedTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package) error {
+func (t publishedTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package, _ *obs.Env) error {
 	pkg.RollupState = model.RollupPublished
 	return nil
 }
@@ -261,7 +261,7 @@ func TestPoolContinuesAfterTaskError(t *testing.T) {
 // setReasonTask sets BuildReason on building targets.
 type setReasonTask struct{ reason string }
 
-func (t setReasonTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package) error {
+func (t setReasonTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package, _ *obs.Env) error {
 	for i, target := range pkg.Targets {
 		if target.State == "building" {
 			pkg.Targets[i].BuildReason = t.reason
@@ -273,7 +273,7 @@ func (t setReasonTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package)
 // setTargetReasonTask sets BuildReason on a specific target unconditionally.
 type setTargetReasonTask struct{ repo, arch, reason string }
 
-func (t setTargetReasonTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package) error {
+func (t setTargetReasonTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package, _ *obs.Env) error {
 	for i, target := range pkg.Targets {
 		if target.Repo == t.repo && target.Arch == t.arch {
 			pkg.Targets[i].BuildReason = t.reason
@@ -285,7 +285,7 @@ func (t setTargetReasonTask) Run(_ context.Context, _ *obs.Client, pkg *model.Pa
 // setStateTask transitions a specific target to a new state.
 type setStateTask struct{ repo, arch, state, details string }
 
-func (t setStateTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package) error {
+func (t setStateTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package, _ *obs.Env) error {
 	for i, target := range pkg.Targets {
 		if target.Repo == t.repo && target.Arch == t.arch {
 			pkg.Targets[i].State = t.state
@@ -298,7 +298,7 @@ func (t setStateTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package) 
 // setPublishedTask marks a target as published.
 type setPublishedTask struct{ repo, arch string }
 
-func (t setPublishedTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package) error {
+func (t setPublishedTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package, _ *obs.Env) error {
 	for i, target := range pkg.Targets {
 		if target.Repo == t.repo && target.Arch == t.arch {
 			pkg.Targets[i].Published = true
@@ -334,7 +334,7 @@ func TestProcessOnceEmitsBuildStarted(t *testing.T) {
 	}
 
 	pool := worker.NewPool(0, []worker.Task{setReasonTask{"source change"}}, nil, nil, db, h, ws, nil)
-	pool.ProcessOnce(context.Background(), pkg)
+	pool.ProcessOnce(context.Background(), pkg, nil)
 
 	now := time.Now().UTC()
 	evts, err := store.QueryEvents(db, "isv:percona:ppg:17", now.Add(-time.Minute), now.Add(time.Minute))
@@ -371,7 +371,7 @@ func TestProcessOnceEmitsFailedTerminal(t *testing.T) {
 	pool := worker.NewPool(0, []worker.Task{
 		setStateTask{"Ubuntu_24.04", "x86_64", "failed", ""},
 	}, nil, nil, db, h, ws, nil)
-	pool.ProcessOnce(context.Background(), pkg)
+	pool.ProcessOnce(context.Background(), pkg, nil)
 
 	now := time.Now().UTC()
 	evts, _ := store.QueryEvents(db, "isv:percona:ppg:17", now.Add(-time.Minute), now.Add(time.Minute))
@@ -405,7 +405,7 @@ func TestProcessOnceNoEventForBlocked(t *testing.T) {
 		pool := worker.NewPool(0, []worker.Task{
 			setStateTask{"Ubuntu_24.04", "x86_64", "blocked", ""},
 		}, nil, nil, db, h, ws, nil)
-		pool.ProcessOnce(context.Background(), pkg)
+		pool.ProcessOnce(context.Background(), pkg, nil)
 
 		now := time.Now().UTC()
 		evts, _ := store.QueryEvents(db, "isv:percona:ppg:17", now.Add(-time.Minute), now.Add(time.Minute))
@@ -433,7 +433,7 @@ func TestProcessOnceNoEventForBlocked(t *testing.T) {
 			setStateTask{"Ubuntu_24.04", "x86_64", "blocked", ""},
 			setTargetReasonTask{"Ubuntu_24.04", "x86_64", "source change"},
 		}, nil, nil, db, h, ws, nil)
-		pool.ProcessOnce(context.Background(), pkg)
+		pool.ProcessOnce(context.Background(), pkg, nil)
 
 		now := time.Now().UTC()
 		evts, _ := store.QueryEvents(db, "isv:percona:ppg:17", now.Add(-time.Minute), now.Add(time.Minute))
@@ -474,7 +474,7 @@ func TestProcessOnceEmitsSucceededOnPublish(t *testing.T) {
 	pool := worker.NewPool(0, []worker.Task{
 		setPublishedTask{"Ubuntu_24.04", "x86_64"},
 	}, nil, nil, db, h, ws, nil)
-	pool.ProcessOnce(context.Background(), pkg)
+	pool.ProcessOnce(context.Background(), pkg, nil)
 
 	now := time.Now().UTC()
 	evts, _ := store.QueryEvents(db, "isv:percona:ppg:17", now.Add(-time.Minute), now.Add(time.Minute))
@@ -512,7 +512,7 @@ func TestBuildStartedFiresOnBlockedState(t *testing.T) {
 	pool := worker.NewPool(0, []worker.Task{
 		setTargetReasonTask{"Ubuntu_24.04", "x86_64", "dep changed"},
 	}, nil, nil, db, h, ws, nil)
-	pool.ProcessOnce(context.Background(), pkg)
+	pool.ProcessOnce(context.Background(), pkg, nil)
 
 	now := time.Now().UTC()
 	evts, _ := store.QueryEvents(db, "isv:percona:ppg:17", now.Add(-time.Minute), now.Add(time.Minute))
@@ -544,7 +544,7 @@ func TestIntermediateStateRequiresBuildReason(t *testing.T) {
 	pool := worker.NewPool(0, []worker.Task{
 		setStateTask{"Ubuntu_24.04", "x86_64", "unresolvable", "nothing provides libpq"},
 	}, nil, nil, db, h, ws, nil)
-	pool.ProcessOnce(context.Background(), pkg)
+	pool.ProcessOnce(context.Background(), pkg, nil)
 
 	now := time.Now().UTC()
 	evts, _ := store.QueryEvents(db, "isv:percona:ppg:17", now.Add(-time.Minute), now.Add(time.Minute))
@@ -574,19 +574,19 @@ func TestIntermediateStatesAllFire(t *testing.T) {
 		setStateTask{"Ubuntu_24.04", "x86_64", "blocked", ""},
 		setTargetReasonTask{"Ubuntu_24.04", "x86_64", "source change"},
 	}, nil, nil, db, h, ws, nil)
-	pool1.ProcessOnce(context.Background(), pkg)
+	pool1.ProcessOnce(context.Background(), pkg, nil)
 
 	// Cycle 2: unresolvable (BuildReason carried over in pkg after cycle 1).
 	pool2 := worker.NewPool(0, []worker.Task{
 		setStateTask{"Ubuntu_24.04", "x86_64", "unresolvable", "nothing provides libpq"},
 	}, nil, nil, db, h, ws, nil)
-	pool2.ProcessOnce(context.Background(), pkg)
+	pool2.ProcessOnce(context.Background(), pkg, nil)
 
 	// Cycle 3: broken.
 	pool3 := worker.NewPool(0, []worker.Task{
 		setStateTask{"Ubuntu_24.04", "x86_64", "broken", "patch failed"},
 	}, nil, nil, db, h, ws, nil)
-	pool3.ProcessOnce(context.Background(), pkg)
+	pool3.ProcessOnce(context.Background(), pkg, nil)
 
 	now := time.Now().UTC()
 	evts, _ := store.QueryEvents(db, "isv:percona:ppg:17", now.Add(-time.Minute), now.Add(time.Minute))
@@ -649,7 +649,7 @@ func TestSucceededOnPublishNotOnState(t *testing.T) {
 	pool := worker.NewPool(0, []worker.Task{
 		setStateTask{"Ubuntu_24.04", "x86_64", "succeeded", ""},
 	}, nil, nil, db, h, ws, nil)
-	pool.ProcessOnce(context.Background(), pkg)
+	pool.ProcessOnce(context.Background(), pkg, nil)
 
 	now := time.Now().UTC()
 	evts, _ := store.QueryEvents(db, "isv:percona:ppg:17", now.Add(-time.Minute), now.Add(time.Minute))
@@ -678,7 +678,7 @@ func TestSucceededOnPublishFlip(t *testing.T) {
 	pool := worker.NewPool(0, []worker.Task{
 		setPublishedTask{"Ubuntu_24.04", "x86_64"},
 	}, nil, nil, db, h, ws, nil)
-	pool.ProcessOnce(context.Background(), pkg)
+	pool.ProcessOnce(context.Background(), pkg, nil)
 
 	now := time.Now().UTC()
 	evts, _ := store.QueryEvents(db, "isv:percona:ppg:17", now.Add(-time.Minute), now.Add(time.Minute))
@@ -728,7 +728,7 @@ func TestProcessOnceEmitsSucceededForNonPublishingRepoOnStateTransition(t *testi
 	pool := worker.NewPool(0, []worker.Task{
 		setStateTask{"UBI_8", "x86_64", "succeeded", ""},
 	}, nil, client, db, h, ws, nil)
-	pool.ProcessOnce(context.Background(), pkg)
+	pool.ProcessOnce(context.Background(), pkg, nil)
 
 	now := time.Now().UTC()
 	evts, err := store.QueryEvents(db, "isv:percona:common:containers:ubi8", now.Add(-time.Minute), now.Add(time.Minute))
@@ -764,7 +764,7 @@ func TestProcessOnceNoSucceededForPublishingRepoOnStateTransitionOnly(t *testing
 	pool := worker.NewPool(0, []worker.Task{
 		setStateTask{"Ubuntu_24.04", "x86_64", "succeeded", ""},
 	}, nil, nil, db, h, ws, nil)
-	pool.ProcessOnce(context.Background(), pkg)
+	pool.ProcessOnce(context.Background(), pkg, nil)
 
 	now := time.Now().UTC()
 	evts, _ := store.QueryEvents(db, "isv:percona:ppg:17", now.Add(-time.Minute), now.Add(time.Minute))
@@ -775,7 +775,7 @@ func TestProcessOnceNoSucceededForPublishingRepoOnStateTransitionOnly(t *testing
 
 type versionTask struct{ v string }
 
-func (t versionTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package) error {
+func (t versionTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package, _ *obs.Env) error {
 	pkg.Version = t.v
 	return nil
 }
@@ -962,7 +962,7 @@ func TestPoolRoutesDevVsReleaseTasks(t *testing.T) {
 		Targets:     []model.Target{{Repo: "RockyLinux_9", Arch: "x86_64", State: "building"}},
 		UpdatedAt:   time.Now().UTC(),
 	}
-	pool.ProcessOnce(context.Background(), devPkg)
+	pool.ProcessOnce(context.Background(), devPkg, nil)
 	if devPkg.Version != "dev" {
 		t.Errorf("dev package: expected version 'dev', got %q", devPkg.Version)
 	}
@@ -980,7 +980,7 @@ func TestPoolRoutesDevVsReleaseTasks(t *testing.T) {
 		Targets:     []model.Target{{Repo: "RockyLinux_9", Arch: "x86_64", State: "building"}},
 		UpdatedAt:   time.Now().UTC(),
 	}
-	pool.ProcessOnce(context.Background(), relPkg)
+	pool.ProcessOnce(context.Background(), relPkg, nil)
 	if relPkg.Version != "release" {
 		t.Errorf("release package: expected version 'release', got %q", relPkg.Version)
 	}

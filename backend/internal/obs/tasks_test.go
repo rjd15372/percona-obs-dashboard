@@ -34,7 +34,7 @@ func TestBuildStateTask(t *testing.T) {
 	}
 
 	task := obs.BuildStateTask{}
-	if err := task.Run(context.Background(), c, pkg); err != nil {
+	if err := task.Run(context.Background(), c, pkg, nil); err != nil {
 		t.Fatal(err)
 	}
 	if pkg.RollupState != model.RollupSucceeded {
@@ -67,7 +67,7 @@ func TestBlockedReasonTask(t *testing.T) {
 	}
 
 	task := obs.BlockedReasonTask{}
-	if err := task.Run(context.Background(), c, pkg); err != nil {
+	if err := task.Run(context.Background(), c, pkg, nil); err != nil {
 		t.Fatal(err)
 	}
 	if pkg.Targets[0].BlockedBy != "not installable" {
@@ -88,7 +88,7 @@ func TestBlockedReasonTaskSkipsWhenNoBlocked(t *testing.T) {
 		Project: "p", Name: "pkg",
 		Targets: []model.Target{{Repo: "images", Arch: "x86_64", State: "succeeded"}},
 	}
-	if err := (obs.BlockedReasonTask{}).Run(context.Background(), c, pkg); err != nil {
+	if err := (obs.BlockedReasonTask{}).Run(context.Background(), c, pkg, nil); err != nil {
 		t.Fatal(err)
 	}
 	if atomic.LoadInt32(&calls) != 0 {
@@ -113,7 +113,7 @@ func TestBlockedReasonTaskSkipsWhenFresh(t *testing.T) {
 			BlockedByFetchedAt: time.Now().UTC().Add(-time.Minute), // fresh
 		}},
 	}
-	if err := (obs.BlockedReasonTask{}).Run(context.Background(), c, pkg); err != nil {
+	if err := (obs.BlockedReasonTask{}).Run(context.Background(), c, pkg, nil); err != nil {
 		t.Fatal(err)
 	}
 	if atomic.LoadInt32(&calls) != 0 {
@@ -146,7 +146,7 @@ func TestBlockedReasonTaskRefetchesWhenStale(t *testing.T) {
 			BlockedByFetchedAt: stale,
 		}},
 	}
-	if err := (obs.BlockedReasonTask{}).Run(context.Background(), c, pkg); err != nil {
+	if err := (obs.BlockedReasonTask{}).Run(context.Background(), c, pkg, nil); err != nil {
 		t.Fatal(err)
 	}
 	if pkg.Targets[0].BlockedBy != "now waiting on libbar" {
@@ -182,7 +182,7 @@ func TestPublishStateTask(t *testing.T) {
 	}
 
 	task := obs.PublishStateTask{}
-	if err := task.Run(context.Background(), c, pkg); err != nil {
+	if err := task.Run(context.Background(), c, pkg, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !pkg.Targets[0].Published {
@@ -217,7 +217,7 @@ func TestPublishStateTaskSkipsNonPublishingRepos(t *testing.T) {
 		Project: "isv:percona:PR:pr-1:ppg:17", Name: "mypkg",
 		Targets: []model.Target{{Repo: "Ubuntu_24.04", Arch: "x86_64", State: "succeeded"}},
 	}
-	if err := (obs.PublishStateTask{}).Run(context.Background(), c, pkg); err != nil {
+	if err := (obs.PublishStateTask{}).Run(context.Background(), c, pkg, nil); err != nil {
 		t.Fatal(err)
 	}
 	if atomic.LoadInt32(&resultCalls) != 0 {
@@ -250,7 +250,7 @@ func TestBuildReasonTask(t *testing.T) {
 	}
 
 	task := obs.BuildReasonTask{}
-	if err := task.Run(context.Background(), c, pkg); err != nil {
+	if err := task.Run(context.Background(), c, pkg, nil); err != nil {
 		t.Fatal(err)
 	}
 	if pkg.Targets[0].BuildReason != "meta change" {
@@ -289,7 +289,7 @@ func TestBuildReasonTaskRetriesOnTransientError(t *testing.T) {
 	}
 
 	task := obs.BuildReasonTask{}
-	if err := task.Run(context.Background(), c, pkg); err != nil {
+	if err := task.Run(context.Background(), c, pkg, nil); err != nil {
 		t.Fatal(err)
 	}
 	if pkg.Targets[0].BuildReason != "source change" {
@@ -317,7 +317,7 @@ func TestBuildReasonTaskSkipsCachedTargets(t *testing.T) {
 		},
 		UpdatedAt: time.Now().UTC(),
 	}
-	if err := (obs.BuildReasonTask{}).Run(context.Background(), c, pkg); err != nil {
+	if err := (obs.BuildReasonTask{}).Run(context.Background(), c, pkg, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := atomic.LoadInt32(&calls); got != 1 {
@@ -348,7 +348,7 @@ func TestPackageTypeTask(t *testing.T) {
 	}
 
 	task := obs.PackageTypeTask{}
-	if err := task.Run(context.Background(), c, pkg); err != nil {
+	if err := task.Run(context.Background(), c, pkg, nil); err != nil {
 		t.Fatal(err)
 	}
 	if pkg.IsContainer == nil || !*pkg.IsContainer {
@@ -371,7 +371,7 @@ func TestPackageTypeTaskRPM(t *testing.T) {
 	}
 
 	task := obs.PackageTypeTask{}
-	if err := task.Run(context.Background(), c, pkg); err != nil {
+	if err := task.Run(context.Background(), c, pkg, nil); err != nil {
 		t.Fatal(err)
 	}
 	if pkg.IsContainer != nil && *pkg.IsContainer {
@@ -396,7 +396,7 @@ func TestPackageTypeTaskSkipsWhenAlreadySet(t *testing.T) {
 	}
 
 	task := obs.PackageTypeTask{}
-	if err := task.Run(context.Background(), c, pkg); err != nil {
+	if err := task.Run(context.Background(), c, pkg, nil); err != nil {
 		t.Fatal(err)
 	}
 	if called {
@@ -427,7 +427,7 @@ func TestVersionTask(t *testing.T) {
 	}
 
 	task := obs.VersionTask{}
-	if err := task.Run(context.Background(), c, pkg); err != nil {
+	if err := task.Run(context.Background(), c, pkg, nil); err != nil {
 		t.Fatal(err)
 	}
 	if pkg.Version != "17.5-1" {
@@ -452,7 +452,7 @@ func TestVersionTaskSkipsContainers(t *testing.T) {
 	}
 
 	task := obs.VersionTask{}
-	if err := task.Run(context.Background(), c, pkg); err != nil {
+	if err := task.Run(context.Background(), c, pkg, nil); err != nil {
 		t.Fatal(err)
 	}
 	if called {
@@ -483,7 +483,7 @@ func TestContainerTagsTask(t *testing.T) {
 	}
 
 	task := obs.ContainerTagsTask{}
-	if err := task.Run(context.Background(), c, pkg); err != nil {
+	if err := task.Run(context.Background(), c, pkg, nil); err != nil {
 		t.Fatal(err)
 	}
 	if pkg.Version != "18.4-1-1.7" {
@@ -514,7 +514,7 @@ func TestContainerTagsTaskSkipsNonContainers(t *testing.T) {
 	}
 
 	task := obs.ContainerTagsTask{}
-	if err := task.Run(context.Background(), c, pkg); err != nil {
+	if err := task.Run(context.Background(), c, pkg, nil); err != nil {
 		t.Fatal(err)
 	}
 	if called {
@@ -605,7 +605,7 @@ func TestBuildStateTaskPreservationMatrix(t *testing.T) {
 				Targets: tc.prevTargets, UpdatedAt: time.Now().UTC(),
 				CacheWarm: true, // simulate a pointer that completed a prior pass
 			}
-			if err := (obs.BuildStateTask{}).Run(context.Background(), c, pkg); err != nil {
+			if err := (obs.BuildStateTask{}).Run(context.Background(), c, pkg, nil); err != nil {
 				t.Fatal(err)
 			}
 
@@ -652,7 +652,7 @@ func TestBuildStateTaskColdPointerIsNeverStable(t *testing.T) {
 		Targets:   []model.Target{{Repo: "repo", Arch: "x86_64", State: "blocked"}},
 		UpdatedAt: time.Now().UTC(),
 	}
-	if err := (obs.BuildStateTask{}).Run(context.Background(), c, pkg); err != nil {
+	if err := (obs.BuildStateTask{}).Run(context.Background(), c, pkg, nil); err != nil {
 		t.Fatal(err)
 	}
 	if pkg.TargetsStable {
@@ -676,10 +676,10 @@ func TestBuildStateTaskSecondPassIsStable(t *testing.T) {
 		Targets:   []model.Target{{Repo: "repo", Arch: "x86_64", State: "blocked"}},
 		UpdatedAt: time.Now().UTC(),
 	}
-	if err := (obs.BuildStateTask{}).Run(context.Background(), c, pkg); err != nil {
+	if err := (obs.BuildStateTask{}).Run(context.Background(), c, pkg, nil); err != nil {
 		t.Fatal(err)
 	}
-	if err := (obs.BuildStateTask{}).Run(context.Background(), c, pkg); err != nil {
+	if err := (obs.BuildStateTask{}).Run(context.Background(), c, pkg, nil); err != nil {
 		t.Fatal(err)
 	}
 	if !pkg.TargetsStable {
@@ -713,7 +713,7 @@ func TestContainerTagsTaskReleaseAlwaysFetches(t *testing.T) {
 		Targets:   []model.Target{{Repo: "images", Arch: "x86_64", State: "succeeded"}},
 		UpdatedAt: time.Now().UTC(),
 	}
-	if err := (obs.ContainerTagsTask{}).Run(context.Background(), c, pkg); err != nil {
+	if err := (obs.ContainerTagsTask{}).Run(context.Background(), c, pkg, nil); err != nil {
 		t.Fatal(err)
 	}
 	if atomic.LoadInt32(&calls) == 0 {
@@ -737,7 +737,7 @@ func TestVersionTaskSkipsWhenStable(t *testing.T) {
 		TargetsStable: true,
 		UpdatedAt:     time.Now().UTC(),
 	}
-	if err := (obs.VersionTask{}).Run(context.Background(), c, pkg); err != nil {
+	if err := (obs.VersionTask{}).Run(context.Background(), c, pkg, nil); err != nil {
 		t.Fatal(err)
 	}
 	if atomic.LoadInt32(&calls) != 0 {
@@ -768,7 +768,7 @@ func TestVersionTaskFetchesWhenUnstable(t *testing.T) {
 		TargetsStable: false, // a target changed → version may have moved
 		UpdatedAt:     time.Now().UTC(),
 	}
-	if err := (obs.VersionTask{}).Run(context.Background(), c, pkg); err != nil {
+	if err := (obs.VersionTask{}).Run(context.Background(), c, pkg, nil); err != nil {
 		t.Fatal(err)
 	}
 	if atomic.LoadInt32(&calls) != 1 {
@@ -795,7 +795,7 @@ func TestContainerTagsTaskSkipsWhenStable(t *testing.T) {
 		Targets:       []model.Target{{Repo: "images", Arch: "x86_64", State: "succeeded"}},
 		UpdatedAt:     time.Now().UTC(),
 	}
-	if err := (obs.ContainerTagsTask{}).Run(context.Background(), c, pkg); err != nil {
+	if err := (obs.ContainerTagsTask{}).Run(context.Background(), c, pkg, nil); err != nil {
 		t.Fatal(err)
 	}
 	if atomic.LoadInt32(&calls) != 0 {
@@ -824,7 +824,7 @@ func TestContainerTagsTaskFetchesWhenUnstable(t *testing.T) {
 		Targets:       []model.Target{{Repo: "images", Arch: "x86_64", State: "succeeded"}},
 		UpdatedAt:     time.Now().UTC(),
 	}
-	if err := (obs.ContainerTagsTask{}).Run(context.Background(), c, pkg); err != nil {
+	if err := (obs.ContainerTagsTask{}).Run(context.Background(), c, pkg, nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(pkg.ContainerTags) != 2 || pkg.ContainerTags[0] != "18.4-2-1.8" {
@@ -856,7 +856,7 @@ func TestBuildReasonTaskSkipsWhenStable(t *testing.T) {
 		},
 		UpdatedAt: time.Now().UTC(),
 	}
-	if err := (obs.BuildReasonTask{}).Run(context.Background(), c, pkg); err != nil {
+	if err := (obs.BuildReasonTask{}).Run(context.Background(), c, pkg, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := atomic.LoadInt32(&calls); got != 0 {
@@ -883,7 +883,7 @@ func TestVersionTaskSkipsEmptyVersionWhenStable(t *testing.T) {
 		TargetsStable: true,
 		UpdatedAt:     time.Now().UTC(),
 	}
-	if err := (obs.VersionTask{}).Run(context.Background(), c, pkg); err != nil {
+	if err := (obs.VersionTask{}).Run(context.Background(), c, pkg, nil); err != nil {
 		t.Fatal(err)
 	}
 	if atomic.LoadInt32(&calls) != 0 {

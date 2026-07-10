@@ -42,7 +42,7 @@ const blockedByTTL = 5 * time.Minute
 // by fetching current build results from OBS for the specific package.
 type BuildStateTask struct{}
 
-func (t BuildStateTask) Run(ctx context.Context, client *Client, pkg *model.Package) error {
+func (t BuildStateTask) Run(ctx context.Context, client *Client, pkg *model.Package, env *Env) error {
 	results, err := client.PackageBuildResults(ctx, pkg.Project, pkg.Name)
 	if err != nil {
 		return err
@@ -89,7 +89,7 @@ func (t BuildStateTask) Run(ctx context.Context, client *Client, pkg *model.Pack
 // repo state is "published" according to the OBS _result?view=status endpoint.
 type PublishStateTask struct{}
 
-func (t PublishStateTask) Run(ctx context.Context, client *Client, pkg *model.Package) error {
+func (t PublishStateTask) Run(ctx context.Context, client *Client, pkg *model.Package, env *Env) error {
 	hasCandidate := false
 	for _, target := range pkg.Targets {
 		if target.State == "succeeded" && !target.Published {
@@ -156,7 +156,7 @@ func (t PublishStateTask) Run(ctx context.Context, client *Client, pkg *model.Pa
 // in "succeeded" state first — release packages use OBS repo state directly.
 type BinariesCheckTask struct{}
 
-func (t BinariesCheckTask) Run(ctx context.Context, client *Client, pkg *model.Package) error {
+func (t BinariesCheckTask) Run(ctx context.Context, client *Client, pkg *model.Package, env *Env) error {
 	if len(pkg.Targets) == 0 {
 		return nil
 	}
@@ -195,7 +195,7 @@ func (t BinariesCheckTask) Run(ctx context.Context, client *Client, pkg *model.P
 // BlockedReasonTask populates BlockedBy on blocked targets.
 type BlockedReasonTask struct{}
 
-func (t BlockedReasonTask) Run(ctx context.Context, client *Client, pkg *model.Package) error {
+func (t BlockedReasonTask) Run(ctx context.Context, client *Client, pkg *model.Package, env *Env) error {
 	needsFetch := false
 	for _, target := range pkg.Targets {
 		if target.State != "blocked" {
@@ -234,7 +234,7 @@ func (t BlockedReasonTask) Run(ctx context.Context, client *Client, pkg *model.P
 // BuildReasonTask fetches the build trigger reason for non-succeeded targets.
 type BuildReasonTask struct{}
 
-func (t BuildReasonTask) Run(ctx context.Context, client *Client, pkg *model.Package) error {
+func (t BuildReasonTask) Run(ctx context.Context, client *Client, pkg *model.Package, env *Env) error {
 	if pkg.TargetsStable {
 		// Negative-result caching: under stable targets every non-succeeded
 		// target was already queried in this exact state — populated reasons
@@ -281,7 +281,7 @@ func (t BuildReasonTask) Run(ctx context.Context, client *Client, pkg *model.Pac
 // Errors are logged and treated as non-fatal to preserve the existing value.
 type PackageTypeTask struct{}
 
-func (t PackageTypeTask) Run(ctx context.Context, client *Client, pkg *model.Package) error {
+func (t PackageTypeTask) Run(ctx context.Context, client *Client, pkg *model.Package, env *Env) error {
 	if pkg.IsContainer != nil {
 		return nil
 	}
@@ -301,7 +301,7 @@ func (t PackageTypeTask) Run(ctx context.Context, client *Client, pkg *model.Pac
 // the OBS endpoint returns an empty string for containers and the task is a no-op.
 type VersionTask struct{}
 
-func (t VersionTask) Run(ctx context.Context, client *Client, pkg *model.Package) error {
+func (t VersionTask) Run(ctx context.Context, client *Client, pkg *model.Package, env *Env) error {
 	if pkg.IsContainer != nil && *pkg.IsContainer {
 		return nil
 	}
@@ -329,7 +329,7 @@ func (t VersionTask) Run(ctx context.Context, client *Client, pkg *model.Package
 // pkg.ContainerTags to the full list.
 type ContainerTagsTask struct{}
 
-func (t ContainerTagsTask) Run(ctx context.Context, client *Client, pkg *model.Package) error {
+func (t ContainerTagsTask) Run(ctx context.Context, client *Client, pkg *model.Package, env *Env) error {
 	if pkg.IsContainer == nil || !*pkg.IsContainer {
 		return nil
 	}
