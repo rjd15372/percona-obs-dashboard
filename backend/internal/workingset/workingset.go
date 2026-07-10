@@ -20,8 +20,10 @@ type Stats struct {
 // to max) when a pass observes nothing new.
 type entry struct {
 	pkg      *model.Package
+	state    string
 	interval time.Duration
 	nextDue  time.Time
+	wake     bool
 }
 
 // Job is a unit of work for the worker pool: one or more packages of the
@@ -76,37 +78,47 @@ func (ws *WorkingSet) Seed(pkgs []*model.Package) {
 	now := ws.now()
 	for _, p := range pkgs {
 		key := p.Project + "/" + p.Name
-		ws.entries[key] = &entry{pkg: p, interval: ws.base, nextDue: now}
+		ws.entries[key] = &entry{pkg: p, state: string(p.RollupState), interval: ws.base, nextDue: now}
 	}
 }
 
 // Add inserts a package and dispatches it immediately. If the package is
-// already present this is a wake signal: its schedule resets to due-now at
-// the base interval (the stored, possibly enriched, package object is kept)
-// but nothing is dispatched — the next scheduler tick handles it.
+// already present this is a wake: the entry is made due now WITHOUT
+// resetting the backoff ladder (interval is left untouched), so blind
+// periodic re-adds (e.g. the poller re-adding unpublished release packages
+// every tick) don't pin a quiet package at base cadence forever. A pass that
+// observes a real change still resets the interval via Done(changed=true).
 func (ws *WorkingSet) Add(pkg *model.Package) {
 	key := pkg.Project + "/" + pkg.Name
 	ws.mu.Lock()
 	defer ws.mu.Unlock()
 	if e, exists := ws.entries[key]; exists {
-		e.interval = ws.base
+		// Wake: make the entry due now but keep the ladder position. A pass
+		// that observes a real change resets the interval via Done; blind
+		// re-adds (e.g. the poller's periodic release-package add) must not
+		// pin a quiet package at base cadence forever.
 		e.nextDue = ws.now()
+		if ws.inflight[key] {
+			e.wake = true
+		}
 		return
 	}
-	ws.entries[key] = &entry{pkg: pkg, interval: ws.base, nextDue: ws.now()}
+	ws.entries[key] = &entry{pkg: pkg, state: string(pkg.RollupState), interval: ws.base, nextDue: ws.now()}
 	if !ws.inflight[key] {
 		ws.sendJob(Job{Pkgs: []*model.Package{pkg}})
 	}
 }
 
-// Signal replaces the stored package, resets its schedule, and dispatches
-// immediately (unless in-flight). Used by the MQ consumer for real-time
+// Signal replaces the stored package, fully resets its schedule (interval
+// back to base — MQ events are strong change signals), and dispatches
+// immediately (unless in-flight, in which case it is marked to wake as soon
+// as the in-flight pass completes). Used by the MQ consumer for real-time
 // reactions.
 func (ws *WorkingSet) Signal(pkg *model.Package) {
 	key := pkg.Project + "/" + pkg.Name
 	ws.mu.Lock()
 	defer ws.mu.Unlock()
-	ws.entries[key] = &entry{pkg: pkg, interval: ws.base, nextDue: ws.now()}
+	ws.entries[key] = &entry{pkg: pkg, state: string(pkg.RollupState), interval: ws.base, nextDue: ws.now(), wake: ws.inflight[key]}
 	if !ws.inflight[key] {
 		ws.sendJob(Job{Pkgs: []*model.Package{pkg}})
 	}
@@ -121,7 +133,8 @@ func (ws *WorkingSet) Remove(key string) {
 
 // Done marks a package as no longer in-flight and advances its schedule:
 // a changed pass resets the interval to base, an unchanged pass doubles it
-// up to max. The next pass is due interval from now.
+// up to max. The next pass is due interval from now, unless a Signal/Add
+// landed while this pass was in flight, in which case it stays due now.
 func (ws *WorkingSet) Done(key string, changed bool) {
 	ws.mu.Lock()
 	defer ws.mu.Unlock()
@@ -130,6 +143,7 @@ func (ws *WorkingSet) Done(key string, changed bool) {
 	if !ok {
 		return // removed while in-flight
 	}
+	e.state = string(e.pkg.RollupState)
 	if changed {
 		e.interval = ws.base
 	} else {
@@ -137,6 +151,13 @@ func (ws *WorkingSet) Done(key string, changed bool) {
 		if e.interval > ws.max {
 			e.interval = ws.max
 		}
+	}
+	if e.wake {
+		// A Signal/Add landed while this pass was in flight: stay due now
+		// instead of being pushed a full interval out.
+		e.wake = false
+		e.nextDue = ws.now()
+		return
 	}
 	e.nextDue = ws.now().Add(e.interval)
 }
@@ -151,7 +172,7 @@ func (ws *WorkingSet) Stats() Stats {
 	defer ws.mu.Unlock()
 	s := Stats{Total: len(ws.entries), Inflight: len(ws.inflight), ByState: make(map[string]int)}
 	for _, e := range ws.entries {
-		s.ByState[string(e.pkg.RollupState)]++
+		s.ByState[e.state]++
 	}
 	return s
 }

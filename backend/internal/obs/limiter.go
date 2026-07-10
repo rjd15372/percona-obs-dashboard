@@ -30,6 +30,7 @@ func (l *minuteLimiter) acquire(ctx context.Context) error {
 	if l.budget <= 0 {
 		return nil
 	}
+	blocked := false
 	for {
 		l.mu.Lock()
 		now := l.now()
@@ -43,7 +44,10 @@ func (l *minuteLimiter) acquire(ctx context.Context) error {
 			l.mu.Unlock()
 			return nil
 		}
-		l.waits++
+		if !blocked {
+			blocked = true
+			l.waits++
+		}
 		wait := windowStart.Add(time.Minute).Sub(now)
 		l.mu.Unlock()
 

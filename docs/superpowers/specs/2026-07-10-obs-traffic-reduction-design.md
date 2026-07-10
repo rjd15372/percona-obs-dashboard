@@ -43,9 +43,13 @@ whose `nextDue` has passed.
   `worker_pool.backoff_max` (default 5m).
 - `Done(key)` becomes `Done(key, changed bool)`. The worker already computes
   changed-ness for event emission; it passes that in.
-- Wake signals reset backoff: `Signal()` (MQ events) and `Add()` (poller
-  re-adds) set `nextDue = now` and reset the interval to base, preserving
-  real-time reaction to MQ traffic.
+- Wake signals: `Signal()` (MQ events) fully resets backoff — `nextDue = now`
+  and interval back to base — preserving real-time reaction to MQ traffic.
+  `Add()` on an existing entry (e.g. the poller's blind periodic re-add of
+  unpublished release packages) only sets `nextDue = now`; it leaves the
+  interval untouched so it doesn't pin a quiet package at base cadence
+  forever. A pass that observes a real change still resets the interval via
+  `Done(changed=true)`.
 - Backoff state is in-memory only. A restart resets all packages to the base
   interval and the ladder re-converges within minutes (same loss-tolerance
   philosophy as parking).
@@ -109,8 +113,8 @@ A fixed-window per-minute counter in `Client`, enforced in the existing `get` /
   binaries, artifact metadata, release artifacts) tag their context via
   `obs.Interactive(ctx)`; tagged requests skip the limiter. Their volume is
   negligible and users must never wait behind background churn.
-- **Observability:** the limiter exports `limited_waits` and
-  `remaining_budget` through the existing `MetricsSnapshot()` so telemetry
+- **Observability:** the limiter exports `limiter_waits` and
+  `limiter_remaining` through the existing `MetricsSnapshot()` so telemetry
   shows when the cap is being approached.
 
 With backoff + batching, normal load is expected around 200–500 req/hour

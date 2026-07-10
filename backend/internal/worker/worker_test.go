@@ -309,6 +309,20 @@ func (t setPublishedTask) Run(_ context.Context, _ *obs.Client, pkg *model.Packa
 	return nil
 }
 
+// flipTargetStateTask flips a single target's State field without touching
+// RollupState, so targetStatesChanged (not the rollup-state comparison) is
+// what must drive ProcessOnce's changed detection in this scenario.
+type flipTargetStateTask struct{ repo, arch, state string }
+
+func (t flipTargetStateTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package, _ *obs.Env) error {
+	for i, target := range pkg.Targets {
+		if target.Repo == t.repo && target.Arch == t.arch {
+			pkg.Targets[i].State = t.state
+		}
+	}
+	return nil
+}
+
 func setupDB(t *testing.T) *sql.DB {
 	t.Helper()
 	db, err := store.Open(":memory:")
@@ -992,6 +1006,62 @@ func TestPoolRoutesDevVsReleaseTasks(t *testing.T) {
 	if len(notifyCh) > 0 {
 		t.Errorf("expected no hub notifications for release package, got %d", len(notifyCh))
 	}
+}
+
+func TestProcessOnceReportsChanged(t *testing.T) {
+	t.Run("rollup state transition reports changed", func(t *testing.T) {
+		db := openDB(t)
+		h := hubpkg.New()
+		ws := workingset.New(10, 30*time.Second, 5*time.Minute, 4)
+
+		pkg := &model.Package{
+			Project:     "isv:percona",
+			Name:        "pkg-a",
+			RollupState: model.RollupFailed,
+			Targets:     []model.Target{{Repo: "repo", Arch: "x86_64", State: "failed"}},
+			UpdatedAt:   time.Now().UTC(),
+		}
+		p := worker.NewPool(1, []worker.Task{succeedingTask{}}, nil, nil, db, h, ws, nil)
+		if changed := p.ProcessOnce(context.Background(), pkg, nil); !changed {
+			t.Errorf("changed = false, want true (rollup state Failed -> Succeeded)")
+		}
+	})
+
+	t.Run("no-op task on unchanged package reports unchanged", func(t *testing.T) {
+		db := openDB(t)
+		h := hubpkg.New()
+		ws := workingset.New(10, 30*time.Second, 5*time.Minute, 4)
+
+		pkg := &model.Package{
+			Project:     "isv:percona",
+			Name:        "pkg-a",
+			RollupState: model.RollupSucceeded,
+			Targets:     []model.Target{{Repo: "repo", Arch: "x86_64", State: "succeeded"}},
+			UpdatedAt:   time.Now().UTC(),
+		}
+		p := worker.NewPool(1, []worker.Task{&captureTask{}}, nil, nil, db, h, ws, nil)
+		if changed := p.ProcessOnce(context.Background(), pkg, nil); changed {
+			t.Errorf("changed = true, want false (no-op task, rollup and targets unchanged)")
+		}
+	})
+
+	t.Run("target state flip with unchanged rollup reports changed", func(t *testing.T) {
+		db := openDB(t)
+		h := hubpkg.New()
+		ws := workingset.New(10, 30*time.Second, 5*time.Minute, 4)
+
+		pkg := &model.Package{
+			Project:     "isv:percona",
+			Name:        "pkg-a",
+			RollupState: model.RollupBuilding,
+			Targets:     []model.Target{{Repo: "repo", Arch: "x86_64", State: "building"}},
+			UpdatedAt:   time.Now().UTC(),
+		}
+		p := worker.NewPool(1, []worker.Task{flipTargetStateTask{"repo", "x86_64", "blocked"}}, nil, nil, db, h, ws, nil)
+		if changed := p.ProcessOnce(context.Background(), pkg, nil); !changed {
+			t.Errorf("changed = false, want true (target state flipped even though RollupState field was untouched)")
+		}
+	})
 }
 
 func TestProcessJobBatchFetchesProjectOnce(t *testing.T) {

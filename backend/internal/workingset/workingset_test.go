@@ -205,17 +205,33 @@ func TestStats(t *testing.T) {
 	}
 }
 
-func TestStatsReflectsLivePackagePointer(t *testing.T) {
-	// Stats now reads state directly off the stored *model.Package (via the
-	// entry), so mutations the worker makes in-place are visible immediately
-	// — unlike the old cached-state-string behavior this replaces.
+func TestStatsSnapshotsStateOnDone(t *testing.T) {
+	// Stats reads a state string snapshotted into the entry under ws.mu, not
+	// the live *model.Package — worker goroutines mutate that pointer
+	// concurrently outside the lock, so reading it directly in Stats would
+	// race. The snapshot is refreshed on Done.
 	ws := workingset.New(10, 30*time.Second, 5*time.Minute, 4)
 	p := &model.Package{Project: "p", Name: "a", RollupState: model.RollupBuilding}
 	ws.Seed([]*model.Package{p})
-	p.RollupState = model.RollupFailed // mutate the shared pointer (as the worker would)
+
 	s := ws.Stats()
+	if s.ByState["building"] != 1 {
+		t.Fatalf("initial Stats = %v, want building:1", s.ByState)
+	}
+
+	p.RollupState = model.RollupFailed // mutate the shared pointer (as a worker would, unsynchronized)
+	s = ws.Stats()
+	if s.ByState["building"] != 1 || s.ByState["failed"] != 0 {
+		t.Fatalf("Stats must not reflect the live pointer before Done, got %v", s.ByState)
+	}
+
+	ws.DispatchDue()
+	drain(t, ws)
+	ws.Done("p/a", true)
+
+	s = ws.Stats()
 	if s.ByState["failed"] != 1 || s.ByState["building"] != 0 {
-		t.Fatalf("Stats should reflect the live package state, got %v", s.ByState)
+		t.Fatalf("Stats should reflect the snapshotted state after Done, got %v", s.ByState)
 	}
 }
 
@@ -297,4 +313,46 @@ func TestAddExistingResetsScheduleWithoutDispatch(t *testing.T) {
 	expectNoDispatch(t, ws) // Add on existing: no immediate dispatch...
 	ws.DispatchDue()
 	drain(t, ws) // ...but the schedule was reset to due-now
+}
+
+func TestAddExistingPreservesBackoffInterval(t *testing.T) {
+	clock := &fakeClock{t: time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)}
+	ws := workingset.NewWithClock(10, 30*time.Second, 5*time.Minute, 4, clock.Now)
+
+	ws.Add(pkg("proj", "pkg-a", model.RollupBuilding))
+	drain(t, ws)
+	ws.Done("proj/pkg-a", false) // unchanged → interval 30s → 60s
+
+	// A blind re-add (e.g. the poller's periodic release-package add) must
+	// wake the package without resetting the backoff ladder.
+	ws.Add(pkg("proj", "pkg-a", model.RollupBuilding))
+	ws.DispatchDue()
+	drain(t, ws) // due now, regardless of interval
+
+	ws.Done("proj/pkg-a", false) // unchanged → interval must double from 60s to 120s, not reset to 30s
+
+	clock.Advance(61 * time.Second)
+	ws.DispatchDue()
+	expectNoDispatch(t, ws) // if Add had reset the interval to 30s this would already be due
+
+	clock.Advance(60 * time.Second) // total 121s ≥ 120s
+	ws.DispatchDue()
+	drain(t, ws)
+}
+
+func TestWakeWhileInflightKeepsPackageDue(t *testing.T) {
+	clock := &fakeClock{t: time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)}
+	ws := workingset.NewWithClock(10, 30*time.Second, 5*time.Minute, 4, clock.Now)
+
+	ws.Add(pkg("proj", "pkg-a", model.RollupBuilding))
+	drain(t, ws) // now in-flight; Done not called yet
+
+	ws.Signal(pkg("proj", "pkg-a", model.RollupFinished))
+	expectNoDispatch(t, ws) // in-flight: Signal suppresses immediate dispatch, marks wake
+
+	ws.Done("proj/pkg-a", false)
+	// Without advancing the clock, the wake must keep the package due now
+	// instead of Done pushing nextDue a full interval out.
+	ws.DispatchDue()
+	drain(t, ws)
 }
