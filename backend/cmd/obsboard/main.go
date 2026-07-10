@@ -60,7 +60,8 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("seed working set: %w", err)
 	}
-	ws := workingset.New(cfg.WorkerPool.QueueSize)
+	ws := workingset.New(cfg.WorkerPool.QueueSize, cfg.WorkerPool.PollInterval,
+		cfg.WorkerPool.BackoffMax, cfg.WorkerPool.BatchThreshold)
 	ws.Seed(activePkgs)
 
 	devTasks := []worker.Task{
@@ -79,7 +80,7 @@ func run() error {
 	}
 	pool := worker.NewPool(cfg.WorkerPool.Size, devTasks, releaseTasks, obsClient, db, h, ws, scanner)
 	pool.Start(ctx)
-	ws.StartScheduler(ctx, cfg.WorkerPool.PollInterval)
+	ws.StartScheduler(ctx)
 
 	poller := obs.NewPoller(obsClient, db, cfg.Poller.Interval, h, ws, cfg.OBSRoot)
 	consumer := mq.NewConsumer(cfg.MQ.URL, db, h, obsClient, ws, cfg.OBSRoot)

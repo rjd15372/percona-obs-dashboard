@@ -66,7 +66,7 @@ func TestBuildUnchangedWakesWorkingSet(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	ws := workingset.New(4)
+	ws := workingset.New(4, 30*time.Second, 5*time.Minute, 4)
 	h := hubpkg.New()
 	c := NewConsumer("", db, h, nil, ws, "isv:percona")
 
@@ -114,7 +114,7 @@ func TestRepoPublishedWakesOnlyMatchingRepo(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	ws := workingset.New(4)
+	ws := workingset.New(4, 30*time.Second, 5*time.Minute, 4)
 	c := NewConsumer("", db, hubpkg.New(), nil, ws, "isv:percona")
 
 	seed := func(name, repo string, published bool) {

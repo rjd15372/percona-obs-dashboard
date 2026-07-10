@@ -64,7 +64,7 @@ func openDB(t *testing.T) *sql.DB {
 func TestPoolRunsTasksForDispatchedPackage(t *testing.T) {
 	db := openDB(t)
 	h := hubpkg.New()
-	ws := workingset.New(10)
+	ws := workingset.New(10, 30*time.Second, 5*time.Minute, 4)
 	capture := &captureTask{}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -101,7 +101,7 @@ func TestPoolRunsTasksForDispatchedPackage(t *testing.T) {
 func TestPoolRemovesSucceededPackageFromWorkingSet(t *testing.T) {
 	db := openDB(t)
 	h := hubpkg.New()
-	ws := workingset.New(10)
+	ws := workingset.New(10, 30*time.Second, 5*time.Minute, 4)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -142,7 +142,7 @@ func TestPoolRemovesSucceededPackageFromWorkingSet(t *testing.T) {
 func TestPoolDoesNotRemoveWhenUnpublished(t *testing.T) {
 	db := openDB(t)
 	h := hubpkg.New()
-	ws := workingset.New(10)
+	ws := workingset.New(10, 30*time.Second, 5*time.Minute, 4)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -189,7 +189,7 @@ func TestPoolRemovesSucceededNonPublishing(t *testing.T) {
 
 	db := openDB(t)
 	h := hubpkg.New()
-	ws := workingset.New(10)
+	ws := workingset.New(10, 30*time.Second, 5*time.Minute, 4)
 	client := obs.NewClient(srv.URL, "u", "p")
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -222,7 +222,7 @@ func TestPoolRemovesSucceededNonPublishing(t *testing.T) {
 func TestPoolContinuesAfterTaskError(t *testing.T) {
 	db := openDB(t)
 	h := hubpkg.New()
-	ws := workingset.New(10)
+	ws := workingset.New(10, 30*time.Second, 5*time.Minute, 4)
 	capture := &captureTask{}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -320,7 +320,7 @@ func setupDB(t *testing.T) *sql.DB {
 func TestProcessOnceEmitsBuildStarted(t *testing.T) {
 	db := setupDB(t)
 	h := hubpkg.New()
-	ws := workingset.New(10)
+	ws := workingset.New(10, 30*time.Second, 5*time.Minute, 4)
 
 	pkg := &model.Package{
 		Project:     "isv:percona:ppg:17",
@@ -355,7 +355,7 @@ func TestProcessOnceEmitsBuildStarted(t *testing.T) {
 func TestProcessOnceEmitsFailedTerminal(t *testing.T) {
 	db := setupDB(t)
 	h := hubpkg.New()
-	ws := workingset.New(10)
+	ws := workingset.New(10, 30*time.Second, 5*time.Minute, 4)
 
 	pkg := &model.Package{
 		Project:     "isv:percona:ppg:17",
@@ -390,7 +390,7 @@ func TestProcessOnceNoEventForBlocked(t *testing.T) {
 	t.Run("no build reason → 0 events", func(t *testing.T) {
 		db := setupDB(t)
 		h := hubpkg.New()
-		ws := workingset.New(10)
+		ws := workingset.New(10, 30*time.Second, 5*time.Minute, 4)
 
 		pkg := &model.Package{
 			Project:     "isv:percona:ppg:17",
@@ -417,7 +417,7 @@ func TestProcessOnceNoEventForBlocked(t *testing.T) {
 	t.Run("with build reason → build_started then blocked", func(t *testing.T) {
 		db := setupDB(t)
 		h := hubpkg.New()
-		ws := workingset.New(10)
+		ws := workingset.New(10, 30*time.Second, 5*time.Minute, 4)
 
 		pkg := &model.Package{
 			Project:     "isv:percona:ppg:17",
@@ -458,7 +458,7 @@ func TestProcessOnceNoEventForBlocked(t *testing.T) {
 func TestProcessOnceEmitsSucceededOnPublish(t *testing.T) {
 	db := setupDB(t)
 	h := hubpkg.New()
-	ws := workingset.New(10)
+	ws := workingset.New(10, 30*time.Second, 5*time.Minute, 4)
 
 	pkg := &model.Package{
 		Project:     "isv:percona:ppg:17",
@@ -492,7 +492,7 @@ func TestProcessOnceEmitsSucceededOnPublish(t *testing.T) {
 func TestBuildStartedFiresOnBlockedState(t *testing.T) {
 	db := setupDB(t)
 	h := hubpkg.New()
-	ws := workingset.New(10)
+	ws := workingset.New(10, 30*time.Second, 5*time.Minute, 4)
 
 	// Seed: target already blocked, no BuildReason yet.
 	pkg := &model.Package{
@@ -527,7 +527,7 @@ func TestBuildStartedFiresOnBlockedState(t *testing.T) {
 func TestIntermediateStateRequiresBuildReason(t *testing.T) {
 	db := setupDB(t)
 	h := hubpkg.New()
-	ws := workingset.New(10)
+	ws := workingset.New(10, 30*time.Second, 5*time.Minute, 4)
 
 	pkg := &model.Package{
 		Project:     "isv:percona:ppg:17",
@@ -556,7 +556,7 @@ func TestIntermediateStateRequiresBuildReason(t *testing.T) {
 func TestIntermediateStatesAllFire(t *testing.T) {
 	db := setupDB(t)
 	h := hubpkg.New()
-	ws := workingset.New(10)
+	ws := workingset.New(10, 30*time.Second, 5*time.Minute, 4)
 
 	// Cycle 1: target transitions to blocked with BuildReason.
 	pkg := &model.Package{
@@ -631,7 +631,7 @@ func TestIntermediateStatesAllFire(t *testing.T) {
 func TestSucceededOnPublishNotOnState(t *testing.T) {
 	db := setupDB(t)
 	h := hubpkg.New()
-	ws := workingset.New(10)
+	ws := workingset.New(10, 30*time.Second, 5*time.Minute, 4)
 
 	// Seed: building state.
 	pkg := &model.Package{
@@ -661,7 +661,7 @@ func TestSucceededOnPublishNotOnState(t *testing.T) {
 func TestSucceededOnPublishFlip(t *testing.T) {
 	db := setupDB(t)
 	h := hubpkg.New()
-	ws := workingset.New(10)
+	ws := workingset.New(10, 30*time.Second, 5*time.Minute, 4)
 
 	pkg := &model.Package{
 		Project:     "isv:percona:ppg:17",
@@ -711,7 +711,7 @@ func TestProcessOnceEmitsSucceededForNonPublishingRepoOnStateTransition(t *testi
 
 	db := setupDB(t)
 	h := hubpkg.New()
-	ws := workingset.New(10)
+	ws := workingset.New(10, 30*time.Second, 5*time.Minute, 4)
 	client := obs.NewClient(srv.URL, "u", "p")
 
 	pkg := &model.Package{
@@ -748,7 +748,7 @@ func TestProcessOnceNoSucceededForPublishingRepoOnStateTransitionOnly(t *testing
 	// must still be preserved for repos that do publish.
 	db := setupDB(t)
 	h := hubpkg.New()
-	ws := workingset.New(10)
+	ws := workingset.New(10, 30*time.Second, 5*time.Minute, 4)
 
 	pkg := &model.Package{
 		Project:     "isv:percona:ppg:17",
@@ -785,7 +785,7 @@ func (t versionTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package, _
 func TestPoolParksAllBuildingPackage(t *testing.T) {
 	db := openDB(t)
 	h := hubpkg.New()
-	ws := workingset.New(10)
+	ws := workingset.New(10, 30*time.Second, 5*time.Minute, 4)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	p := worker.NewPool(1, nil, nil, nil, db, h, ws, nil) // no tasks, nil client
@@ -833,7 +833,7 @@ func TestPoolParksAllBuildingPackage(t *testing.T) {
 func TestPoolParksMixedBuildingAndSucceeded(t *testing.T) {
 	db := openDB(t)
 	h := hubpkg.New()
-	ws := workingset.New(10)
+	ws := workingset.New(10, 30*time.Second, 5*time.Minute, 4)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -873,7 +873,7 @@ func TestPoolParksMixedBuildingAndSucceeded(t *testing.T) {
 func TestPoolDoesNotParkWhenPublishFlagsUnknown(t *testing.T) {
 	db := openDB(t)
 	h := hubpkg.New()
-	ws := workingset.New(10)
+	ws := workingset.New(10, 30*time.Second, 5*time.Minute, 4)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "OBS unavailable", http.StatusInternalServerError)
@@ -914,7 +914,7 @@ func TestPoolDoesNotParkWhenPublishFlagsUnknown(t *testing.T) {
 func TestPoolDoesNotParkWithoutBuildReason(t *testing.T) {
 	db := openDB(t)
 	h := hubpkg.New()
-	ws := workingset.New(10)
+	ws := workingset.New(10, 30*time.Second, 5*time.Minute, 4)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -946,7 +946,7 @@ func TestPoolDoesNotParkWithoutBuildReason(t *testing.T) {
 func TestPoolRoutesDevVsReleaseTasks(t *testing.T) {
 	db := openDB(t)
 	h := hubpkg.New()
-	ws := workingset.New(10)
+	ws := workingset.New(10, 30*time.Second, 5*time.Minute, 4)
 
 	devTasks := []worker.Task{versionTask{"dev"}}
 	releaseTasks := []worker.Task{versionTask{"release"}}

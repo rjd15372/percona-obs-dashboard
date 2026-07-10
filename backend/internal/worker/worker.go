@@ -55,17 +55,19 @@ func (p *Pool) run(ctx context.Context) {
 				return
 			}
 			key := pkg.Project + "/" + pkg.Name
-			p.ProcessOnce(ctx, pkg, nil)
-			p.ws.Done(key)
+			changed := p.ProcessOnce(ctx, pkg, nil)
+			p.ws.Done(key, changed)
 		}
 	}
 }
 
 // ProcessOnce runs the task chain for pkg (devTasks or releaseTasks based on
 // pkg.IsRelease), upserts to DB, emits build events and SSE for real-time
-// packages only, and removes pkg from the working set when rollup reaches published.
+// packages only, and removes pkg from the working set when rollup reaches
+// published. Returns true when the pass observed a rollup or target build
+// state change — the scheduler uses this to reset or grow the poll backoff.
 // Exported for testing.
-func (p *Pool) ProcessOnce(ctx context.Context, pkg *model.Package, env *obs.Env) {
+func (p *Pool) ProcessOnce(ctx context.Context, pkg *model.Package, env *obs.Env) bool {
 	// Capture now before tasks run so state_changed_at reflects when the state
 	// was observed, not when the (potentially slow) task chain finished.
 	now := time.Now().UTC()
@@ -97,6 +99,9 @@ func (p *Pool) ProcessOnce(ctx context.Context, pkg *model.Package, env *obs.Env
 				"err", err)
 		}
 	}
+
+	changed := prevRollupState != pkg.RollupState ||
+		targetStatesChanged(oldTargets, pkg.Targets)
 
 	// flagsKnown gates parking below: on a fetch error the zero-value flags
 	// treat every repo as publishing, which blocks Settled — and parking
@@ -153,6 +158,28 @@ func (p *Pool) ProcessOnce(ctx context.Context, pkg *model.Package, env *obs.Env
 	if pkg.Settled || (flagsKnown && pkg.IsContainer != nil && obs.Parkable(pkg)) {
 		p.ws.Remove(pkg.Project + "/" + pkg.Name)
 	}
+	return changed
+}
+
+// targetStatesChanged reports whether any target's build state differs
+// between two snapshots, or the target set itself changed. Details and
+// enrichment fields are deliberately ignored: backoff cares about build
+// progress, not metadata refinement.
+func targetStatesChanged(old, new []model.Target) bool {
+	if len(old) != len(new) {
+		return true
+	}
+	prev := make(map[string]string, len(old))
+	for _, t := range old {
+		prev[t.Repo+"/"+t.Arch] = t.State
+	}
+	for _, t := range new {
+		s, ok := prev[t.Repo+"/"+t.Arch]
+		if !ok || s != t.State {
+			return true
+		}
+	}
+	return false
 }
 
 const obsBase = "https://build.opensuse.org"
