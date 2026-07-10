@@ -96,6 +96,7 @@ func run() error {
 		Enabled:  telemetryEnabled,
 		Stats:    ws,
 		Snap:     obsClient,
+		Limiter:  obsClient,
 	}
 	go reporter.Run(ctx)
 

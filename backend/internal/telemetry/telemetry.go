@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/percona/obs-dashboard/internal/obs"
 	"github.com/percona/obs-dashboard/internal/workingset"
 )
 
@@ -15,12 +16,16 @@ type Statter interface{ Stats() workingset.Stats }
 // Snapshotter provides cumulative per-op OBS request counts.
 type Snapshotter interface{ MetricsSnapshot() map[string]int64 }
 
+// LimiterStatser provides absolute limiter gauges.
+type LimiterStatser interface{ LimiterStats() obs.LimiterStats }
+
 // Reporter periodically logs working-set and OBS-request telemetry.
 type Reporter struct {
 	Interval time.Duration
 	Enabled  *atomic.Bool
 	Stats    Statter
 	Snap     Snapshotter
+	Limiter  LimiterStatser // optional; nil disables limiter fields
 }
 
 // Diff returns per-op deltas (omitting zero-delta ops) and the total delta.
@@ -51,7 +56,7 @@ func (r *Reporter) tick(prev map[string]int64) map[string]int64 {
 		if r.Interval > 0 {
 			rate = float64(total) / r.Interval.Seconds()
 		}
-		slog.Info("telemetry",
+		args := []any{
 			"window", r.Interval.String(),
 			"ws_packages", s.Total,
 			"ws_inflight", s.Inflight,
@@ -60,7 +65,13 @@ func (r *Reporter) tick(prev map[string]int64) map[string]int64 {
 			"obs_total", cumulative,
 			"obs_req_per_s", rate,
 			"obs_by_endpoint", perOp,
-		)
+		}
+		if r.Limiter != nil {
+			if ls := r.Limiter.LimiterStats(); ls.Enabled {
+				args = append(args, "limiter_remaining", ls.Remaining, "limiter_waits", ls.Waits)
+			}
+		}
+		slog.Info("telemetry", args...)
 	}
 	return cur
 }

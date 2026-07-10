@@ -1,11 +1,15 @@
 package telemetry
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/percona/obs-dashboard/internal/obs"
 	"github.com/percona/obs-dashboard/internal/workingset"
 )
 
@@ -56,4 +60,62 @@ func TestRunNoPanicOnZeroInterval(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("Run did not return on zero interval")
 	}
+}
+
+type fakeLimiter struct{ ls obs.LimiterStats }
+
+func (f fakeLimiter) LimiterStats() obs.LimiterStats { return f.ls }
+
+func captureTick(t *testing.T, r *Reporter) string {
+	t.Helper()
+	var buf bytes.Buffer
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	defer slog.SetDefault(old)
+	r.tick(map[string]int64{})
+	return buf.String()
+}
+
+func TestTickLogsLimiterGauges(t *testing.T) {
+	var enabled atomic.Bool
+	enabled.Store(true)
+	r := &Reporter{
+		Interval: time.Minute,
+		Enabled:  &enabled,
+		Stats:    fakeStatter{},
+		Snap:     fakeSnap{m: map[string]int64{}},
+		Limiter:  fakeLimiter{ls: obs.LimiterStats{Enabled: true, Budget: 60, Remaining: 41, Waits: 17}},
+	}
+	out := captureTick(t, r)
+	if !strings.Contains(out, "limiter_remaining=41") || !strings.Contains(out, "limiter_waits=17") {
+		t.Fatalf("limiter gauges missing from log line: %q", out)
+	}
+}
+
+func TestTickOmitsLimiterWhenDisabled(t *testing.T) {
+	var enabled atomic.Bool
+	enabled.Store(true)
+	r := &Reporter{
+		Interval: time.Minute,
+		Enabled:  &enabled,
+		Stats:    fakeStatter{},
+		Snap:     fakeSnap{m: map[string]int64{}},
+		Limiter:  fakeLimiter{}, // zero value: Enabled false
+	}
+	out := captureTick(t, r)
+	if strings.Contains(out, "limiter_") {
+		t.Fatalf("limiter fields present despite disabled limiter: %q", out)
+	}
+}
+
+func TestTickNilLimiterNoPanic(t *testing.T) {
+	var enabled atomic.Bool
+	enabled.Store(true)
+	r := &Reporter{
+		Interval: time.Minute,
+		Enabled:  &enabled,
+		Stats:    fakeStatter{},
+		Snap:     fakeSnap{m: map[string]int64{}},
+	}
+	_ = captureTick(t, r) // must not panic
 }
