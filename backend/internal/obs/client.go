@@ -69,16 +69,27 @@ func (c *Client) SetMinuteBudget(n int) {
 	c.limiter = newMinuteLimiter(n)
 }
 
-// MetricsSnapshot returns a copy of the per-operation OBS request counts,
-// plus limiter gauges when rate limiting is enabled.
+// MetricsSnapshot returns a copy of the per-operation OBS request counts.
 func (c *Client) MetricsSnapshot() map[string]int64 {
-	out := c.metrics.snapshot()
-	if c.limiter.budget > 0 {
-		waits, remaining := c.limiter.stats()
-		out["limiter_waits"] = waits
-		out["limiter_remaining"] = remaining
+	return c.metrics.snapshot()
+}
+
+// LimiterStats reports the background rate limiter's absolute gauges.
+// The zero value (Enabled: false) means rate limiting is disabled.
+type LimiterStats struct {
+	Enabled   bool
+	Budget    int
+	Remaining int64
+	Waits     int64
+}
+
+// LimiterStats returns the current limiter gauges.
+func (c *Client) LimiterStats() LimiterStats {
+	if c.limiter.budget <= 0 {
+		return LimiterStats{}
 	}
-	return out
+	waits, remaining := c.limiter.stats()
+	return LimiterStats{Enabled: true, Budget: c.limiter.budget, Remaining: remaining, Waits: waits}
 }
 
 func (c *Client) get(ctx context.Context, op, path string) (*http.Response, error) {
