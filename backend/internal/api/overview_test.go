@@ -14,15 +14,28 @@ import (
 func TestLogicalProject(t *testing.T) {
 	const root = "isv:percona"
 	cases := []struct{ project, want string }{
-		{"isv:percona:ppg:17", "isv:percona:ppg:17"},
-		{"isv:percona:ppg:17:containers:ubi9", "isv:percona:ppg:17"},
-		{"isv:percona:ppg:16:extras", "isv:percona:ppg:16:extras"},
-		{"isv:percona:ppg:16:extras:containers:ubi9", "isv:percona:ppg:16:extras"},
+		// three-tier shapes
+		{"isv:percona:ppg:staging:17", "isv:percona:ppg:staging:17"},
+		{"isv:percona:ppg:staging:17:containers:ubi9", "isv:percona:ppg:staging:17"},
+		{"isv:percona:ppg:staging:16:extras", "isv:percona:ppg:staging:16:extras"},
+		{"isv:percona:ppg:staging:16:extras:containers:ubi9", "isv:percona:ppg:staging:16:extras"},
+		{"isv:percona:ppg:staging:16:tde", "isv:percona:ppg:staging:16:tde"},
+		{"isv:percona:ppg:devel:18", "isv:percona:ppg:devel:18"},
+		{"isv:percona:ppg:devel:18:containers:ubi9", "isv:percona:ppg:devel:18"},
+		{"isv:percona:ppg:devel", ""},
+		{"isv:percona:ppg:staging", ""},
+		// legacy two-tier shapes map onto staging (renamed continuation):
+		// pre-migration duration/event rows inside the stats windows merge
+		// into the staging rows instead of rendering ghost sections.
+		{"isv:percona:ppg:17", "isv:percona:ppg:staging:17"},
+		{"isv:percona:ppg:17:containers:ubi9", "isv:percona:ppg:staging:17"},
+		{"isv:percona:ppg:16:extras", "isv:percona:ppg:staging:16:extras"},
+		// unchanged shapes
 		{"isv:percona:ppg:common", "isv:percona:ppg:common"},
 		{"isv:percona:ppg:common:deps", "isv:percona:ppg:common"},
 		{"isv:percona:common:containers:ubi8", "isv:percona:common"},
 		{"isv:percona:ppg:releases:17:containers:ubi9", "isv:percona:ppg:releases"},
-		{"isv:percona:PR:pr-124:ppg:16:extras", "isv:percona:PR:pr-124"},
+		{"isv:percona:PR:pr-124:ppg:staging:16:extras", "isv:percona:PR:pr-124"},
 		{"isv:percona:PR:pr-33:ppg:18:containers:ubi9", "isv:percona:PR:pr-33"},
 		{"isv:other:ppg:17", ""},
 		{"isv:percona:ppg", ""},
@@ -64,9 +77,9 @@ func TestOverviewSnapshotBuilder(t *testing.T) {
 	if s.TopRepo == nil || s.TopRepo.Name != "UBI_9" || s.TopRepo.Count != 2 {
 		t.Fatalf("top_repo = %+v", s.TopRepo)
 	}
-	p17 := findProject(t, s, "isv:percona:ppg:17")
+	p17 := findProject(t, s, "isv:percona:ppg:staging:17")
 	if p17.Rebuilds != 3 || p17.TopPackage.Name != "pkg-a" || p17.TopPackage.Count != 2 {
-		t.Fatalf("ppg:17 = %+v", p17)
+		t.Fatalf("ppg:staging:17 = %+v", p17)
 	}
 	if len(p17.Images) != 1 || p17.Images[0].Critical != 2 || p17.Images[0].High != 7 {
 		t.Fatalf("img-x max-across-archs failed: %+v", p17.Images)
@@ -86,7 +99,7 @@ func TestOverviewSnapshotBuilder(t *testing.T) {
 	if pr.Rebuilds != 1 {
 		t.Fatalf("pr = %+v", pr)
 	}
-	if s.Projects[0].Project != "isv:percona:ppg:17" {
+	if s.Projects[0].Project != "isv:percona:ppg:staging:17" {
 		t.Fatalf("sort order: %v", s.Projects[0].Project)
 	}
 }
@@ -168,7 +181,7 @@ func TestOverviewTopTieBreakDeterministic(t *testing.T) {
 		if s.TopRepo == nil || s.TopRepo.Name != "Debian_12" || s.TopRepo.Count != 1 {
 			t.Fatalf("top_repo tie-break = %+v, want Debian_12/1", s.TopRepo)
 		}
-		p := findProject(t, s, "isv:percona:ppg:17")
+		p := findProject(t, s, "isv:percona:ppg:staging:17")
 		if p.TopPackage == nil || p.TopPackage.Name != "pkg-a" || p.TopPackage.Count != 1 {
 			t.Fatalf("top_package tie-break = %+v, want pkg-a/1", p.TopPackage)
 		}

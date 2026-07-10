@@ -44,7 +44,7 @@ func setupTestServer(t *testing.T) http.Handler {
 func TestPackagesHandler_EmptyDB(t *testing.T) {
 	router := setupTestServer(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/products/ppg/17/packages", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/products/ppg/staging/17/packages", nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
@@ -71,7 +71,7 @@ func TestPackagesHandler_EmptyDB(t *testing.T) {
 func TestEventsHandler_WindowParam(t *testing.T) {
 	router := setupTestServer(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/products/ppg/17/events?window=1440", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/products/ppg/staging/17/events?window=1440", nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
@@ -97,7 +97,7 @@ func TestEventsHandler_WindowParam(t *testing.T) {
 func TestEventsHandler_DateRangeParam(t *testing.T) {
 	router := setupTestServer(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/products/ppg/17/events?from=2026-01-01&to=2026-12-31", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/products/ppg/staging/17/events?from=2026-01-01&to=2026-12-31", nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
@@ -123,7 +123,7 @@ func TestEventsHandler_DateRangeParam(t *testing.T) {
 func TestEventsHandler_DefaultWindow(t *testing.T) {
 	router := setupTestServer(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/products/ppg/17/events", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/products/ppg/staging/17/events", nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
@@ -140,7 +140,7 @@ func TestEventsHandler_DefaultWindow(t *testing.T) {
 func TestEventsHandler_InvalidWindow(t *testing.T) {
 	router := setupTestServer(t)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/products/ppg/17/events?window=notanumber", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/products/ppg/staging/17/events?window=notanumber", nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
@@ -276,7 +276,7 @@ func TestReposSubprojectParam(t *testing.T) {
 	falseVal := false
 	now := time.Now()
 	mainPkg := &model.Package{
-		Project: "isv:percona:ppg:18", Name: "percona-postgresql18",
+		Project: "isv:percona:ppg:staging:18", Name: "percona-postgresql18",
 		RollupState: model.RollupSucceeded, OKTargets: 1, TotalTargets: 1,
 		IsContainer: &falseVal,
 		Targets:     []model.Target{{Repo: "Debian_13", Arch: "x86_64", State: "succeeded"}},
@@ -286,7 +286,7 @@ func TestReposSubprojectParam(t *testing.T) {
 		t.Fatalf("seed main pkg: %v", err)
 	}
 	extrasPkg := &model.Package{
-		Project: "isv:percona:ppg:18:extras", Name: "percona-postgresql18-extras",
+		Project: "isv:percona:ppg:staging:18:extras", Name: "percona-postgresql18-extras",
 		RollupState: model.RollupSucceeded, OKTargets: 1, TotalTargets: 1,
 		IsContainer: &falseVal,
 		Targets:     []model.Target{{Repo: "UBI_9", Arch: "x86_64", State: "succeeded"}},
@@ -311,7 +311,7 @@ func TestReposSubprojectParam(t *testing.T) {
 	}
 
 	// 1. subproject=extras returns only extras repos.
-	req := httptest.NewRequest(http.MethodGet, "/api/products/ppg/18/repos?subproject=extras", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/products/ppg/staging/18/repos?subproject=extras", nil)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -329,7 +329,7 @@ func TestReposSubprojectParam(t *testing.T) {
 	}
 
 	// 2. no subproject param: unchanged behaviour, main repo present.
-	req2 := httptest.NewRequest(http.MethodGet, "/api/products/ppg/18/repos", nil)
+	req2 := httptest.NewRequest(http.MethodGet, "/api/products/ppg/staging/18/repos", nil)
 	rec2 := httptest.NewRecorder()
 	router.ServeHTTP(rec2, req2)
 	if rec2.Code != http.StatusOK {
@@ -344,7 +344,7 @@ func TestReposSubprojectParam(t *testing.T) {
 	}
 
 	// 3. invalid subproject param -> 400.
-	req3 := httptest.NewRequest(http.MethodGet, "/api/products/ppg/18/repos?subproject=EX%25TRAS", nil)
+	req3 := httptest.NewRequest(http.MethodGet, "/api/products/ppg/staging/18/repos?subproject=EX%25TRAS", nil)
 	rec3 := httptest.NewRecorder()
 	router.ServeHTTP(rec3, req3)
 	if rec3.Code != http.StatusBadRequest {
@@ -558,5 +558,37 @@ func TestCveScansRoute(t *testing.T) {
 		"/api/cve/scans?project=p&package=k", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("route not registered or failing: expected 200, got %d", rec.Code)
+	}
+}
+
+func TestProductsTierValidation(t *testing.T) {
+	router := setupTestServer(t)
+	for _, path := range []string{
+		"/api/products/ppg/bogus/17/packages",
+		"/api/products/ppg/bogus/17/events",
+		"/api/products/ppg/bogus/17/repos",
+	} {
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("%s: expected 400, got %d", path, rec.Code)
+		}
+		if !strings.Contains(rec.Body.String(), "tier must be devel or staging") {
+			t.Fatalf("%s: unexpected body %q", path, rec.Body.String())
+		}
+	}
+}
+
+func TestProductsTierRoutes(t *testing.T) {
+	router := setupTestServer(t)
+	for _, path := range []string{
+		"/api/products/ppg/devel/18/packages",
+		"/api/products/ppg/staging/17/repos",
+	} {
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: expected 200, got %d", path, rec.Code)
+		}
 	}
 }

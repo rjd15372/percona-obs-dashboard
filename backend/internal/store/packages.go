@@ -513,16 +513,20 @@ func QueryPRBuildPackages(db *sql.DB, root, pr string) ([]*model.Package, error)
 	return scanPackages(db, rows)
 }
 
-// QueryBuildPackages returns packages for the builds tab: version-specific project
-// (including container subprojects), product-common subtree, and global common subtree.
-// root is e.g. "isv:percona", product is "ppg", version is "17".
-// When version is "_" or "", all versions under the product subtree are returned.
-func QueryBuildPackages(db *sql.DB, root, product, version string) ([]*model.Package, error) {
+// QueryBuildPackages returns build packages for one product tier
+// (root:product:tier[:version] subtree, subprojects included — the client
+// splits them into version-extension entries) plus the shared common
+// projects: root:product:common and root:common appear in both devel and
+// staging views. The version-less branch scopes to the whole tier and keeps
+// only root:common, as before.
+// root is e.g. "isv:percona", product is "ppg", tier is "devel"/"staging", version is "17".
+// When version is "_" or "", all versions under the product:tier subtree are returned.
+func QueryBuildPackages(db *sql.DB, root, product, tier, version string) ([]*model.Package, error) {
 	gp := root + ":common"
 	var rows *sql.Rows
 	var err error
 	if version == "_" || version == "" {
-		pp := root + ":" + product
+		pp := root + ":" + product + ":" + tier
 		rows, err = db.Query(`SELECT`+packageSelectCols+`
 			FROM packages
 			WHERE is_release = 0
@@ -532,7 +536,7 @@ func QueryBuildPackages(db *sql.DB, root, product, version string) ([]*model.Pac
 			pp, pp, gp, gp,
 		)
 	} else {
-		vp := root + ":" + product + ":" + version
+		vp := root + ":" + product + ":" + tier + ":" + version
 		cp := root + ":" + product + ":common"
 		rows, err = db.Query(`SELECT`+packageSelectCols+`
 			FROM packages

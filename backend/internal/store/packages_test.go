@@ -256,13 +256,15 @@ func TestQueryBuildPackages(t *testing.T) {
 		db.Exec(`INSERT INTO packages (project, name, rollup_state, ok_targets, total_targets, targets_json, updated_at)
             VALUES (?, ?, 'building', 0, 0, '[]', ?)`, project, name, now)
 	}
-	insert("isv:percona:ppg:17", "pg_tde")
-	insert("isv:percona:ppg:17:containers:ubi9", "pg_container")
+	insert("isv:percona:ppg:staging:17", "pg_tde")
+	insert("isv:percona:ppg:staging:17:containers:ubi9", "pg_container")
+	insert("isv:percona:ppg:staging:17:extras", "extras_pkg")
+	insert("isv:percona:ppg:devel:17", "devel_pkg")
 	insert("isv:percona:ppg:common", "common_pkg")
 	insert("isv:percona:common", "global_common")
 	insert("isv:percona:ppg:releases:17", "release_pkg")
 
-	pkgs, err := QueryBuildPackages(db, "isv:percona", "ppg", "17")
+	pkgs, err := QueryBuildPackages(db, "isv:percona", "ppg", "staging", "17")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,13 +273,26 @@ func TestQueryBuildPackages(t *testing.T) {
 	for _, p := range pkgs {
 		names[p.Name] = true
 	}
-	for _, want := range []string{"pg_tde", "pg_container", "common_pkg", "global_common"} {
+	// The staging:17 subtree (incl. subprojects — the client filters extras
+	// into its own version entry) plus both shared common projects.
+	for _, want := range []string{"pg_tde", "pg_container", "extras_pkg", "common_pkg", "global_common"} {
 		if !names[want] {
 			t.Errorf("missing expected package %q", want)
 		}
 	}
-	if names["release_pkg"] {
-		t.Error("release_pkg should not appear in build packages")
+	for _, unwanted := range []string{"devel_pkg", "release_pkg"} {
+		if names[unwanted] {
+			t.Errorf("%s should not appear in staging build packages", unwanted)
+		}
+	}
+
+	// Version-less fetch scopes to the whole tier.
+	all, err := QueryBuildPackages(db, "isv:percona", "ppg", "devel", "_")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 2 { // devel_pkg + global_common (no ppg:common in the "_" branch, as before)
+		t.Fatalf("devel _ fetch: expected 2 packages, got %d", len(all))
 	}
 }
 

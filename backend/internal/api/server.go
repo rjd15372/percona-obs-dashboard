@@ -22,7 +22,7 @@ func NewRouter(db *sql.DB, h *hub.Hub, obsClient *obs.Client, root string, telem
 	metadataCache := newBinaryListCache(5 * time.Minute)
 	overview := newOverviewCache(60 * time.Second)
 
-	r.Route("/api/products/{product}/{version}", func(r chi.Router) {
+	r.Route("/api/products/{product}/{tier}/{version}", func(r chi.Router) {
 		r.Get("/packages", packagesHandler(db, root))
 		r.Get("/events", eventsHandler(db))
 		r.Get("/repos", reposHandler(db))

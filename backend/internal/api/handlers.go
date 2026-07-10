@@ -19,13 +19,29 @@ import (
 	"github.com/percona/obs-dashboard/internal/store"
 )
 
-// packagesHandler returns a handler for GET /api/products/{product}/{version}/packages.
+// productTier extracts and validates the {tier} URL param. The three-tier
+// layout has exactly two building tiers; anything else is a client error
+// (and must not reach the SQL LIKE prefixes).
+func productTier(w http.ResponseWriter, r *http.Request) (string, bool) {
+	tier := chi.URLParam(r, "tier")
+	if tier != "devel" && tier != "staging" {
+		http.Error(w, "tier must be devel or staging", http.StatusBadRequest)
+		return "", false
+	}
+	return tier, true
+}
+
+// packagesHandler returns a handler for GET /api/products/{product}/{tier}/{version}/packages.
 func packagesHandler(db *sql.DB, root string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		product := chi.URLParam(r, "product")
+		tier, ok := productTier(w, r)
+		if !ok {
+			return
+		}
 		version := chi.URLParam(r, "version")
 
-		pkgs, err := store.QueryBuildPackages(db, root, product, version)
+		pkgs, err := store.QueryBuildPackages(db, root, product, tier, version)
 		if err != nil {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
@@ -72,7 +88,7 @@ func parseTimeWindow(r *http.Request) (from, to time.Time, err error) {
 	return now.Add(-24 * time.Hour), now, nil
 }
 
-// eventsHandler returns a handler for GET /api/products/{product}/{version}/events.
+// eventsHandler returns a handler for GET /api/products/{product}/{tier}/{version}/events.
 // Query params:
 //   - window=<minutes>  — last N minutes (overrides from/to)
 //   - from=YYYY-MM-DD   — start of date range (inclusive)
@@ -82,7 +98,11 @@ func parseTimeWindow(r *http.Request) (from, to time.Time, err error) {
 func eventsHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		product := chi.URLParam(r, "product")
-		prefix := "isv:percona:" + product
+		tier, ok := productTier(w, r)
+		if !ok {
+			return
+		}
+		prefix := "isv:percona:" + product + ":" + tier
 
 		from, to, err := parseTimeWindow(r)
 		if err != nil {
@@ -265,20 +285,23 @@ func reposHandlerWithPrefix(db *sql.DB, prefixFn func(*http.Request) string) htt
 // endpoint is a read-only repo listing, so an over-match is harmless.
 var subprojectRe = regexp.MustCompile(`^[a-z0-9_-]+$`)
 
-// reposHandler returns a handler for GET /api/products/{product}/{version}/repos.
+// reposHandler returns a handler for GET /api/products/{product}/{tier}/{version}/repos.
 // It queries the DB for distinct OBS repository names found in non-container
 // packages' targets, and returns them grouped into rpm and deb categories.
 // An optional ?subproject=<segment> narrows the query to that subproject
-// (e.g. isv:percona:ppg:18:extras); invalid segments are rejected with 400.
+// (e.g. isv:percona:ppg:staging:18:extras); invalid segments are rejected with 400.
 func reposHandler(db *sql.DB) http.HandlerFunc {
 	inner := reposHandlerWithPrefix(db, func(r *http.Request) string {
-		prefix := "isv:percona:" + chi.URLParam(r, "product") + ":" + chi.URLParam(r, "version")
+		prefix := "isv:percona:" + chi.URLParam(r, "product") + ":" + chi.URLParam(r, "tier") + ":" + chi.URLParam(r, "version")
 		if sub := r.URL.Query().Get("subproject"); sub != "" {
 			prefix += ":" + sub
 		}
 		return prefix
 	})
 	return func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := productTier(w, r); !ok {
+			return
+		}
 		if sub := r.URL.Query().Get("subproject"); sub != "" && !subprojectRe.MatchString(sub) {
 			http.Error(w, "invalid subproject", http.StatusBadRequest)
 			return

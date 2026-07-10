@@ -14,9 +14,15 @@ import (
 )
 
 // logicalProject maps a raw OBS project to the Overview row it belongs to:
-// dev version roots absorb their :containers:* subprojects; :extras is its own
-// row (absorbing its subtree); the common trees, the releases tree, and each PR
-// collapse to one row each. Unknown shapes return "" (excluded).
+// tier version roots (ppg:devel:<V>, ppg:staging:<V>) absorb their
+// :containers:* subprojects; any other direct subproject (extras, tde, …)
+// is its own row (absorbing its subtree) — matching the version selector's
+// <V>:<sub> granularity. The common trees, the releases tree, and each PR
+// collapse to one row each. The legacy two-tier shape ppg:<V> maps onto the
+// staging row — staging is the renamed continuation of ppg:<V>, so
+// pre-migration duration/event rows still inside the stats windows merge
+// into the staging rows instead of rendering ghost sections. Unknown shapes
+// return "" (excluded).
 func logicalProject(root, project string) string {
 	prefix := root + ":"
 	if !strings.HasPrefix(project, prefix) {
@@ -40,14 +46,28 @@ func logicalProject(root, project string) string {
 			return root + ":ppg:common"
 		case "releases":
 			return root + ":ppg:releases"
-		default:
-			if len(rel) >= 3 && rel[2] == "extras" {
-				return root + ":ppg:" + rel[1] + ":extras"
+		case "devel", "staging":
+			if len(rel) < 3 {
+				return ""
 			}
-			return root + ":ppg:" + rel[1]
+			return tierRow(root, rel[1], rel[2], rel[3:])
+		default:
+			// Legacy two-tier shape: ppg:<V>[:<sub>…] → the staging row.
+			return tierRow(root, "staging", rel[1], rel[2:])
 		}
 	}
 	return ""
+}
+
+// tierRow builds the Overview row name for a tier version root and its
+// subproject tail: containers are absorbed into the version row; any other
+// direct subproject gets its own row.
+func tierRow(root, tier, version string, sub []string) string {
+	row := root + ":ppg:" + tier + ":" + version
+	if len(sub) > 0 && sub[0] != "containers" {
+		row += ":" + sub[0]
+	}
+	return row
 }
 
 // ── snapshot types (snake_case JSON, app convention) ──
