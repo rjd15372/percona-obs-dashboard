@@ -2,6 +2,9 @@ obs:
   username: ""
   password: ""
   base_url: "https://build.opensuse.org"
+  # Per-minute cap on background OBS requests (poller + workers).
+  # Interactive API requests bypass it. 0 disables limiting.
+  minute_request_budget: 60
 
 mq:
   url: "amqps://opensuse:opensuse@rabbit.opensuse.org:5671/"
@@ -16,3 +19,14 @@ store:
 server:
   http_port: 8080
   frontend_dir: ""
+
+worker_pool:
+  size: 5
+  poll_interval: 30s
+  queue_size: 512
+  # Cap of the per-package backoff ladder: unchanged packages are polled
+  # less and less often, up to this interval.
+  backoff_max: 5m
+  # Minimum number of due packages of the same project to fetch build
+  # results with one project-level call instead of per-package calls.
+  batch_threshold: 4

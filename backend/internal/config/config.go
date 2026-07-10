@@ -21,9 +21,10 @@ type Config struct {
 }
 
 type OBSConfig struct {
-	Username string
-	Password string
-	BaseURL  string
+	Username            string
+	Password            string
+	BaseURL             string
+	MinuteRequestBudget int
 }
 
 type MQConfig struct {
@@ -45,9 +46,11 @@ type ServerConfig struct {
 }
 
 type WorkerPoolConfig struct {
-	Size         int
-	PollInterval time.Duration
-	QueueSize    int
+	Size           int
+	PollInterval   time.Duration
+	QueueSize      int
+	BackoffMax     time.Duration
+	BatchThreshold int
 }
 
 type TelemetryConfig struct {
@@ -62,6 +65,7 @@ func Load() (*Config, error) {
 	_ = v.BindEnv("obs_root", "OBS_ROOT")
 
 	v.SetDefault("obs.base_url", "https://api.opensuse.org")
+	v.SetDefault("obs.minute_request_budget", 60)
 	v.SetDefault("mq.url", "amqps://opensuse:opensuse@rabbit.opensuse.org:5671/")
 	v.SetDefault("poller.interval", "2m")
 	v.SetDefault("store.db_path", "/data/obsboard.db")
@@ -71,6 +75,8 @@ func Load() (*Config, error) {
 	v.SetDefault("worker_pool.size", 5)
 	v.SetDefault("worker_pool.poll_interval", "30s")
 	v.SetDefault("worker_pool.queue_size", 512)
+	v.SetDefault("worker_pool.backoff_max", "5m")
+	v.SetDefault("worker_pool.batch_threshold", 4)
 	v.SetDefault("telemetry.interval", "60s")
 	v.SetDefault("telemetry.enabled", false)
 
@@ -89,6 +95,7 @@ func Load() (*Config, error) {
 		{"obs.username", "OBS_USERNAME"},
 		{"obs.password", "OBS_PASSWORD"},
 		{"obs.base_url", "OBS_BASE_URL"},
+		{"obs.minute_request_budget", "OBS_MINUTE_REQUEST_BUDGET"},
 		{"mq.url", "MQ_URL"},
 		{"poller.interval", "POLL_INTERVAL"},
 		{"store.db_path", "DB_PATH"},
@@ -98,6 +105,8 @@ func Load() (*Config, error) {
 		{"worker_pool.size", "WORKER_POOL_SIZE"},
 		{"worker_pool.poll_interval", "WORKER_POOL_POLL_INTERVAL"},
 		{"worker_pool.queue_size", "WORKER_POOL_QUEUE_SIZE"},
+		{"worker_pool.backoff_max", "WORKER_POOL_BACKOFF_MAX"},
+		{"worker_pool.batch_threshold", "WORKER_POOL_BATCH_THRESHOLD"},
 		{"telemetry.interval", "TELEMETRY_INTERVAL"},
 		{"telemetry.enabled", "TELEMETRY_ENABLED"},
 	} {
@@ -119,6 +128,11 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("invalid WORKER_POOL_POLL_INTERVAL %q: %w", v.GetString("worker_pool.poll_interval"), err)
 	}
 
+	backoffMax, err := time.ParseDuration(v.GetString("worker_pool.backoff_max"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid WORKER_POOL_BACKOFF_MAX %q: %w", v.GetString("worker_pool.backoff_max"), err)
+	}
+
 	telemetryInterval, err := time.ParseDuration(v.GetString("telemetry.interval"))
 	if err != nil {
 		return nil, fmt.Errorf("invalid TELEMETRY_INTERVAL %q: %w", v.GetString("telemetry.interval"), err)
@@ -127,9 +141,10 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		OBSRoot: v.GetString("obs_root"),
 		OBS: OBSConfig{
-			Username: v.GetString("obs.username"),
-			Password: v.GetString("obs.password"),
-			BaseURL:  strings.TrimRight(v.GetString("obs.base_url"), "/"),
+			Username:            v.GetString("obs.username"),
+			Password:            v.GetString("obs.password"),
+			BaseURL:             strings.TrimRight(v.GetString("obs.base_url"), "/"),
+			MinuteRequestBudget: v.GetInt("obs.minute_request_budget"),
 		},
 		MQ:     MQConfig{URL: v.GetString("mq.url")},
 		Poller: PollerConfig{Interval: pollInterval},
@@ -142,9 +157,11 @@ func Load() (*Config, error) {
 			FrontendDir: v.GetString("server.frontend_dir"),
 		},
 		WorkerPool: WorkerPoolConfig{
-			Size:         v.GetInt("worker_pool.size"),
-			PollInterval: pollIntervalWP,
-			QueueSize:    v.GetInt("worker_pool.queue_size"),
+			Size:           v.GetInt("worker_pool.size"),
+			PollInterval:   pollIntervalWP,
+			QueueSize:      v.GetInt("worker_pool.queue_size"),
+			BackoffMax:     backoffMax,
+			BatchThreshold: v.GetInt("worker_pool.batch_threshold"),
 		},
 		Telemetry: TelemetryConfig{
 			Interval: telemetryInterval,
