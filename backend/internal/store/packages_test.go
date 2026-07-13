@@ -261,6 +261,7 @@ func TestQueryBuildPackages(t *testing.T) {
 	insert("isv:percona:ppg:staging:17:extras", "extras_pkg")
 	insert("isv:percona:ppg:devel:17", "devel_pkg")
 	insert("isv:percona:ppg:common", "common_pkg")
+	insert("isv:percona:ppg:common:deps", "common_deps_pkg")
 	insert("isv:percona:common", "global_common")
 	insert("isv:percona:ppg:releases:17", "release_pkg")
 
@@ -275,7 +276,7 @@ func TestQueryBuildPackages(t *testing.T) {
 	}
 	// The staging:17 subtree (incl. subprojects — the client filters extras
 	// into its own version entry) plus both shared common projects.
-	for _, want := range []string{"pg_tde", "pg_container", "extras_pkg", "common_pkg", "global_common"} {
+	for _, want := range []string{"pg_tde", "pg_container", "extras_pkg", "common_pkg", "common_deps_pkg", "global_common"} {
 		if !names[want] {
 			t.Errorf("missing expected package %q", want)
 		}
@@ -286,13 +287,26 @@ func TestQueryBuildPackages(t *testing.T) {
 		}
 	}
 
-	// Version-less fetch scopes to the whole tier.
+	// Version-less fetch scopes to the whole tier plus BOTH shared common
+	// subtrees. Regression guard: the board only ever issues the "_" (All)
+	// query, so isv:percona:ppg:common[:deps...] must appear here too.
 	all, err := QueryBuildPackages(db, "isv:percona", "ppg", "devel", "_")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(all) != 2 { // devel_pkg + global_common (no ppg:common in the "_" branch, as before)
-		t.Fatalf("devel _ fetch: expected 2 packages, got %d", len(all))
+	allNames := make(map[string]bool)
+	for _, p := range all {
+		allNames[p.Name] = true
+	}
+	for _, want := range []string{"devel_pkg", "common_pkg", "common_deps_pkg", "global_common"} {
+		if !allNames[want] {
+			t.Errorf("devel _ fetch: missing expected package %q", want)
+		}
+	}
+	for _, unwanted := range []string{"pg_tde", "release_pkg"} {
+		if allNames[unwanted] {
+			t.Errorf("devel _ fetch: %s should not appear", unwanted)
+		}
 	}
 }
 

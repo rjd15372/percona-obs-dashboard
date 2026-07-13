@@ -517,12 +517,13 @@ func QueryPRBuildPackages(db *sql.DB, root, pr string) ([]*model.Package, error)
 // (root:product:tier[:version] subtree, subprojects included — the client
 // splits them into version-extension entries) plus the shared common
 // projects: root:product:common and root:common appear in both devel and
-// staging views. The version-less branch scopes to the whole tier and keeps
-// only root:common, as before.
+// staging views, in the versioned and version-less branches alike (the
+// board only ever issues the version-less "_" query and filters client-side).
 // root is e.g. "isv:percona", product is "ppg", tier is "devel"/"staging", version is "17".
 // When version is "_" or "", all versions under the product:tier subtree are returned.
 func QueryBuildPackages(db *sql.DB, root, product, tier, version string) ([]*model.Package, error) {
 	gp := root + ":common"
+	cp := root + ":" + product + ":common"
 	var rows *sql.Rows
 	var err error
 	if version == "_" || version == "" {
@@ -531,13 +532,13 @@ func QueryBuildPackages(db *sql.DB, root, product, tier, version string) ([]*mod
 			FROM packages
 			WHERE is_release = 0
 			  AND (  (project = ? OR project LIKE ? || ':%')
+			      OR (project = ? OR project LIKE ? || ':%')
 			      OR (project = ? OR project LIKE ? || ':%') )
 			ORDER BY project, name`,
-			pp, pp, gp, gp,
+			pp, pp, cp, cp, gp, gp,
 		)
 	} else {
 		vp := root + ":" + product + ":" + tier + ":" + version
-		cp := root + ":" + product + ":common"
 		rows, err = db.Query(`SELECT`+packageSelectCols+`
 			FROM packages
 			WHERE is_release = 0
