@@ -22,6 +22,7 @@ const CHIP_CLASSES: Record<'brand' | 'info' | 'crit' | 'ok' | 'high', string> = 
       <span class="text-[11.5px] font-bold uppercase tracking-[0.05em] text-text-muted">{{ label }}</span>
     </div>
     <slot name="value" />
+    <slot />
     <div class="text-[12px] text-text-muted">
       <slot name="footnote" />
     </div>

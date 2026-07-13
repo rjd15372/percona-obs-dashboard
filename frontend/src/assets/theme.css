@@ -33,6 +33,10 @@
   --border-strong: rgba(20, 17, 28, 0.14);
   --tech-postgres: #005ED6;
   --tint-postgres: rgba(0, 94, 214, 0.10);
+  --cat-devel: #6E3FF3;
+  --cat-staging: #2A78D4;
+  --cat-releases: #1F9D55;
+  --cat-prs: #E08A00;
   --font-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
 }
 
@@ -67,6 +71,10 @@
   --border-strong: rgba(255, 255, 255, 0.26);
   --tech-postgres: #3FAFCB;
   --tint-postgres: rgba(63, 175, 203, 0.16);
+  --cat-devel: #7E55F5;
+  --cat-staging: #2A78D4;
+  --cat-releases: #1F9D55;
+  --cat-prs: #CB7D0F;
 }
 
 /* ── Base ── */
