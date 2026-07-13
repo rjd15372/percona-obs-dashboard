@@ -1,5 +1,6 @@
 import { ref, computed, watch, onMounted, onUnmounted, type Ref } from 'vue'
 import type { OverviewSnapshot, OverviewCount, WindowKey } from '../types/overview'
+import { categoryOf, type ProjectCategory } from '../lib/overview'
 
 export interface RebuildBar {
   project: string
@@ -90,10 +91,29 @@ export function useOverviewData(window: Ref<WindowKey>) {
       .map(p => ({ project: p.project, count: p.rebuilds, pct: Math.round(p.rebuilds / max * 100) }))
   })
 
+  const emptyByCategory = (): Record<ProjectCategory, number> =>
+    ({ Devel: 0, Staging: 0, Releases: 0, PRs: 0 })
+
+  const rebuildsByCategory = computed<Record<ProjectCategory, number>>(() => {
+    const out = emptyByCategory()
+    for (const p of projects.value) out[categoryOf(p.project)] += p.rebuilds
+    return out
+  })
+
+  const openCvesByCategory = computed<Record<ProjectCategory, number>>(() => {
+    const out = emptyByCategory()
+    for (const p of projects.value) {
+      const cat = categoryOf(p.project)
+      for (const img of p.images) out[cat] += img.critical + img.high
+    }
+    return out
+  })
+
   return {
     snapshot, loading, error,
     totalRebuilds, rebuildDeltaPct, topPackage, topRepo,
     totalCritical, totalHigh, affectedImageCount, avgFixDays, oldestOpenDays,
     rebuildBars, projects,
+    rebuildsByCategory, openCvesByCategory,
   }
 }

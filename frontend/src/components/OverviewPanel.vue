@@ -4,6 +4,7 @@ import type { WindowKey } from '../types/overview'
 import { useOverviewData } from '../composables/useOverviewData'
 import { PROJECT_ACCENTS } from '../lib/overview'
 import StatCard from './StatCard.vue'
+import CategoryBreakdown from './CategoryBreakdown.vue'
 import RebuildBarChart from './RebuildBarChart.vue'
 import CveExposureTable from './CveExposureTable.vue'
 import { shortProject } from '../lib/project'
@@ -26,6 +27,7 @@ const {
   totalRebuilds, rebuildDeltaPct, topPackage, topRepo,
   totalCritical, totalHigh, affectedImageCount, avgFixDays, oldestOpenDays,
   rebuildBars, projects,
+  rebuildsByCategory, openCvesByCategory,
 } = useOverviewData(win)
 
 const WINDOWS: WindowKey[] = ['24h', '48h', '7d']
@@ -39,6 +41,26 @@ function accentOf(project: string): string {
   const idx = accentOrder.value.indexOf(project)
   return PROJECT_ACCENTS[Math.max(0, idx) % PROJECT_ACCENTS.length]
 }
+
+// Rebuilds: strictly devel/staging/PRs (user decision — Releases stays in
+// the total but gets no breakdown line).
+const rebuildSegments = computed(() => [
+  { label: 'devel', count: rebuildsByCategory.value.Devel, colorVar: 'var(--cat-devel)' },
+  { label: 'staging', count: rebuildsByCategory.value.Staging, colorVar: 'var(--cat-staging)' },
+  { label: 'PRs', count: rebuildsByCategory.value.PRs, colorVar: 'var(--cat-prs)' },
+])
+
+// CVEs: staging + releases always; devel/PRs only when non-zero. Order
+// follows CATEGORY_ORDER (Devel, Staging, Releases, PRs).
+const cveSegments = computed(() => {
+  const c = openCvesByCategory.value
+  const segs: { label: string; count: number; colorVar: string }[] = []
+  if (c.Devel > 0) segs.push({ label: 'devel', count: c.Devel, colorVar: 'var(--cat-devel)' })
+  segs.push({ label: 'staging', count: c.Staging, colorVar: 'var(--cat-staging)' })
+  segs.push({ label: 'releases', count: c.Releases, colorVar: 'var(--cat-releases)' })
+  if (c.PRs > 0) segs.push({ label: 'PRs', count: c.PRs, colorVar: 'var(--cat-prs)' })
+  return segs
+})
 </script>
 
 <template>
@@ -97,8 +119,9 @@ function accentOf(project: string): string {
               >{{ rebuildDeltaPct >= 0 ? '▲' : '▼' }} {{ Math.abs(rebuildDeltaPct) }}%</span>
             </div>
           </template>
+          <CategoryBreakdown :segments="rebuildSegments" />
           <template #footnote>
-            across <b class="text-text-secondary">{{ projects.length }}</b> projects · last {{ win }}
+            last {{ win }}
           </template>
         </StatCard>
 
@@ -143,6 +166,7 @@ function accentOf(project: string): string {
               <span class="text-[11.5px] font-bold px-2 py-0.5 rounded-md text-high bg-high-tint">{{ totalHigh }} High</span>
             </div>
           </template>
+          <CategoryBreakdown :segments="cveSegments" />
           <template #footnote>
             across <b class="text-text-secondary">{{ affectedImageCount }}</b> container images
           </template>
