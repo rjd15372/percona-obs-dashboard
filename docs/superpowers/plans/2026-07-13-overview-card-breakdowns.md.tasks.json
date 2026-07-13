@@ -5,19 +5,19 @@
       "id": 1,
       "nativeTaskId": 29,
       "subject": "Task 1: theme vars + CategoryBreakdown + StatCard slot",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** The presentation infrastructure: validated category colors as theme variables, the reusable bar+legend component, and a default slot in `StatCard`.\n\n**Files:**\n- Modify: `frontend/src/assets/theme.css:35,69`\n- Modify: `frontend/src/components/StatCard.vue:24-25`\n- Create: `frontend/src/components/CategoryBreakdown.vue`\n\n**Acceptance Criteria:**\n- [ ] `:root` defines `--cat-devel: #6E3FF3`, `--cat-staging: #2A78D4`, `--cat-releases: #1F9D55`, `--cat-prs: #E08A00`\n- [ ] `[data-theme=\"dark\"]` overrides `--cat-devel: #7E55F5` and `--cat-prs: #CB7D0F`\n- [ ] `CategoryBreakdown.vue` renders a 6px bar (2px gaps, 4px radius), slices only for count > 0, bar hidden when total is 0, legend entry per passed segment\n- [ ] `StatCard.vue` renders a default slot between value slot and footnote\n- [ ] `npm run build` exits 0\n\n**Verify:** `cd frontend && npm run build` -> exit 0\n\n**Steps:** full code in plan Task 1. Commit: git commit -s, never Co-Authored-By.\n\n```json:metadata\n{\"files\": [\"frontend/src/assets/theme.css\", \"frontend/src/components/StatCard.vue\", \"frontend/src/components/CategoryBreakdown.vue\"], \"verifyCommand\": \"cd frontend && npm run build\", \"acceptanceCriteria\": [\"4 --cat-* vars in :root with light hexes\", \"dark overrides --cat-devel #7E55F5 and --cat-prs #CB7D0F\", \"bar hides at total 0, zero-count segments legend-only\", \"StatCard default slot between value and footnote\", \"npm run build exit 0\"], \"modelTier\": \"mechanical\"}\n```"
     },
     {
       "id": 2,
       "nativeTaskId": 30,
       "subject": "Task 2: per-category computeds + card wiring",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         1
       ],
       "description": "**Goal:** `useOverviewData` exposes rebuild and open-CVE counts per category; the two cards render the breakdown per the user's category rules.\n\n**Files:**\n- Modify: `frontend/src/composables/useOverviewData.ts:1-2,84-98`\n- Modify: `frontend/src/components/OverviewPanel.vue:1-42,87-149`\n\n**Acceptance Criteria:**\n- [ ] `rebuildsByCategory` and `openCvesByCategory` return `Record<ProjectCategory, number>` summed via `categoryOf()`\n- [ ] Total Rebuilds card: exactly three segments devel/staging/PRs always present; footnote becomes `last {win}`\n- [ ] Open CVEs card: staging and releases always, devel/PRs only when count > 0, CATEGORY_ORDER order; footnote unchanged\n- [ ] Other three cards unchanged\n- [ ] `npm run build` exits 0\n\n**Verify:** `cd frontend && npm run build` -> exit 0; visual check per plan Task 2 Step 5\n\n**Steps:** full code in plan Task 2. Commit: git commit -s, never Co-Authored-By.\n\n```json:metadata\n{\"files\": [\"frontend/src/composables/useOverviewData.ts\", \"frontend/src/components/OverviewPanel.vue\"], \"verifyCommand\": \"cd frontend && npm run build\", \"acceptanceCriteria\": [\"rebuildsByCategory/openCvesByCategory Record<ProjectCategory,number> via categoryOf\", \"Rebuilds card: fixed devel/staging/PRs segments, footnote last {win}\", \"CVE card: staging/releases always, devel/PRs when >0, CATEGORY_ORDER\", \"other three cards unchanged\", \"npm run build exit 0\"], \"modelTier\": \"mechanical\"}\n```"
     }
   ],
-  "lastUpdated": "2026-07-13T10:50:06Z"
+  "lastUpdated": "2026-07-13T11:03:52Z"
 }
