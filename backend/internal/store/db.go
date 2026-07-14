@@ -85,6 +85,14 @@ CREATE TABLE IF NOT EXISTS cve_periods (
     clean_since DATETIME NOT NULL,
     PRIMARY KEY (project, package, arch, cve_since)
 );
+
+CREATE TABLE IF NOT EXISTS metrics_samples (
+    ts    DATETIME NOT NULL,
+    op    TEXT     NOT NULL,
+    count INTEGER  NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_metrics_samples_ts ON metrics_samples (ts);
 `
 
 // columnExists reports whether table has a column named col.
