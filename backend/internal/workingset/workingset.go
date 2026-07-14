@@ -35,11 +35,20 @@ type Job struct {
 	Pkgs         []*model.Package
 }
 
+// Gate lets the working set pause OBS-bound dispatching while no dashboard
+// client is connected. See internal/presence. A nil gate means "always
+// dispatch".
+type Gate interface {
+	Active() bool
+	Subscribe() <-chan struct{}
+}
+
 type WorkingSet struct {
 	mu       sync.Mutex
 	entries  map[string]*entry
 	inflight map[string]bool
 	dispatch chan Job
+	gate     Gate
 
 	base           time.Duration
 	max            time.Duration
@@ -68,6 +77,12 @@ func NewWithClock(queueSize int, base, max time.Duration, batchThreshold int, cl
 	ws := New(queueSize, base, max, batchThreshold)
 	ws.now = clock
 	return ws
+}
+
+// SetGate installs the presence gate. Not safe to call concurrently with
+// dispatching — wire it at startup.
+func (ws *WorkingSet) SetGate(g Gate) {
+	ws.gate = g
 }
 
 // Seed inserts packages without dispatching; they become due immediately and
@@ -205,8 +220,14 @@ func (ws *WorkingSet) DispatchDue() {
 }
 
 // StartScheduler ticks at the base interval and dispatches due packages.
+// While the gate is idle the tick is skipped; an idle→active wake signal
+// dispatches immediately.
 func (ws *WorkingSet) StartScheduler(ctx context.Context) {
 	go func() {
+		var wake <-chan struct{}
+		if ws.gate != nil {
+			wake = ws.gate.Subscribe()
+		}
 		ticker := time.NewTicker(ws.base)
 		defer ticker.Stop()
 		for {
@@ -214,6 +235,10 @@ func (ws *WorkingSet) StartScheduler(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+				if ws.gate == nil || ws.gate.Active() {
+					ws.DispatchDue()
+				}
+			case <-wake:
 				ws.DispatchDue()
 			}
 		}
@@ -222,9 +247,14 @@ func (ws *WorkingSet) StartScheduler(ctx context.Context) {
 
 // sendJob attempts a non-blocking enqueue and marks every package in the job
 // as in-flight on success. Drops the job if the channel is full — the
-// packages stay due and are retried on the next tick. Must be called with
-// ws.mu held. Callers must ensure no package in the job is already in-flight.
+// packages stay due and are retried on the next tick. While the presence
+// gate is idle, jobs are dropped the same way (drained on wake). Must be
+// called with ws.mu held. Callers must ensure no package in the job is
+// already in-flight.
 func (ws *WorkingSet) sendJob(job Job) {
+	if ws.gate != nil && !ws.gate.Active() {
+		return
+	}
 	select {
 	case ws.dispatch <- job:
 		for _, p := range job.Pkgs {

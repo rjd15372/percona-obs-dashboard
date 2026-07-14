@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/percona/obs-dashboard/internal/model"
+	"github.com/percona/obs-dashboard/internal/store"
 )
 
 func TestPreservePublishedAcrossTransientStateChange(t *testing.T) {
@@ -182,4 +183,66 @@ func TestPollerFetchProjectResultsBypassesLimiter(t *testing.T) {
 	if hits.Load() != 1 {
 		t.Fatalf("OBS endpoint hits = %d, want 1", hits.Load())
 	}
+}
+
+type stubGate struct {
+	active atomic.Bool
+	wake   chan struct{}
+}
+
+func (s *stubGate) Active() bool               { return s.active.Load() }
+func (s *stubGate) Subscribe() <-chan struct{} { return s.wake }
+
+func TestPollerRunGatedByPresence(t *testing.T) {
+	var searchHits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/search/") {
+			searchHits.Add(1)
+		}
+		w.Write([]byte(`<collection matches="0"></collection>`))
+	}))
+	defer srv.Close()
+
+	db, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	g := &stubGate{wake: make(chan struct{}, 1)}
+	p := &Poller{
+		client:   NewClient(srv.URL, "u", "p"),
+		db:       db,
+		interval: 25 * time.Millisecond,
+		root:     "isv:percona",
+		gate:     g,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go p.Run(ctx)
+
+	// Startup tick is unconditional: exactly one discovery fetch.
+	waitFor(t, func() bool { return searchHits.Load() == 1 })
+	time.Sleep(120 * time.Millisecond) // several ticks pass while idle
+	if got := searchHits.Load(); got != 1 {
+		t.Fatalf("idle poller fetched: %d discovery calls, want 1 (startup only)", got)
+	}
+
+	g.wake <- struct{}{} // wake: immediate tick
+	waitFor(t, func() bool { return searchHits.Load() == 2 })
+
+	g.active.Store(true) // active: ticks resume
+	waitFor(t, func() bool { return searchHits.Load() >= 3 })
+}
+
+func waitFor(t *testing.T, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("condition not met within 2s")
 }

@@ -3,6 +3,7 @@ package workingset_test
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -355,4 +356,42 @@ func TestWakeWhileInflightKeepsPackageDue(t *testing.T) {
 	// instead of Done pushing nextDue a full interval out.
 	ws.DispatchDue()
 	drain(t, ws)
+}
+
+type stubGate struct {
+	active atomic.Bool
+	wake   chan struct{}
+}
+
+func (s *stubGate) Active() bool               { return s.active.Load() }
+func (s *stubGate) Subscribe() <-chan struct{} { return s.wake }
+
+func TestGateBlocksDispatchWhileIdle(t *testing.T) {
+	ws := workingset.New(10, 20*time.Millisecond, 5*time.Minute, 4)
+	g := &stubGate{wake: make(chan struct{}, 1)}
+	ws.SetGate(g)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ws.StartScheduler(ctx)
+
+	// Add dispatches immediately when ungated — with an idle gate it must not.
+	ws.Add(pkg("proj", "pkg-a", model.RollupFailed))
+	select {
+	case <-ws.Dispatch():
+		t.Fatal("idle gate must suppress Add's immediate dispatch")
+	case <-time.After(80 * time.Millisecond): // several scheduler ticks too
+	}
+
+	// Wake drains the accumulated due package. Active must be true during
+	// the drain (DispatchDue → sendJob re-checks the gate).
+	g.active.Store(true)
+	g.wake <- struct{}{}
+	select {
+	case j := <-ws.Dispatch():
+		if j.Pkgs[0].Name != "pkg-a" {
+			t.Fatalf("unexpected package %s", j.Pkgs[0].Name)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("wake did not drain the due package")
+	}
 }

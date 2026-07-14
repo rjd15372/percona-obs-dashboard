@@ -83,7 +83,7 @@ func run() error {
 	pool.Start(ctx)
 	ws.StartScheduler(ctx)
 
-	poller := obs.NewPoller(obsClient, db, cfg.Poller.Interval, h, ws, cfg.OBSRoot)
+	poller := obs.NewPoller(obsClient, db, cfg.Poller.Interval, h, ws, cfg.OBSRoot, nil)
 	consumer := mq.NewConsumer(cfg.MQ.URL, db, h, obsClient, ws, cfg.OBSRoot)
 
 	go poller.Run(ctx)

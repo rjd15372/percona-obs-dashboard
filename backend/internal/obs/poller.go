@@ -13,6 +13,13 @@ import (
 	"github.com/percona/obs-dashboard/internal/workingset"
 )
 
+// PollGate lets the poller pause while no dashboard client is connected.
+// See internal/presence. A nil gate means "always poll".
+type PollGate interface {
+	Active() bool
+	Subscribe() <-chan struct{}
+}
+
 // Poller periodically fetches OBS build results and reconciles them with the store.
 type Poller struct {
 	client   *Client
@@ -21,14 +28,21 @@ type Poller struct {
 	root     string
 	hub      *hubpkg.Hub
 	ws       *workingset.WorkingSet
+	gate     PollGate
 }
 
-func NewPoller(client *Client, db *sql.DB, interval time.Duration, h *hubpkg.Hub, ws *workingset.WorkingSet, root string) *Poller {
-	return &Poller{client: client, db: db, interval: interval, root: root, hub: h, ws: ws}
+func NewPoller(client *Client, db *sql.DB, interval time.Duration, h *hubpkg.Hub, ws *workingset.WorkingSet, root string, gate PollGate) *Poller {
+	return &Poller{client: client, db: db, interval: interval, root: root, hub: h, ws: ws, gate: gate}
 }
 
-// Run blocks until ctx is cancelled. It ticks immediately on first call.
+// Run blocks until ctx is cancelled. It ticks immediately on first call
+// (the presence gate's boot grace covers this window), skips interval
+// ticks while the gate is idle, and ticks immediately on idle→active.
 func (p *Poller) Run(ctx context.Context) {
+	var wake <-chan struct{}
+	if p.gate != nil {
+		wake = p.gate.Subscribe()
+	}
 	ticker := time.NewTicker(p.interval)
 	defer ticker.Stop()
 
@@ -38,6 +52,10 @@ func (p *Poller) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			if p.gate == nil || p.gate.Active() {
+				p.tick(ctx)
+			}
+		case <-wake:
 			p.tick(ctx)
 		}
 	}
