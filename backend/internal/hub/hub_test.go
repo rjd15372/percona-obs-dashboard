@@ -62,3 +62,32 @@ func TestHub_SlowClientDoesNotBlock(t *testing.T) {
 		t.Error("slow client should have been dropped, not buffered")
 	}
 }
+
+type stubPresence struct {
+	connects, disconnects int
+}
+
+func (s *stubPresence) Connect()    { s.connects++ }
+func (s *stubPresence) Disconnect() { s.disconnects++ }
+
+func TestPresenceHook(t *testing.T) {
+	h := hub.New()
+	p := &stubPresence{}
+	h.Presence = p
+
+	ch := make(chan []byte, 1)
+	h.Register(ch)
+	h.Register(make(chan []byte, 1))
+	h.Unregister(ch)
+
+	if p.connects != 2 || p.disconnects != 1 {
+		t.Fatalf("presence hook: connects=%d disconnects=%d, want 2/1", p.connects, p.disconnects)
+	}
+}
+
+func TestNilPresenceSafe(t *testing.T) {
+	h := hub.New() // Presence nil
+	ch := make(chan []byte, 1)
+	h.Register(ch)   // must not panic
+	h.Unregister(ch) // must not panic
+}
