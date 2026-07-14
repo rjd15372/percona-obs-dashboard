@@ -38,8 +38,9 @@ type PollerConfig struct {
 }
 
 type StoreConfig struct {
-	DBPath         string
-	EventRetention time.Duration
+	DBPath           string
+	EventRetention   time.Duration
+	MetricsRetention time.Duration
 }
 
 type ServerConfig struct {
@@ -82,6 +83,7 @@ func Load() (*Config, error) {
 	v.SetDefault("poller.interval", "2m")
 	v.SetDefault("store.db_path", "/data/obsboard.db")
 	v.SetDefault("store.event_retention", "7d")
+	v.SetDefault("store.metrics_retention", "30d")
 	v.SetDefault("server.http_port", 4000)
 	v.SetDefault("server.frontend_dir", "")
 	v.SetDefault("worker_pool.size", 5)
@@ -116,6 +118,7 @@ func Load() (*Config, error) {
 		{"poller.interval", "POLL_INTERVAL"},
 		{"store.db_path", "DB_PATH"},
 		{"store.event_retention", "EVENT_RETENTION"},
+		{"store.metrics_retention", "METRICS_RETENTION"},
 		{"server.http_port", "HTTP_PORT"},
 		{"server.frontend_dir", "FRONTEND_DIR"},
 		{"worker_pool.size", "WORKER_POOL_SIZE"},
@@ -141,6 +144,11 @@ func Load() (*Config, error) {
 	retention, err := parseRetention(v.GetString("store.event_retention"))
 	if err != nil {
 		return nil, fmt.Errorf("invalid EVENT_RETENTION %q: %w", v.GetString("store.event_retention"), err)
+	}
+
+	metricsRetention, err := parseRetention(v.GetString("store.metrics_retention"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid METRICS_RETENTION %q: %w", v.GetString("store.metrics_retention"), err)
 	}
 
 	pollIntervalWP, err := time.ParseDuration(v.GetString("worker_pool.poll_interval"))
@@ -179,8 +187,9 @@ func Load() (*Config, error) {
 		MQ:     MQConfig{URL: v.GetString("mq.url")},
 		Poller: PollerConfig{Interval: pollInterval},
 		Store: StoreConfig{
-			DBPath:         v.GetString("store.db_path"),
-			EventRetention: retention,
+			DBPath:           v.GetString("store.db_path"),
+			EventRetention:   retention,
+			MetricsRetention: metricsRetention,
 		},
 		Server: ServerConfig{
 			HTTPPort:    v.GetInt("server.http_port"),

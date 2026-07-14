@@ -16,6 +16,7 @@ import (
 	"github.com/percona/obs-dashboard/internal/config"
 	"github.com/percona/obs-dashboard/internal/cve"
 	"github.com/percona/obs-dashboard/internal/hub"
+	"github.com/percona/obs-dashboard/internal/metricsampler"
 	"github.com/percona/obs-dashboard/internal/mq"
 	"github.com/percona/obs-dashboard/internal/obs"
 	"github.com/percona/obs-dashboard/internal/presence"
@@ -92,7 +93,10 @@ func run() error {
 
 	go poller.Run(ctx)
 	go consumer.Run(ctx)
-	go runPruner(ctx, db, cfg.Poller.Interval, cfg.Store.EventRetention)
+	go runPruner(ctx, db, cfg.Poller.Interval, cfg.Store.EventRetention, cfg.Store.MetricsRetention)
+
+	sampler := &metricsampler.Sampler{DB: db, Snap: obsClient}
+	go sampler.Run(ctx)
 
 	if cfg.Unblocker.Enabled {
 		sweeper := &unblocker.Sweeper{DB: db, Rebuilder: obsClient, Threshold: cfg.Unblocker.Threshold}
@@ -145,7 +149,7 @@ func run() error {
 	return nil
 }
 
-func runPruner(ctx context.Context, db *sql.DB, interval time.Duration, retention time.Duration) {
+func runPruner(ctx context.Context, db *sql.DB, interval, eventRetention, metricsRetention time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
@@ -153,9 +157,12 @@ func runPruner(ctx context.Context, db *sql.DB, interval time.Duration, retentio
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			cutoff := time.Now().UTC().Add(-retention)
+			cutoff := time.Now().UTC().Add(-eventRetention)
 			if err := store.PruneEvents(db, cutoff); err != nil {
 				slog.Error("prune events", "err", err)
+			}
+			if _, err := store.PruneMetricsSamples(db, time.Now().UTC().Add(-metricsRetention)); err != nil {
+				slog.Warn("pruner: prune metrics samples", "err", err)
 			}
 		}
 	}

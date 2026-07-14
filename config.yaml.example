@@ -15,6 +15,9 @@ poller:
 store:
   db_path: "/data/obsboard.db"
   event_retention: "7d"
+  # How long persisted OBS request-count samples are kept (feeds the
+  # 6h/12h/24h/7d/30d windows in /api/metrics).
+  metrics_retention: "30d"
 
 server:
   http_port: 8080

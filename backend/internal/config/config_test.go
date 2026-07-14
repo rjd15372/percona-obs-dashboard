@@ -136,6 +136,29 @@ func TestLoadIdleDefaultsAndOverride(t *testing.T) {
 	}
 }
 
+func TestLoadMetricsRetention(t *testing.T) {
+	os.Setenv("OBS_USERNAME", "u")
+	defer os.Unsetenv("OBS_USERNAME")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Store.MetricsRetention != 30*24*time.Hour {
+		t.Errorf("default metrics retention = %v, want 720h", cfg.Store.MetricsRetention)
+	}
+
+	os.Setenv("METRICS_RETENTION", "60d")
+	defer os.Unsetenv("METRICS_RETENTION")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Store.MetricsRetention != 60*24*time.Hour {
+		t.Errorf("override metrics retention = %v, want 1440h", cfg.Store.MetricsRetention)
+	}
+}
+
 func TestTrafficReductionEnvOverride(t *testing.T) {
 	t.Setenv("OBS_USERNAME", "u")
 	t.Setenv("WORKER_POOL_BACKOFF_MAX", "2m")
