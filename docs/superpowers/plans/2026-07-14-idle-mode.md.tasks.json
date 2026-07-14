@@ -5,14 +5,14 @@
       "id": 1,
       "nativeTaskId": 47,
       "subject": "Task 1: internal/presence gate",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** The Gate: SSE-fed activity tracking with linger, boot grace, per-transition wake signals, disabled mode permanently active.\n\n**Files:**\n- Create: internal/presence/presence.go\n- Create: internal/presence/presence_test.go\n\n**Acceptance Criteria:**\n- [ ] boot grace then idle after linger\n- [ ] Connect on idle -> active + one signal per subscriber per transition; connects while active signal nothing\n- [ ] active for linger after last Disconnect, then idle\n- [ ] disabled: always active, never signals\n\n**Verify:** cd backend && go test ./internal/presence/ -count=1 -v -> all PASS\n\n**Steps:** TDD, full code in plan Task 1. git commit -s, never Co-Authored-By.\n\n```json:metadata\n{\"files\": [\"backend/internal/presence/presence.go\", \"backend/internal/presence/presence_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/presence/ -count=1 -v\", \"acceptanceCriteria\": [\"boot grace then idle after linger\", \"wake exactly once per idle->active transition\", \"linger after last disconnect\", \"disabled gate always active never signals\"], \"modelTier\": \"mechanical\"}\n```"
     },
     {
       "id": 2,
       "nativeTaskId": 48,
       "subject": "Task 2: hub presence hook",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** SSE register/unregister feed the gate through an optional, nil-safe hub field.\n\n**Files:**\n- Modify: internal/hub/hub.go\n- Modify: internal/hub/hub_test.go\n\n**Acceptance Criteria:**\n- [ ] Register->Connect, Unregister->Disconnect, after mutex release\n- [ ] nil Presence safe\n- [ ] hub tests pass\n\n**Verify:** cd backend && go test ./internal/hub/ -count=1 -v -> all PASS\n\n**Steps:** TDD, full code in plan Task 2. git commit -s, never Co-Authored-By.\n\n```json:metadata\n{\"files\": [\"backend/internal/hub/hub.go\", \"backend/internal/hub/hub_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/hub/ -count=1 -v\", \"acceptanceCriteria\": [\"Register/Unregister propagate to Presence after mutex release\", \"nil Presence safe\", \"hub tests pass\"], \"modelTier\": \"mechanical\"}\n```",
       "blockedBy": [
         1
@@ -22,7 +22,7 @@
       "id": 3,
       "nativeTaskId": 49,
       "subject": "Task 3: gate poller + working-set dispatch",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** Poller skips ticks while idle and wakes on transition; working set drops dispatches in sendJob while idle (Add/Signal/scheduler paths) and drains on wake.\n\n**Files:**\n- Modify: internal/obs/poller.go + poller_test.go\n- Modify: internal/workingset/workingset.go + workingset_test.go\n- Modify: cmd/obsboard/main.go (NewPoller gains nil gate arg)\n\n**Acceptance Criteria:**\n- [ ] idle poller: startup tick only; wake -> immediate tick; nil gate unchanged\n- [ ] idle working set: Add suppressed via sendJob guard; wake drains; nil gate unchanged\n- [ ] obs+workingset tests and go build pass\n\n**Verify:** cd backend && go test ./internal/obs/ -run TestPollerRunGated -count=1 -v && go test ./internal/workingset/ -run TestGate -count=1 -v -> PASS\n\n**Steps:** TDD, full code in plan Task 3. git commit -s, never Co-Authored-By.\n\n```json:metadata\n{\"files\": [\"backend/internal/obs/poller.go\", \"backend/internal/obs/poller_test.go\", \"backend/internal/workingset/workingset.go\", \"backend/internal/workingset/workingset_test.go\", \"backend/cmd/obsboard/main.go\"], \"verifyCommand\": \"cd backend && go test ./internal/obs/ ./internal/workingset/ -count=1 && go build ./...\", \"acceptanceCriteria\": [\"idle poller: startup tick only; wake ticks immediately; nil gate unchanged\", \"idle working set: Add suppressed via sendJob; wake drains; nil gate unchanged\", \"obs+workingset tests and build pass\"], \"modelTier\": \"standard\"}\n```",
       "blockedBy": [
         2
@@ -32,12 +32,12 @@
       "id": 4,
       "nativeTaskId": 50,
       "subject": "Task 4: idle config + main wiring",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** idle.{enabled,linger} config (default true/5m) and the real gate wired into hub, poller, working set.\n\n**Files:**\n- Modify: internal/config/config.go + config_test.go\n- Modify: cmd/obsboard/main.go\n- Modify: config.yaml.example (root) + backend/config.yaml.example\n\n**Acceptance Criteria:**\n- [ ] defaults true/5m; IDLE_ENABLED/IDLE_LINGER override\n- [ ] main wires gate: h.Presence, NewPoller arg, ws.SetGate before StartScheduler\n- [ ] both example files document the section\n- [ ] full suite + build pass\n\n**Verify:** cd backend && go test ./... -count=1 && go build ./... -> all PASS\n\n**Steps:** TDD, full code in plan Task 4. git commit -s, never Co-Authored-By.\n\n```json:metadata\n{\"files\": [\"backend/internal/config/config.go\", \"backend/internal/config/config_test.go\", \"backend/cmd/obsboard/main.go\", \"config.yaml.example\", \"backend/config.yaml.example\"], \"verifyCommand\": \"cd backend && go test ./... -count=1 && go build ./...\", \"acceptanceCriteria\": [\"defaults true/5m with IDLE_ENABLED/IDLE_LINGER overrides\", \"main wires gate to hub+poller+workingset before StartScheduler\", \"both example files document idle section\", \"full suite + build pass\"], \"modelTier\": \"standard\"}\n```",
       "blockedBy": [
         3
       ]
     }
   ],
-  "lastUpdated": "2026-07-14T11:21:00Z"
+  "lastUpdated": "2026-07-14T11:55:24Z"
 }
