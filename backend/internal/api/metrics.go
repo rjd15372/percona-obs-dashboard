@@ -21,6 +21,7 @@ type obsSection struct {
 	Total      int64            `json:"total"`
 	ByEndpoint map[string]int64 `json:"by_endpoint"`
 	ReqPerS    float64          `json:"req_per_s"`
+	Windows    map[string]int64 `json:"windows"` // trailing counts: "6h", "12h", "24h"
 }
 
 type limiterSection struct {
@@ -37,7 +38,8 @@ type wsSection struct {
 }
 
 // metricsHandler handles GET /api/metrics: absolute OBS request counts,
-// the trailing-minute request rate, limiter gauges, and working-set stats.
+// the trailing-minute request rate, trailing 6h/12h/24h window totals,
+// limiter gauges, and working-set stats.
 func metricsHandler(obsClient *obs.Client, ws Statter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		byEndpoint := obsClient.MetricsSnapshot()
@@ -47,6 +49,7 @@ func metricsHandler(obsClient *obs.Client, ws Statter) http.HandlerFunc {
 		}
 		ls := obsClient.LimiterStats()
 		s := ws.Stats()
+		h6, h12, h24 := obsClient.WindowCounts()
 
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(metricsResponse{
@@ -54,6 +57,7 @@ func metricsHandler(obsClient *obs.Client, ws Statter) http.HandlerFunc {
 				Total:      total,
 				ByEndpoint: byEndpoint,
 				ReqPerS:    obsClient.RatePerSecond(),
+				Windows:    map[string]int64{"6h": h6, "12h": h12, "24h": h24},
 			},
 			Limiter: limiterSection{
 				Enabled:   ls.Enabled,

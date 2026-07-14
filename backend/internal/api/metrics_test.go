@@ -43,6 +43,14 @@ func TestMetricsHandler(t *testing.T) {
 	if got.OBS.ByEndpoint == nil {
 		t.Fatalf("obs.by_endpoint must be a map, got null")
 	}
+	if got.OBS.Windows == nil {
+		t.Fatalf("obs.windows must be a map, got null")
+	}
+	for _, k := range []string{"6h", "12h", "24h"} {
+		if v, ok := got.OBS.Windows[k]; !ok || v != 0 {
+			t.Fatalf("obs.windows[%q] = %d (present=%v), want 0 present", k, v, ok)
+		}
+	}
 	if !got.Limiter.Enabled || got.Limiter.Budget != 60 || got.Limiter.Remaining != 60 || got.Limiter.Waits != 0 {
 		t.Fatalf("limiter = %+v, want {enabled:true budget:60 remaining:60 waits:0}", got.Limiter)
 	}
