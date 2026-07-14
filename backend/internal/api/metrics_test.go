@@ -14,6 +14,10 @@ type fakeStatter struct{ s workingset.Stats }
 
 func (f fakeStatter) Stats() workingset.Stats { return f.s }
 
+type fakeClientCounter struct{ n int }
+
+func (f fakeClientCounter) Clients() int { return f.n }
+
 func TestMetricsHandler(t *testing.T) {
 	c := obs.NewClient("https://obs.example", "u", "p")
 	c.SetMinuteBudget(60)
@@ -24,7 +28,7 @@ func TestMetricsHandler(t *testing.T) {
 	}}
 
 	rec := httptest.NewRecorder()
-	metricsHandler(c, ws)(rec, httptest.NewRequest(http.MethodGet, "/api/metrics", nil))
+	metricsHandler(c, ws, fakeClientCounter{n: 3})(rec, httptest.NewRequest(http.MethodGet, "/api/metrics", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -65,5 +69,11 @@ func TestMetricsHandler(t *testing.T) {
 	up, ok := raw["uptime_seconds"].(float64)
 	if !ok || up < 0 {
 		t.Fatalf("uptime_seconds = %v (present=%v), want number >= 0", raw["uptime_seconds"], ok)
+	}
+	if got.SSEClients != 3 {
+		t.Fatalf("sse_clients = %d, want 3", got.SSEClients)
+	}
+	if _, ok := raw["sse_clients"]; !ok {
+		t.Fatalf("sse_clients key missing from raw response")
 	}
 }

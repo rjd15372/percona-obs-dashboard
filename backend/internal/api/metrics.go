@@ -16,11 +16,15 @@ var processStart = time.Now()
 // Statter provides working-set stats for the metrics endpoint.
 type Statter interface{ Stats() workingset.Stats }
 
+// ClientCounter reports the number of connected SSE clients.
+type ClientCounter interface{ Clients() int }
+
 type metricsResponse struct {
 	OBS           obsSection     `json:"obs"`
 	Limiter       limiterSection `json:"limiter"`
 	WorkingSet    wsSection      `json:"working_set"`
 	UptimeSeconds int64          `json:"uptime_seconds"`
+	SSEClients    int            `json:"sse_clients"`
 }
 
 type obsSection struct {
@@ -45,8 +49,8 @@ type wsSection struct {
 
 // metricsHandler handles GET /api/metrics: absolute OBS request counts,
 // the trailing-minute request rate, trailing 6h/12h/24h window totals,
-// limiter gauges, working-set stats, and process uptime.
-func metricsHandler(obsClient *obs.Client, ws Statter) http.HandlerFunc {
+// limiter gauges, working-set stats, process uptime, and connected SSE clients.
+func metricsHandler(obsClient *obs.Client, ws Statter, clients ClientCounter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		byEndpoint := obsClient.MetricsSnapshot()
 		var total int64
@@ -77,6 +81,7 @@ func metricsHandler(obsClient *obs.Client, ws Statter) http.HandlerFunc {
 				ByState:  s.ByState,
 			},
 			UptimeSeconds: int64(time.Since(processStart).Seconds()),
+			SSEClients:    clients.Clients(),
 		})
 	}
 }

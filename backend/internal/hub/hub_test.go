@@ -91,3 +91,21 @@ func TestNilPresenceSafe(t *testing.T) {
 	h.Register(ch)   // must not panic
 	h.Unregister(ch) // must not panic
 }
+
+func TestClients(t *testing.T) {
+	h := hub.New()
+	if h.Clients() != 0 {
+		t.Fatalf("empty hub: Clients() = %d, want 0", h.Clients())
+	}
+	a := make(chan []byte, 1)
+	b := make(chan []byte, 1)
+	h.Register(a)
+	h.Register(b)
+	if h.Clients() != 2 {
+		t.Fatalf("after 2 registers: Clients() = %d, want 2", h.Clients())
+	}
+	h.Unregister(a)
+	if h.Clients() != 1 {
+		t.Fatalf("after 1 unregister: Clients() = %d, want 1", h.Clients())
+	}
+}

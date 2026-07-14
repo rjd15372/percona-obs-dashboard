@@ -39,6 +39,13 @@ func (h *Hub) Unregister(ch chan<- []byte) {
 	}
 }
 
+// Clients returns the number of currently registered SSE clients.
+func (h *Hub) Clients() int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.clients)
+}
+
 // Notify sends payload to every registered client.
 // Callers must not retain or modify payload after this call returns.
 // If a client's channel buffer is full the message is dropped for that
