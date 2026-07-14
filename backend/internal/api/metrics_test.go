@@ -5,8 +5,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/percona/obs-dashboard/internal/obs"
+	"github.com/percona/obs-dashboard/internal/store"
 	"github.com/percona/obs-dashboard/internal/workingset"
 )
 
@@ -27,8 +29,24 @@ func TestMetricsHandler(t *testing.T) {
 		ByState:  map[string]int{"succeeded": 180, "building": 20},
 	}}
 
+	db, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	// Seed: 7 requests 1h ago (in all windows), 9 requests 3 days ago
+	// (7d/30d only).
+	if err := store.InsertMetricsSamples(db, time.Now().UTC().Add(-time.Hour),
+		map[string]int64{"build_results": 7}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.InsertMetricsSamples(db, time.Now().UTC().Add(-3*24*time.Hour),
+		map[string]int64{"build_results": 9}); err != nil {
+		t.Fatal(err)
+	}
+
 	rec := httptest.NewRecorder()
-	metricsHandler(c, ws, fakeClientCounter{n: 3})(rec, httptest.NewRequest(http.MethodGet, "/api/metrics", nil))
+	metricsHandler(c, ws, fakeClientCounter{n: 3}, db)(rec, httptest.NewRequest(http.MethodGet, "/api/metrics", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -50,9 +68,10 @@ func TestMetricsHandler(t *testing.T) {
 	if got.OBS.Windows == nil {
 		t.Fatalf("obs.windows must be a map, got null")
 	}
-	for _, k := range []string{"6h", "12h", "24h"} {
-		if v, ok := got.OBS.Windows[k]; !ok || v != 0 {
-			t.Fatalf("obs.windows[%q] = %d (present=%v), want 0 present", k, v, ok)
+	wantWindows := map[string]int64{"6h": 7, "12h": 7, "24h": 7, "7d": 16, "30d": 16}
+	for k, want := range wantWindows {
+		if got.OBS.Windows[k] != want {
+			t.Fatalf("obs.windows[%q] = %d, want %d", k, got.OBS.Windows[k], want)
 		}
 	}
 	if !got.Limiter.Enabled || got.Limiter.Budget != 60 || got.Limiter.Remaining != 60 || got.Limiter.Waits != 0 {

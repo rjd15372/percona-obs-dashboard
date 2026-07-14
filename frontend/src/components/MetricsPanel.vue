@@ -30,7 +30,7 @@ const endpoints = computed(() =>
 const states = computed(() =>
   Object.entries(data.value?.working_set.by_state ?? {}).sort((a, b) => b[1] - a[1]))
 
-const WINDOW_KEYS = ['6h', '12h', '24h'] as const
+const WINDOW_KEYS = ['6h', '12h', '24h', '7d', '30d'] as const
 
 const fmt = (n: number) => n.toLocaleString('en-US')
 

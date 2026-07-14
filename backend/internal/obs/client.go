@@ -14,8 +14,7 @@ import (
 )
 
 // obsMetrics counts OBS requests by operation label, into a ring of
-// per-second buckets for the trailing-minute request rate, and into a ring
-// of 5-minute buckets for the trailing 6h/12h/24h window totals.
+// per-second buckets for the trailing-minute request rate.
 type obsMetrics struct {
 	mu     sync.Mutex
 	counts map[string]int64
@@ -23,9 +22,6 @@ type obsMetrics struct {
 
 	ringSec  [60]int64 // unix second each bucket currently holds
 	ringHits [60]int64 // request count observed within that second
-
-	winPeriod [288]int64 // 5-minute period id (unixSec/300) each bucket holds
-	winHits   [288]int64 // request count observed within that period
 }
 
 func (m *obsMetrics) inc(op string) {
@@ -38,13 +34,6 @@ func (m *obsMetrics) inc(op string) {
 		m.ringHits[i] = 0
 	}
 	m.ringHits[i]++
-	p := sec / 300
-	j := p % 288
-	if m.winPeriod[j] != p {
-		m.winPeriod[j] = p
-		m.winHits[j] = 0
-	}
-	m.winHits[j]++
 	m.mu.Unlock()
 }
 
@@ -60,29 +49,6 @@ func (m *obsMetrics) ratePerSecond() float64 {
 		}
 	}
 	return float64(total) / 60
-}
-
-// windowCounts returns request totals over the trailing 6h, 12h and 24h at
-// 5-minute bucket precision. Windows cover at most process uptime.
-func (m *obsMetrics) windowCounts() (h6, h12, h24 int64) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	cur := m.now().Unix() / 300
-	for i := range m.winPeriod {
-		p := m.winPeriod[i]
-		if p <= cur-288 { // outside 24h (also skips never-used zero buckets)
-			continue
-		}
-		hits := m.winHits[i]
-		h24 += hits
-		if p > cur-144 {
-			h12 += hits
-		}
-		if p > cur-72 {
-			h6 += hits
-		}
-	}
-	return h6, h12, h24
 }
 
 func (m *obsMetrics) snapshot() map[string]int64 {
@@ -156,12 +122,6 @@ func (c *Client) LimiterStats() LimiterStats {
 // counting both background and interactive requests.
 func (c *Client) RatePerSecond() float64 {
 	return c.metrics.ratePerSecond()
-}
-
-// WindowCounts returns OBS request totals over the trailing 6h, 12h and
-// 24h (5-minute bucket precision; covers at most process uptime).
-func (c *Client) WindowCounts() (h6, h12, h24 int64) {
-	return c.metrics.windowCounts()
 }
 
 func (c *Client) get(ctx context.Context, op, path string) (*http.Response, error) {
