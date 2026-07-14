@@ -47,3 +47,12 @@ unblocker:
   enabled: false
   # Trigger a rebuild when a target has been blocked longer than this.
   threshold: 30m
+
+# Idle mode: pause background OBS polling (discovery + working set) while
+# no dashboard client is connected; RabbitMQ events keep the database
+# current, and the first client to connect triggers an immediate refresh.
+# Enabled by default — set enabled: false to poll continuously.
+idle:
+  enabled: true
+  # Keep polling this long after the last client disconnects.
+  linger: 5m

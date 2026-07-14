@@ -19,6 +19,7 @@ type Config struct {
 	WorkerPool WorkerPoolConfig
 	Telemetry  TelemetryConfig
 	Unblocker  UnblockerConfig
+	Idle       IdleConfig
 }
 
 type OBSConfig struct {
@@ -64,6 +65,11 @@ type UnblockerConfig struct {
 	Threshold time.Duration
 }
 
+type IdleConfig struct {
+	Enabled bool
+	Linger  time.Duration
+}
+
 func Load() (*Config, error) {
 	v := viper.New()
 
@@ -87,6 +93,8 @@ func Load() (*Config, error) {
 	v.SetDefault("telemetry.enabled", false)
 	v.SetDefault("unblocker.enabled", false)
 	v.SetDefault("unblocker.threshold", "30m")
+	v.SetDefault("idle.enabled", true)
+	v.SetDefault("idle.linger", "5m")
 
 	// Config file (optional)
 	cfgFile := "config.yaml"
@@ -119,6 +127,8 @@ func Load() (*Config, error) {
 		{"telemetry.enabled", "TELEMETRY_ENABLED"},
 		{"unblocker.enabled", "UNBLOCKER_ENABLED"},
 		{"unblocker.threshold", "UNBLOCKER_THRESHOLD"},
+		{"idle.enabled", "IDLE_ENABLED"},
+		{"idle.linger", "IDLE_LINGER"},
 	} {
 		_ = v.BindEnv(pair[0], pair[1])
 	}
@@ -153,6 +163,11 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("invalid UNBLOCKER_THRESHOLD %q: %w", v.GetString("unblocker.threshold"), err)
 	}
 
+	idleLinger, err := time.ParseDuration(v.GetString("idle.linger"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid IDLE_LINGER %q: %w", v.GetString("idle.linger"), err)
+	}
+
 	cfg := &Config{
 		OBSRoot: v.GetString("obs_root"),
 		OBS: OBSConfig{
@@ -185,6 +200,10 @@ func Load() (*Config, error) {
 		Unblocker: UnblockerConfig{
 			Enabled:   v.GetBool("unblocker.enabled"),
 			Threshold: unblockThreshold,
+		},
+		Idle: IdleConfig{
+			Enabled: v.GetBool("idle.enabled"),
+			Linger:  idleLinger,
 		},
 	}
 

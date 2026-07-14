@@ -18,6 +18,7 @@ import (
 	"github.com/percona/obs-dashboard/internal/hub"
 	"github.com/percona/obs-dashboard/internal/mq"
 	"github.com/percona/obs-dashboard/internal/obs"
+	"github.com/percona/obs-dashboard/internal/presence"
 	"github.com/percona/obs-dashboard/internal/store"
 	"github.com/percona/obs-dashboard/internal/telemetry"
 	"github.com/percona/obs-dashboard/internal/unblocker"
@@ -50,6 +51,8 @@ func run() error {
 	obsClient := obs.NewClient(cfg.OBS.BaseURL, cfg.OBS.Username, cfg.OBS.Password)
 	obsClient.SetMinuteBudget(cfg.OBS.MinuteRequestBudget)
 	h := hub.New()
+	gate := presence.New(cfg.Idle.Enabled, cfg.Idle.Linger)
+	h.Presence = gate
 
 	scanner := cve.NewScanner(db, h, 2)
 	scanner.Start(ctx)
@@ -80,10 +83,11 @@ func run() error {
 		obs.BinariesCheckTask{},
 	}
 	pool := worker.NewPool(cfg.WorkerPool.Size, devTasks, releaseTasks, obsClient, db, h, ws, scanner)
+	ws.SetGate(gate)
 	pool.Start(ctx)
 	ws.StartScheduler(ctx)
 
-	poller := obs.NewPoller(obsClient, db, cfg.Poller.Interval, h, ws, cfg.OBSRoot, nil)
+	poller := obs.NewPoller(obsClient, db, cfg.Poller.Interval, h, ws, cfg.OBSRoot, gate)
 	consumer := mq.NewConsumer(cfg.MQ.URL, db, h, obsClient, ws, cfg.OBSRoot)
 
 	go poller.Run(ctx)

@@ -107,6 +107,35 @@ func TestLoadUnblockerDefaultsAndOverride(t *testing.T) {
 	}
 }
 
+func TestLoadIdleDefaultsAndOverride(t *testing.T) {
+	os.Setenv("OBS_USERNAME", "u")
+	defer os.Unsetenv("OBS_USERNAME")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Idle.Enabled {
+		t.Error("idle mode should be enabled by default")
+	}
+	if cfg.Idle.Linger != 5*time.Minute {
+		t.Errorf("default linger = %v, want 5m", cfg.Idle.Linger)
+	}
+
+	os.Setenv("IDLE_ENABLED", "false")
+	os.Setenv("IDLE_LINGER", "10m")
+	defer os.Unsetenv("IDLE_ENABLED")
+	defer os.Unsetenv("IDLE_LINGER")
+
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Idle.Enabled || cfg.Idle.Linger != 10*time.Minute {
+		t.Errorf("override: enabled=%v linger=%v, want false/10m", cfg.Idle.Enabled, cfg.Idle.Linger)
+	}
+}
+
 func TestTrafficReductionEnvOverride(t *testing.T) {
 	t.Setenv("OBS_USERNAME", "u")
 	t.Setenv("WORKER_POOL_BACKOFF_MAX", "2m")
