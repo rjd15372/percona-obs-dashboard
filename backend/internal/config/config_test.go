@@ -78,6 +78,35 @@ func TestTrafficReductionDefaults(t *testing.T) {
 	}
 }
 
+func TestLoadUnblockerDefaultsAndOverride(t *testing.T) {
+	os.Setenv("OBS_USERNAME", "u")
+	defer os.Unsetenv("OBS_USERNAME")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Unblocker.Enabled {
+		t.Error("unblocker should be disabled by default")
+	}
+	if cfg.Unblocker.Threshold != 30*time.Minute {
+		t.Errorf("default threshold = %v, want 30m", cfg.Unblocker.Threshold)
+	}
+
+	os.Setenv("UNBLOCKER_ENABLED", "true")
+	os.Setenv("UNBLOCKER_THRESHOLD", "45m")
+	defer os.Unsetenv("UNBLOCKER_ENABLED")
+	defer os.Unsetenv("UNBLOCKER_THRESHOLD")
+
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Unblocker.Enabled || cfg.Unblocker.Threshold != 45*time.Minute {
+		t.Errorf("override: enabled=%v threshold=%v, want true/45m", cfg.Unblocker.Enabled, cfg.Unblocker.Threshold)
+	}
+}
+
 func TestTrafficReductionEnvOverride(t *testing.T) {
 	t.Setenv("OBS_USERNAME", "u")
 	t.Setenv("WORKER_POOL_BACKOFF_MAX", "2m")

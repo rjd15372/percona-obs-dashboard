@@ -20,6 +20,7 @@ import (
 	"github.com/percona/obs-dashboard/internal/obs"
 	"github.com/percona/obs-dashboard/internal/store"
 	"github.com/percona/obs-dashboard/internal/telemetry"
+	"github.com/percona/obs-dashboard/internal/unblocker"
 	"github.com/percona/obs-dashboard/internal/worker"
 	"github.com/percona/obs-dashboard/internal/workingset"
 )
@@ -88,6 +89,11 @@ func run() error {
 	go poller.Run(ctx)
 	go consumer.Run(ctx)
 	go runPruner(ctx, db, cfg.Poller.Interval, cfg.Store.EventRetention)
+
+	if cfg.Unblocker.Enabled {
+		sweeper := &unblocker.Sweeper{DB: db, Rebuilder: obsClient, Threshold: cfg.Unblocker.Threshold}
+		go sweeper.Run(ctx)
+	}
 
 	telemetryEnabled := &atomic.Bool{}
 	telemetryEnabled.Store(cfg.Telemetry.Enabled)

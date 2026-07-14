@@ -18,6 +18,7 @@ type Config struct {
 	Server     ServerConfig
 	WorkerPool WorkerPoolConfig
 	Telemetry  TelemetryConfig
+	Unblocker  UnblockerConfig
 }
 
 type OBSConfig struct {
@@ -58,6 +59,11 @@ type TelemetryConfig struct {
 	Enabled  bool
 }
 
+type UnblockerConfig struct {
+	Enabled   bool
+	Threshold time.Duration
+}
+
 func Load() (*Config, error) {
 	v := viper.New()
 
@@ -79,6 +85,8 @@ func Load() (*Config, error) {
 	v.SetDefault("worker_pool.batch_threshold", 4)
 	v.SetDefault("telemetry.interval", "60s")
 	v.SetDefault("telemetry.enabled", false)
+	v.SetDefault("unblocker.enabled", false)
+	v.SetDefault("unblocker.threshold", "30m")
 
 	// Config file (optional)
 	cfgFile := "config.yaml"
@@ -109,6 +117,8 @@ func Load() (*Config, error) {
 		{"worker_pool.batch_threshold", "WORKER_POOL_BATCH_THRESHOLD"},
 		{"telemetry.interval", "TELEMETRY_INTERVAL"},
 		{"telemetry.enabled", "TELEMETRY_ENABLED"},
+		{"unblocker.enabled", "UNBLOCKER_ENABLED"},
+		{"unblocker.threshold", "UNBLOCKER_THRESHOLD"},
 	} {
 		_ = v.BindEnv(pair[0], pair[1])
 	}
@@ -136,6 +146,11 @@ func Load() (*Config, error) {
 	telemetryInterval, err := time.ParseDuration(v.GetString("telemetry.interval"))
 	if err != nil {
 		return nil, fmt.Errorf("invalid TELEMETRY_INTERVAL %q: %w", v.GetString("telemetry.interval"), err)
+	}
+
+	unblockThreshold, err := time.ParseDuration(v.GetString("unblocker.threshold"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid UNBLOCKER_THRESHOLD %q: %w", v.GetString("unblocker.threshold"), err)
 	}
 
 	cfg := &Config{
@@ -166,6 +181,10 @@ func Load() (*Config, error) {
 		Telemetry: TelemetryConfig{
 			Interval: telemetryInterval,
 			Enabled:  v.GetBool("telemetry.enabled"),
+		},
+		Unblocker: UnblockerConfig{
+			Enabled:   v.GetBool("unblocker.enabled"),
+			Threshold: unblockThreshold,
 		},
 	}
 

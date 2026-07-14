@@ -30,3 +30,11 @@ worker_pool:
   # Minimum number of due packages of the same project to fetch build
   # results with one project-level call instead of per-package calls.
   batch_threshold: 4
+
+# Automatic rebuild trigger for targets stuck in blocked state (works
+# around an OBS bug where targets stay blocked after their dependencies
+# built). Opt-in; triggers go through the background OBS rate limiter.
+unblocker:
+  enabled: false
+  # Trigger a rebuild when a target has been blocked longer than this.
+  threshold: 30m
