@@ -57,4 +57,13 @@ func TestMetricsHandler(t *testing.T) {
 	if got.WorkingSet.Packages != 214 || got.WorkingSet.Inflight != 3 || got.WorkingSet.ByState["succeeded"] != 180 {
 		t.Fatalf("working_set = %+v", got.WorkingSet)
 	}
+
+	var raw map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("decode raw: %v", err)
+	}
+	up, ok := raw["uptime_seconds"].(float64)
+	if !ok || up < 0 {
+		t.Fatalf("uptime_seconds = %v (present=%v), want number >= 0", raw["uptime_seconds"], ok)
+	}
 }

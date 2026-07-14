@@ -3,18 +3,24 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/percona/obs-dashboard/internal/obs"
 	"github.com/percona/obs-dashboard/internal/workingset"
 )
 
+// processStart approximates process start (package init happens within
+// milliseconds of it); /api/metrics reports uptime relative to this.
+var processStart = time.Now()
+
 // Statter provides working-set stats for the metrics endpoint.
 type Statter interface{ Stats() workingset.Stats }
 
 type metricsResponse struct {
-	OBS        obsSection     `json:"obs"`
-	Limiter    limiterSection `json:"limiter"`
-	WorkingSet wsSection      `json:"working_set"`
+	OBS           obsSection     `json:"obs"`
+	Limiter       limiterSection `json:"limiter"`
+	WorkingSet    wsSection      `json:"working_set"`
+	UptimeSeconds int64          `json:"uptime_seconds"`
 }
 
 type obsSection struct {
@@ -39,7 +45,7 @@ type wsSection struct {
 
 // metricsHandler handles GET /api/metrics: absolute OBS request counts,
 // the trailing-minute request rate, trailing 6h/12h/24h window totals,
-// limiter gauges, and working-set stats.
+// limiter gauges, working-set stats, and process uptime.
 func metricsHandler(obsClient *obs.Client, ws Statter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		byEndpoint := obsClient.MetricsSnapshot()
@@ -70,6 +76,7 @@ func metricsHandler(obsClient *obs.Client, ws Statter) http.HandlerFunc {
 				Inflight: s.Inflight,
 				ByState:  s.ByState,
 			},
+			UptimeSeconds: int64(time.Since(processStart).Seconds()),
 		})
 	}
 }
