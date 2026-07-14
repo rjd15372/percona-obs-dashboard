@@ -402,6 +402,49 @@ func attachTargetStartedAt(db *sql.DB, pkgs []*model.Package) error {
 	return nil
 }
 
+// BlockedTarget identifies one build target currently stuck in blocked state.
+type BlockedTarget struct {
+	Project   string
+	Package   string
+	Repo      string
+	Arch      string
+	EnteredAt time.Time
+}
+
+// QueryStaleBlockedTargets returns targets whose CURRENT state is 'blocked'
+// and was entered before cutoff, restricted to non-release projects
+// (devel/staging/PRs). Consumed by the unblocker sweeper.
+func QueryStaleBlockedTargets(db *sql.DB, cutoff time.Time) ([]BlockedTarget, error) {
+	rows, err := db.Query(`
+		SELECT d.project, d.package, d.repo, d.arch, d.entered_at
+		FROM target_state_durations d
+		JOIN packages p ON p.project = d.project AND p.name = d.package
+		WHERE d.state = 'blocked' AND d.exited_at IS NULL
+		  AND d.entered_at < ?
+		  AND p.is_release = 0
+		ORDER BY d.entered_at`,
+		cutoff.UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []BlockedTarget
+	for rows.Next() {
+		var t BlockedTarget
+		var entered string
+		if err := rows.Scan(&t.Project, &t.Package, &t.Repo, &t.Arch, &entered); err != nil {
+			return nil, err
+		}
+		ts, err := time.Parse(time.RFC3339Nano, entered)
+		if err != nil {
+			return nil, err
+		}
+		t.EnteredAt = ts
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
 // QueryDistinctRepos returns the sorted list of distinct OBS repository names
 // (the "repo" field from targets_json) for non-container packages matching the
 // given project prefix.

@@ -1066,6 +1066,69 @@ func TestDeletePackagesByProjectRemovesCveRows(t *testing.T) {
 	}
 }
 
+func TestQueryStaleBlockedTargets(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	now := time.Now().UTC()
+	old := now.Add(-45 * time.Minute)
+	fresh := now.Add(-5 * time.Minute)
+
+	insertPkg := func(project, name string, isRelease int) {
+		if _, err := db.Exec(`INSERT INTO packages (project, name, rollup_state, ok_targets, total_targets, targets_json, is_release, updated_at)
+			VALUES (?, ?, 'blocked', 0, 0, '[]', ?, ?)`, project, name, isRelease, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	insertDur := func(project, pkg, repo, arch, state string, enteredAt time.Time, exited bool) {
+		// Seed timestamps exactly as the production write path
+		// (recordStateTransitions) does: RFC3339Nano strings in UTC.
+		exitedAt := any(nil)
+		if exited {
+			exitedAt = now.UTC().Format(time.RFC3339Nano)
+		}
+		if _, err := db.Exec(`INSERT INTO target_state_durations (project, package, repo, arch, state, entered_at, exited_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?)`, project, pkg, repo, arch, state,
+			enteredAt.UTC().Format(time.RFC3339Nano), exitedAt); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	insertPkg("isv:percona:ppg:devel:17", "stuck_pkg", 0)
+	insertDur("isv:percona:ppg:devel:17", "stuck_pkg", "Fedora_42", "x86_64", "blocked", old, false)
+
+	insertPkg("isv:percona:ppg:staging:17", "fresh_pkg", 0)
+	insertDur("isv:percona:ppg:staging:17", "fresh_pkg", "Fedora_42", "x86_64", "blocked", fresh, false)
+
+	insertPkg("isv:percona:ppg:devel:16", "building_pkg", 0)
+	insertDur("isv:percona:ppg:devel:16", "building_pkg", "Fedora_42", "x86_64", "building", old, false)
+
+	insertPkg("isv:percona:ppg:devel:15", "ended_pkg", 0)
+	insertDur("isv:percona:ppg:devel:15", "ended_pkg", "Fedora_42", "x86_64", "blocked", old, true)
+
+	insertPkg("isv:percona:ppg:releases:17", "release_pkg", 1)
+	insertDur("isv:percona:ppg:releases:17", "release_pkg", "Fedora_42", "x86_64", "blocked", old, false)
+
+	got, err := QueryStaleBlockedTargets(db, now.Add(-30*time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected exactly [stuck_pkg], got %d rows: %+v", len(got), got)
+	}
+	bt := got[0]
+	if bt.Project != "isv:percona:ppg:devel:17" || bt.Package != "stuck_pkg" ||
+		bt.Repo != "Fedora_42" || bt.Arch != "x86_64" {
+		t.Fatalf("unexpected target: %+v", bt)
+	}
+	if !bt.EnteredAt.Equal(old) {
+		t.Fatalf("EnteredAt = %v, want %v", bt.EnteredAt, old)
+	}
+}
+
 // Rows orphaned before the delete-path fix are swept on startup.
 func TestCleanupOrphanedCveRows(t *testing.T) {
 	db, err := Open(":memory:")
