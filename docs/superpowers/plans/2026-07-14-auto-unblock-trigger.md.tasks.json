@@ -5,14 +5,14 @@
       "id": 1,
       "nativeTaskId": 34,
       "subject": "Task 1: store.QueryStaleBlockedTargets",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** A store query returning targets whose current state is `blocked`, entered before a cutoff, in non-release projects.\n\n**Files:**\n- Modify: `internal/store/packages.go` (append after `attachTargetStartedAt`)\n- Modify: `internal/store/packages_test.go` (append test)\n\n**Acceptance Criteria:**\n- [ ] Returns rows with state='blocked' AND exited_at IS NULL AND entered_at < cutoff joined to packages with is_release = 0\n- [ ] Excludes non-blocked states, closed episodes, under-cutoff rows, release packages\n- [ ] EnteredAt parses RFC3339Nano like attachTargetStartedAt\n- [ ] go test ./internal/store/ -count=1 passes\n\n**Verify:** `cd backend && go test ./internal/store/ -count=1` -> all PASS\n\n**Steps:** TDD, full code in plan Task 1. Commit: git commit -s, never Co-Authored-By.\n\n```json:metadata\n{\"files\": [\"backend/internal/store/packages.go\", \"backend/internal/store/packages_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/store/ -count=1\", \"acceptanceCriteria\": [\"query returns only current blocked rows older than cutoff with is_release=0\", \"excludes non-blocked/exited/fresh/release rows\", \"EnteredAt parses RFC3339Nano\", \"store package tests pass\"], \"modelTier\": \"mechanical\"}\n```"
     },
     {
       "id": 2,
       "nativeTaskId": 35,
       "subject": "Task 2: internal/unblocker sweeper",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         1
       ],
@@ -22,12 +22,12 @@
       "id": 3,
       "nativeTaskId": 36,
       "subject": "Task 3: unblocker config + main wiring",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         2
       ],
       "description": "**Goal:** Opt-in `unblocker` config section and the `main.go` goroutine start.\n\n**Files:**\n- Modify: `internal/config/config.go`\n- Modify: `internal/config/config_test.go` (append test)\n- Modify: `cmd/obsboard/main.go`\n- Modify: `config.yaml.example` (repo root)\n\n**Acceptance Criteria:**\n- [ ] cfg.Unblocker.Enabled defaults false; Threshold defaults 30m\n- [ ] UNBLOCKER_ENABLED / UNBLOCKER_THRESHOLD env overrides work\n- [ ] main.go starts go sweeper.Run(ctx) only when enabled, with obsClient as Rebuilder\n- [ ] config.yaml.example documents the section\n- [ ] go test ./... -count=1 && go build ./... pass\n\n**Verify:** `cd backend && go test ./... -count=1 && go build ./...` -> all PASS, build OK\n\n**Steps:** TDD, full code in plan Task 3. Commit: git commit -s, never Co-Authored-By.\n\n```json:metadata\n{\"files\": [\"backend/internal/config/config.go\", \"backend/internal/config/config_test.go\", \"backend/cmd/obsboard/main.go\", \"config.yaml.example\"], \"verifyCommand\": \"cd backend && go test ./... -count=1 && go build ./...\", \"acceptanceCriteria\": [\"defaults false/30m\", \"UNBLOCKER_ENABLED/UNBLOCKER_THRESHOLD overrides\", \"main starts sweeper only when enabled with obsClient\", \"example file documents section\", \"full test + build pass\"], \"modelTier\": \"standard\"}\n```"
     }
   ],
-  "lastUpdated": "2026-07-14T08:28:03Z"
+  "lastUpdated": "2026-07-14T08:55:41Z"
 }
