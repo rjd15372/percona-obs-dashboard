@@ -1,0 +1,23 @@
+{
+  "planPath": "docs/superpowers/plans/2026-07-14-metrics-panel-clients.md",
+  "tasks": [
+    {
+      "id": 1,
+      "nativeTaskId": 52,
+      "subject": "Task 1: hub accessor + sse_clients in API",
+      "status": "pending",
+      "description": "**Goal:** Hub.Clients() exists and the metrics response carries the connection count.\n\n**Files:**\n- Modify: internal/hub/hub.go + hub_test.go\n- Modify: internal/api/metrics.go + metrics_test.go + server.go\n\n**Acceptance Criteria:**\n- [ ] Clients(): empty 0; register 2 -> 2; unregister 1 -> 1\n- [ ] top-level sse_clients equals stub value 3\n- [ ] hub+api tests pass; go build OK\n\n**Verify:** cd backend && go test ./internal/hub/ ./internal/api/ -count=1 -v -> all PASS\n\n**Steps:** TDD, full code in plan Task 1. git commit -s, never Co-Authored-By.\n\n```json:metadata\n{\"files\": [\"backend/internal/hub/hub.go\", \"backend/internal/hub/hub_test.go\", \"backend/internal/api/metrics.go\", \"backend/internal/api/metrics_test.go\", \"backend/internal/api/server.go\"], \"verifyCommand\": \"cd backend && go test ./internal/hub/ ./internal/api/ -count=1 -v\", \"acceptanceCriteria\": [\"Clients(): 0/2/1 across register-unregister sequence\", \"sse_clients top-level equals stub value 3\", \"hub+api tests and build pass\"], \"modelTier\": \"mechanical\"}\n```"
+    },
+    {
+      "id": 2,
+      "nativeTaskId": 53,
+      "subject": "Task 2: connection count in panel header",
+      "status": "pending",
+      "blockedBy": [
+        1
+      ],
+      "description": "**Goal:** Header reads '3 connections \u00b7 up 3d 4h \u00b7 updated 12s ago' (singular '1 connection').\n\n**Files:**\n- Modify: frontend/src/types/metrics.ts\n- Modify: frontend/src/components/MetricsPanel.vue\n\n**Acceptance Criteria:**\n- [ ] sse_clients: number in MetricsSnapshot\n- [ ] header count-first with singular/plural, then uptime, then age\n- [ ] npm run build exits 0\n\n**Verify:** cd frontend && npm run build -> exit 0\n\n**Steps:** full code in plan Task 2. git commit -s, never Co-Authored-By.\n\n```json:metadata\n{\"files\": [\"frontend/src/types/metrics.ts\", \"frontend/src/components/MetricsPanel.vue\"], \"verifyCommand\": \"cd frontend && npm run build\", \"acceptanceCriteria\": [\"sse_clients in MetricsSnapshot\", \"header count-first with singular/plural\", \"npm run build exit 0\"], \"modelTier\": \"mechanical\"}\n```"
+    }
+  ],
+  "lastUpdated": "2026-07-14T12:53:48Z"
+}
