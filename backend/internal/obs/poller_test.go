@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/percona/obs-dashboard/internal/model"
 )
@@ -149,5 +150,36 @@ func TestAwaitingPublishReady(t *testing.T) {
 				t.Fatalf("awaitingPublishReady = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// The discovery pass is bounded (one call per live project per interval) and
+// must not queue behind working-set traffic: its build-results fetch bypasses
+// the background rate limiter.
+func TestPollerFetchProjectResultsBypassesLimiter(t *testing.T) {
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Write([]byte(`<resultlist state="x"></resultlist>`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "u", "p")
+	c.SetMinuteBudget(1)
+	// Exhaust the minute budget so any limiter-governed request blocks until
+	// the next window — far beyond this test's context deadline.
+	if err := c.limiter.acquire(context.Background()); err != nil {
+		t.Fatalf("drain budget: %v", err)
+	}
+
+	p := &Poller{client: c}
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+
+	if _, _, err := p.fetchProjectResults(ctx, "isv:percona:ppg:devel:17"); err != nil {
+		t.Fatalf("fetch blocked by exhausted limiter (no bypass): %v", err)
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("OBS endpoint hits = %d, want 1", hits.Load())
 	}
 }

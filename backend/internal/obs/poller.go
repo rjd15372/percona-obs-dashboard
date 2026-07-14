@@ -43,6 +43,13 @@ func (p *Poller) Run(ctx context.Context) {
 	}
 }
 
+// fetchProjectResults fetches one project's build results outside the
+// background rate limiter: the discovery pass is bounded (one call per live
+// project per interval) and must not queue behind working-set traffic.
+func (p *Poller) fetchProjectResults(ctx context.Context, project string) ([]PackageBuildState, map[string]string, error) {
+	return p.client.BuildResults(Interactive(ctx), project)
+}
+
 func (p *Poller) tick(ctx context.Context) {
 	projects, err := p.discoverProjects(ctx, p.root)
 	if err != nil {
@@ -74,7 +81,7 @@ func (p *Poller) tick(ctx context.Context) {
 			continue
 		}
 
-		results, repoStates, err := p.client.BuildResults(ctx, project)
+		results, repoStates, err := p.fetchProjectResults(ctx, project)
 		if err != nil {
 			slog.Warn("poller: build results", "project", project, "err", err)
 			continue
