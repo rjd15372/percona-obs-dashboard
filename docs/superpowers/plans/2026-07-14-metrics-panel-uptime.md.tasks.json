@@ -5,19 +5,19 @@
       "id": 1,
       "nativeTaskId": 44,
       "subject": "Task 1: uptime_seconds in /api/metrics",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** The metrics response carries process uptime in whole seconds.\n\n**Files:**\n- Modify: internal/api/metrics.go\n- Modify: internal/api/metrics_test.go\n\n**Acceptance Criteria:**\n- [ ] Response JSON has top-level uptime_seconds as a number >= 0\n- [ ] go test ./internal/api/ -count=1 passes\n\n**Verify:** cd backend && go test ./internal/api/ -run TestMetricsHandler -count=1 -v -> PASS\n\n**Steps:** TDD, full code in plan Task 1. Commit: git commit -s, never Co-Authored-By.\n\n```json:metadata\n{\"files\": [\"backend/internal/api/metrics.go\", \"backend/internal/api/metrics_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/api/ -run TestMetricsHandler -count=1 -v\", \"acceptanceCriteria\": [\"top-level uptime_seconds number >= 0 in response\", \"api package tests pass\"], \"modelTier\": \"mechanical\"}\n```"
     },
     {
       "id": 2,
       "nativeTaskId": 45,
       "subject": "Task 2: header uptime + width caps in panel",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         1
       ],
       "description": "**Goal:** Header shows up <uptime> + updated Ns ago; window rows and endpoint table stop stretching across wide columns.\n\n**Files:**\n- Modify: frontend/src/types/metrics.ts\n- Modify: frontend/src/components/MetricsPanel.vue\n\n**Acceptance Criteria:**\n- [ ] MetricsSnapshot has uptime_seconds: number\n- [ ] Header renders up 3d 4h + updated 12s ago once data exists (frozen while collapsed)\n- [ ] fmtUptime: 274680s->3d 4h; 18720s->5h 12m; 720s->12m; 45s->45s; negative->0s\n- [ ] max-w-[200px] on window rows; max-w-[560px] on endpoint table\n- [ ] npm run build exits 0\n\n**Verify:** cd frontend && npm run build -> exit 0\n\n**Steps:** full code in plan Task 2. Commit: git commit -s, never Co-Authored-By.\n\n```json:metadata\n{\"files\": [\"frontend/src/types/metrics.ts\", \"frontend/src/components/MetricsPanel.vue\"], \"verifyCommand\": \"cd frontend && npm run build\", \"acceptanceCriteria\": [\"uptime_seconds in MetricsSnapshot\", \"header shows up <uptime> + updated age when data exists\", \"fmtUptime tier outputs per AC\", \"max-w-[200px] window rows and max-w-[560px] endpoint table\", \"npm run build exit 0\"], \"modelTier\": \"mechanical\"}\n```"
     }
   ],
-  "lastUpdated": "2026-07-14T10:28:38Z"
+  "lastUpdated": "2026-07-14T10:35:44Z"
 }
