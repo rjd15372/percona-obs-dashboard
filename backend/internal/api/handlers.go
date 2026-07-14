@@ -489,9 +489,13 @@ func rebuildHandler(obsClient *obs.Client) http.HandlerFunc {
 			return
 		}
 		if err := obsClient.Rebuild(r.Context(), body.Project, body.Repo, body.Arch, body.Package); err != nil {
+			slog.Warn("api: rebuild trigger failed",
+				"project", body.Project, "package", body.Package, "repo", body.Repo, "arch", body.Arch, "err", err)
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
+		slog.Info("api: rebuild triggered",
+			"project", body.Project, "package", body.Package, "repo", body.Repo, "arch", body.Arch)
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(map[string]string{"status": "ok"}); err != nil {
 			return

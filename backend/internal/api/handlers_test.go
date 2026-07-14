@@ -1,7 +1,9 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -364,6 +366,11 @@ func TestRebuildHandler_Success(t *testing.T) {
 	obsClient := obs.NewClient(obsSrv.URL, "user", "pass")
 	handler := rebuildHandler(obsClient)
 
+	var logBuf bytes.Buffer
+	oldLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, nil)))
+	defer slog.SetDefault(oldLogger)
+
 	body := `{"project":"isv:percona:ppg:17","repo":"RockyLinux_9","arch":"x86_64","package":"percona-pg_tde"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/rebuild", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -379,6 +386,10 @@ func TestRebuildHandler_Success(t *testing.T) {
 	}
 	if resp["status"] != "ok" {
 		t.Errorf("expected status=ok, got %v", resp)
+	}
+	out := logBuf.String()
+	if !strings.Contains(out, "api: rebuild triggered") || !strings.Contains(out, "percona-pg_tde") {
+		t.Errorf("expected info log for the manual rebuild trigger, got: %q", out)
 	}
 }
 
