@@ -61,12 +61,15 @@ func TestQueryStaleBlockedTargets(t *testing.T) {
 		}
 	}
 	insertDur := func(project, pkg, repo, arch, state string, enteredAt time.Time, exited bool) {
+		// Seed exactly as the production write path (recordStateTransitions)
+		// does: pre-formatted RFC3339Nano strings, NOT raw time.Time (the
+		// driver would render those in an incompatible format).
 		exitedAt := any(nil)
 		if exited {
-			exitedAt = now
+			exitedAt = now.UTC().Format(time.RFC3339Nano)
 		}
 		if _, err := db.Exec(`INSERT INTO target_state_durations (project, package, repo, arch, state, entered_at, exited_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?)`, project, pkg, repo, arch, state, enteredAt, exitedAt); err != nil {
+			VALUES (?, ?, ?, ?, ?, ?, ?)`, project, pkg, repo, arch, state, enteredAt.UTC().Format(time.RFC3339Nano), exitedAt); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -135,7 +138,7 @@ func QueryStaleBlockedTargets(db *sql.DB, cutoff time.Time) ([]BlockedTarget, er
 		  AND d.entered_at < ?
 		  AND p.is_release = 0
 		ORDER BY d.entered_at`,
-		cutoff.UTC())
+		cutoff.UTC().Format(time.RFC3339Nano))
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +161,7 @@ func QueryStaleBlockedTargets(db *sql.DB, cutoff time.Time) ([]BlockedTarget, er
 }
 ```
 
-(Time handling mirrors `attachTargetStartedAt`: the modernc sqlite driver stores `time.Time` params as RFC3339Nano text, so binding `cutoff.UTC()` compares lexically-correctly against stored UTC values, and `entered_at` is scanned as string then parsed.)
+(Time handling: the production write path — `recordStateTransitions` — stores `entered_at` as explicit `.Format(time.RFC3339Nano)` strings, and the modernc driver renders a RAW `time.Time` arg via `t.String()`, a different lexical format. So the cutoff MUST be bound pre-formatted, mirroring `QueryBuildingEntries` in `overview.go`; `entered_at` is scanned as string then parsed. Any test seeding this table must likewise insert pre-formatted RFC3339Nano strings, or it will pass against data unlike production's.)
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -239,22 +242,28 @@ func seedBlocked(t *testing.T, db *sql.DB, project, pkg string, enteredAt time.T
 		VALUES (?, ?, 'blocked', 0, 0, '[]', 0, ?)`, project, pkg, enteredAt); err != nil {
 		t.Fatal(err)
 	}
+	// entered_at seeded as the production write path stores it: a
+	// pre-formatted RFC3339Nano string (raw time.Time would be rendered
+	// in an incompatible format by the driver).
 	if _, err := db.Exec(`INSERT INTO target_state_durations (project, package, repo, arch, state, entered_at)
-		VALUES (?, ?, 'Fedora_42', 'x86_64', 'blocked', ?)`, project, pkg, enteredAt); err != nil {
+		VALUES (?, ?, 'Fedora_42', 'x86_64', 'blocked', ?)`, project, pkg, enteredAt.UTC().Format(time.RFC3339Nano)); err != nil {
 		t.Fatal(err)
 	}
 }
 
 // closeEpisode marks the target's current blocked episode as exited and
 // opens a new one entered at newEnteredAt (simulating blocked→…→blocked).
+// Timestamps are seeded as pre-formatted RFC3339Nano strings, matching the
+// production write path.
 func closeEpisode(t *testing.T, db *sql.DB, project, pkg string, newEnteredAt time.Time) {
 	t.Helper()
+	ts := newEnteredAt.UTC().Format(time.RFC3339Nano)
 	if _, err := db.Exec(`UPDATE target_state_durations SET exited_at = ? WHERE project = ? AND package = ? AND exited_at IS NULL`,
-		newEnteredAt, project, pkg); err != nil {
+		ts, project, pkg); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec(`INSERT INTO target_state_durations (project, package, repo, arch, state, entered_at)
-		VALUES (?, ?, 'Fedora_42', 'x86_64', 'blocked', ?)`, project, pkg, newEnteredAt); err != nil {
+		VALUES (?, ?, 'Fedora_42', 'x86_64', 'blocked', ?)`, project, pkg, ts); err != nil {
 		t.Fatal(err)
 	}
 }
