@@ -56,7 +56,7 @@ function fmtUptime(totalSeconds: number): string {
     >
       <span class="text-text-muted text-[11px] transition-transform inline-block" :class="expanded ? 'rotate-90' : ''">▸</span>
       <span class="text-[11.5px] font-bold uppercase tracking-[0.05em] text-text-muted">Backend metrics</span>
-      <span v-if="data" class="ml-auto text-[11px] text-text-muted">up {{ fmtUptime(data.uptime_seconds) }} · {{ updatedLabel }}</span>
+      <span v-if="data" class="ml-auto text-[11px] text-text-muted">{{ data.sse_clients }} connection{{ data.sse_clients === 1 ? '' : 's' }} · up {{ fmtUptime(data.uptime_seconds) }} · {{ updatedLabel }}</span>
     </button>
 
     <div v-if="expanded" class="border-t border-border p-[14px_20px_16px]">
