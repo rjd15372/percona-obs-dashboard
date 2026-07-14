@@ -41,7 +41,8 @@ worker_pool:
 
 # Automatic rebuild trigger for targets stuck in blocked state (works
 # around an OBS bug where targets stay blocked after their dependencies
-# built). Opt-in; triggers go through the background OBS rate limiter.
+# built). Opt-in; triggers bypass the background OBS rate limiter, like
+# manual rebuilds (they are rare and capped per sweep).
 unblocker:
   enabled: false
   # Trigger a rebuild when a target has been blocked longer than this.

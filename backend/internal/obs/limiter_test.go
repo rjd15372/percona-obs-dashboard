@@ -67,10 +67,10 @@ func TestLimiterDisabledByZeroBudget(t *testing.T) {
 
 func TestInteractiveContextBypassesLimiter(t *testing.T) {
 	ctx := Interactive(context.Background())
-	if !isInteractive(ctx) {
+	if !IsInteractive(ctx) {
 		t.Fatal("expected interactive context to be detected")
 	}
-	if isInteractive(context.Background()) {
+	if IsInteractive(context.Background()) {
 		t.Fatal("plain context must not be interactive")
 	}
 }

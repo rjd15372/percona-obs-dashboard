@@ -131,7 +131,7 @@ func (c *Client) get(ctx context.Context, op, path string) (*http.Response, erro
 	}
 	req.SetBasicAuth(c.username, c.password)
 	req.Header.Set("Accept", "application/xml")
-	if !isInteractive(ctx) {
+	if !IsInteractive(ctx) {
 		if err := c.limiter.acquire(ctx); err != nil {
 			return nil, err
 		}
@@ -157,7 +157,7 @@ func (c *Client) getFile(ctx context.Context, op, path string) (*http.Response, 
 		return nil, err
 	}
 	req.SetBasicAuth(c.username, c.password)
-	if !isInteractive(ctx) {
+	if !IsInteractive(ctx) {
 		if err := c.limiter.acquire(ctx); err != nil {
 			return nil, err
 		}
@@ -183,7 +183,7 @@ func (c *Client) post(ctx context.Context, op, path string) error {
 		return err
 	}
 	req.SetBasicAuth(c.username, c.password)
-	if !isInteractive(ctx) {
+	if !IsInteractive(ctx) {
 		if err := c.limiter.acquire(ctx); err != nil {
 			return err
 		}

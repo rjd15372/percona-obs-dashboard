@@ -11,7 +11,10 @@ func Interactive(ctx context.Context) context.Context {
 	return context.WithValue(ctx, interactiveKey{}, true)
 }
 
-func isInteractive(ctx context.Context) bool {
+// IsInteractive reports whether ctx was marked by Interactive. Exported so
+// callers outside the package (and their tests) can assert limiter-bypass
+// behavior.
+func IsInteractive(ctx context.Context) bool {
 	v, _ := ctx.Value(interactiveKey{}).(bool)
 	return v
 }

@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/percona/obs-dashboard/internal/obs"
 	"github.com/percona/obs-dashboard/internal/store"
 )
 
@@ -22,7 +23,7 @@ type Rebuilder interface {
 const (
 	sweepInterval       = 5 * time.Minute
 	maxAttempts         = 3  // per blocked episode
-	maxTriggersPerSweep = 10 // protects the shared per-minute OBS budget
+	maxTriggersPerSweep = 10 // bounds the rebuild burst OBS sees per sweep
 )
 
 // episodeKey identifies one continuous blocked episode: any state
@@ -41,7 +42,9 @@ type episode struct {
 // Sweeper periodically rebuilds targets stuck in blocked state longer than
 // Threshold. Detection reads target_state_durations (maintained by the
 // poller and MQ consumer) — it adds no OBS read traffic; only the rebuild
-// triggers hit OBS, through the client's background rate limiter.
+// triggers hit OBS. Triggers bypass the background rate limiter (like the
+// dashboard's manual rebuild button): they are rare, capped per sweep, and
+// must not queue behind polling traffic.
 type Sweeper struct {
 	DB        *sql.DB
 	Rebuilder Rebuilder
@@ -117,7 +120,9 @@ func (s *Sweeper) sweep(ctx context.Context) {
 		triggered++
 
 		blockedFor := now.Sub(t.EnteredAt).Round(time.Minute)
-		if err := s.Rebuilder.Rebuild(ctx, t.Project, t.Repo, t.Arch, t.Package); err != nil {
+		// Bypass the background rate limiter, like the manual rebuild button:
+		// triggers are rare and capped, and must not queue behind polling.
+		if err := s.Rebuilder.Rebuild(obs.Interactive(ctx), t.Project, t.Repo, t.Arch, t.Package); err != nil {
 			slog.Warn("unblocker: rebuild trigger failed",
 				"project", t.Project, "package", t.Package, "repo", t.Repo, "arch", t.Arch,
 				"blocked_for", blockedFor, "attempt", ep.attempts, "err", err)

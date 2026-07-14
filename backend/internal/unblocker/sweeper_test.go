@@ -8,16 +8,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/percona/obs-dashboard/internal/obs"
 	"github.com/percona/obs-dashboard/internal/store"
 )
 
 type fakeRebuilder struct {
-	calls []string
-	err   error
+	calls       []string
+	interactive []bool // per call: was ctx marked to bypass the rate limiter?
+	err         error
 }
 
-func (f *fakeRebuilder) Rebuild(_ context.Context, project, repo, arch, pkg string) error {
+func (f *fakeRebuilder) Rebuild(ctx context.Context, project, repo, arch, pkg string) error {
 	f.calls = append(f.calls, project+"/"+pkg+"/"+repo+"/"+arch)
+	f.interactive = append(f.interactive, obs.IsInteractive(ctx))
 	return f.err
 }
 
@@ -84,6 +87,9 @@ func TestSweepTriggersStaleAndPacesRetries(t *testing.T) {
 	s.sweep(context.Background())
 	if len(rb.calls) != 1 {
 		t.Fatalf("first sweep: %d calls, want 1", len(rb.calls))
+	}
+	if !rb.interactive[0] {
+		t.Fatal("rebuild trigger must bypass the rate limiter (interactive-tagged ctx)")
 	}
 
 	// 5 minutes later (next tick): still blocked, but within pacing window.
