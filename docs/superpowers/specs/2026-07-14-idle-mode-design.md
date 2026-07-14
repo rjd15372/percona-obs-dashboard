@@ -100,12 +100,18 @@ import the presence package; `main.go` assigns the gate.
   }
   ```
 
-- **Working-set scheduler** (`internal/workingset/workingset.go`):
-  `StartScheduler` gains the same gate interface parameter; the ticker case
-  runs `DispatchDue` only when active, plus a wake case dispatching
-  immediately. While idle, MQ's `ws.Add` keeps accumulating due packages;
-  the wake dispatch drains the backlog through the rate limiter at the
-  normal budget.
+- **Working set** (`internal/workingset/workingset.go`): the gate is
+  enforced in `sendJob` — the single funnel through which every dispatch
+  path flows (`Add`'s immediate dispatch for new packages, `Signal`'s
+  MQ-driven dispatch, and the scheduler's `DispatchDue`). When the gate is
+  idle, `sendJob` drops the job exactly as it does when the queue is full:
+  the package stays due and is picked up later. This matters because `Add`
+  and `Signal` dispatch immediately — gating only the scheduler tick would
+  leave the MQ→worker→OBS path live while idle. `StartScheduler`
+  additionally gains the wake case (immediate `DispatchDue` on idle→active)
+  and skips ticking `DispatchDue` while idle to avoid pointless scans.
+  While idle, MQ keeps accumulating due packages; the wake dispatch drains
+  the backlog through the rate limiter at the normal budget.
 
 - **Untouched:** MQ consumer, unblocker sweeper, CVE scanner (no OBS
   traffic), telemetry reporter, all interactive API handlers, and the
