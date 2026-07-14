@@ -7,4 +7,5 @@ export interface MetricsSnapshot {
   }
   limiter: { enabled: boolean; budget: number; remaining: number; waits: number }
   working_set: { packages: number; inflight: number; by_state: Record<string, number> }
+  uptime_seconds: number
 }
