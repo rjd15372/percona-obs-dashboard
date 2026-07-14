@@ -7,6 +7,7 @@ import StatCard from './StatCard.vue'
 import CategoryBreakdown from './CategoryBreakdown.vue'
 import RebuildBarChart from './RebuildBarChart.vue'
 import CveExposureTable from './CveExposureTable.vue'
+import MetricsPanel from './MetricsPanel.vue'
 import { shortProject } from '../lib/project'
 
 const props = defineProps<{
@@ -196,6 +197,7 @@ const cveSegments = computed(() => {
 
       <RebuildBarChart :bars="rebuildBars" :window-label="win" :accent-of="accentOf" />
       <CveExposureTable :projects="projects" :accent-of="accentOf" />
+      <MetricsPanel />
     </template>
   </div>
 </template>
