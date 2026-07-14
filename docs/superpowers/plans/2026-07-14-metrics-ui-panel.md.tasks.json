@@ -1,0 +1,33 @@
+{
+  "planPath": "docs/superpowers/plans/2026-07-14-metrics-ui-panel.md",
+  "tasks": [
+    {
+      "id": 1,
+      "nativeTaskId": 40,
+      "subject": "Task 1: 24h window ring + WindowCounts()",
+      "status": "pending",
+      "description": "**Goal:** `obsMetrics` counts requests into 288 five-minute buckets; `Client.WindowCounts()` reports trailing 6h/12h/24h totals.\n\n**Files:**\n- Modify: `internal/obs/client.go` (obsMetrics struct, inc, new methods)\n- Modify: `internal/obs/metrics_test.go` (append tests)\n\n**Acceptance Criteria:**\n- [ ] 11h hits count toward 12h+24h not 6h; 23h only 24h; 24h+5m none\n- [ ] Bucket reused exactly 24h later is zeroed first\n- [ ] Zero traffic -> all windows 0\n- [ ] go test ./internal/obs/ -count=1 passes\n\n**Verify:** `cd backend && go test ./internal/obs/ -run TestWindowCounts -count=1 -v` -> all PASS\n\n**Steps:** TDD, full code in plan Task 1. Commit: git commit -s, never Co-Authored-By.\n\n```json:metadata\n{\"files\": [\"backend/internal/obs/client.go\", \"backend/internal/obs/metrics_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/obs/ -run TestWindowCounts -count=1 -v\", \"acceptanceCriteria\": [\"11h hits in 12h+24h not 6h; 23h only 24h; 24h+5m in none\", \"bucket reuse after 24h zeroes stale hits\", \"zero traffic -> 0/0/0\", \"obs package tests pass\"], \"modelTier\": \"mechanical\"}\n```"
+    },
+    {
+      "id": 2,
+      "nativeTaskId": 41,
+      "subject": "Task 2: obs.windows in /api/metrics",
+      "status": "pending",
+      "blockedBy": [
+        1
+      ],
+      "description": "**Goal:** `/api/metrics` reports the three window totals under `obs.windows`.\n\n**Files:**\n- Modify: `internal/api/metrics.go` (obsSection + handler)\n- Modify: `internal/api/metrics_test.go` (extend TestMetricsHandler)\n\n**Acceptance Criteria:**\n- [ ] Response contains `obs.windows` with exactly keys 6h/12h/24h\n- [ ] No-traffic case: all three 0, map present not null\n- [ ] go test ./internal/api/ -count=1 passes\n\n**Verify:** `cd backend && go test ./internal/api/ -run TestMetricsHandler -count=1 -v` -> PASS\n\n**Steps:** TDD, full code in plan Task 2. Commit: git commit -s, never Co-Authored-By.\n\n```json:metadata\n{\"files\": [\"backend/internal/api/metrics.go\", \"backend/internal/api/metrics_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/api/ -run TestMetricsHandler -count=1 -v\", \"acceptanceCriteria\": [\"obs.windows has keys 6h/12h/24h\", \"no-traffic values are 0 with map present\", \"api package tests pass\"], \"modelTier\": \"mechanical\"}\n```"
+    },
+    {
+      "id": 3,
+      "nativeTaskId": 42,
+      "subject": "Task 3: MetricsPanel frontend",
+      "status": "pending",
+      "blockedBy": [
+        2
+      ],
+      "description": "**Goal:** The collapsed panel at the bottom of the Overview tab, polling `/api/metrics` every 30s while expanded, rendering the mockup-A layout.\n\n**Files:**\n- Create: `frontend/src/types/metrics.ts`\n- Create: `frontend/src/composables/useMetrics.ts`\n- Create: `frontend/src/components/MetricsPanel.vue`\n- Modify: `frontend/src/components/OverviewPanel.vue` (import + one tag after CveExposureTable)\n\n**Acceptance Criteria:**\n- [ ] Collapsed by default; header toggles\n- [ ] Poll only while expanded: immediate fetch + 30s interval, cleared on collapse/unmount\n- [ ] Three groups (OBS total/rate/windows; limiter meter or disabled; working-set chips) + sorted two-column endpoint table (empty state)\n- [ ] updated-age label; error line with stale data still rendered\n- [ ] npm run build exits 0\n\n**Verify:** `cd frontend && npm run build` -> vue-tsc no errors, exit 0\n\n**Steps:** full code in plan Task 3. Commit: git commit -s, never Co-Authored-By.\n\n```json:metadata\n{\"files\": [\"frontend/src/types/metrics.ts\", \"frontend/src/composables/useMetrics.ts\", \"frontend/src/components/MetricsPanel.vue\", \"frontend/src/components/OverviewPanel.vue\"], \"verifyCommand\": \"cd frontend && npm run build\", \"acceptanceCriteria\": [\"collapsed by default, header toggles\", \"poll only while expanded, 30s interval, cleared on collapse/unmount\", \"three groups + sorted endpoint table per mockup A\", \"updated-age label and error-with-stale-data behavior\", \"npm run build exit 0\"], \"modelTier\": \"standard\"}\n```"
+    }
+  ],
+  "lastUpdated": "2026-07-14T09:30:48Z"
+}
