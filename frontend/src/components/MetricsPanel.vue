@@ -32,6 +32,50 @@ const states = computed(() =>
 
 const WINDOW_KEYS = ['6h', '12h', '24h', '7d', '30d'] as const
 
+const WINDOW_MS: Record<string, number> = {
+  '6h': 6 * 3_600_000,
+  '12h': 12 * 3_600_000,
+  '24h': 24 * 3_600_000,
+  '7d': 7 * 86_400_000,
+}
+
+// Delta vs the previous adjacent period; null renders as a muted "—":
+// always for 30d (its baseline would need 60d of samples), and whenever
+// the baseline is zero or not fully covered by stored history yet.
+function windowDelta(k: string): number | null {
+  const obs = data.value?.obs
+  if (!obs || !(k in WINDOW_MS)) return null
+  const prev = obs.windows_prev?.[k] ?? 0
+  if (prev === 0) return null
+  if (!obs.oldest_sample) return null
+  if (Date.parse(obs.oldest_sample) > Date.now() - 2 * WINDOW_MS[k]) return null
+  const cur = obs.windows?.[k] ?? 0
+  return Math.round(((cur - prev) / prev) * 100)
+}
+
+const tiles = computed(() =>
+  WINDOW_KEYS.map((k) => ({
+    key: k,
+    count: data.value?.obs.windows?.[k] ?? 0,
+    delta: windowDelta(k),
+  })))
+
+const sparkPoints = computed(() => {
+  const series = data.value?.obs.series ?? []
+  if (series.length < 2) return ''
+  const W = 180
+  const H = 34
+  const pad = 2
+  const max = Math.max(...series, 1)
+  return series
+    .map((v, i) => {
+      const x = (i / (series.length - 1)) * W
+      const y = H - pad - (Number(v) / max) * (H - 2 * pad)
+      return `${x.toFixed(1)},${y.toFixed(1)}`
+    })
+    .join(' ')
+})
+
 const fmt = (n: number) => n.toLocaleString('en-US')
 
 function fmtUptime(totalSeconds: number): string {
@@ -70,11 +114,11 @@ function fmtUptime(totalSeconds: number): string {
             <div class="text-[11px] text-text-muted mt-1">
               total since start · <b class="text-text-secondary">{{ data.obs.req_per_s.toFixed(1) }}</b> req/s last minute
             </div>
-            <div class="mt-2 max-w-[200px]">
-              <div v-for="k in WINDOW_KEYS" :key="k" class="flex justify-between text-[12.5px] py-[2px]">
-                <span class="text-text-muted">last {{ k }}</span>
-                <span class="font-mono tabular-nums font-semibold">{{ fmt(data.obs.windows?.[k] ?? 0) }}</span>
-              </div>
+            <div class="mt-2">
+              <svg v-if="sparkPoints" width="180" height="34" viewBox="0 0 180 34" role="img" aria-label="OBS requests per 5 minutes over the last 24 hours">
+                <polyline fill="none" stroke="var(--brand-purple)" stroke-width="1.5" :points="sparkPoints" />
+              </svg>
+              <div class="text-[9.5px] text-text-muted mt-1">requests per 5 min · last 24h</div>
             </div>
           </div>
           <!-- Rate limiter -->
@@ -109,6 +153,23 @@ function fmtUptime(totalSeconds: number): string {
                 :key="state"
                 class="text-[10.5px] font-bold px-2 py-[2px] rounded-[6px] bg-bg-muted text-text-secondary tabular-nums"
               >{{ fmt(n) }} {{ state }}</span>
+            </div>
+          </div>
+        </div>
+        <!-- Window tiles -->
+        <div class="flex gap-2 mt-4 flex-wrap">
+          <div
+            v-for="tile in tiles"
+            :key="tile.key"
+            class="flex-1 min-w-[96px] bg-bg-muted border border-border rounded-[8px] px-3 py-2"
+          >
+            <div class="text-[9.5px] font-bold uppercase tracking-[0.05em] text-text-muted">last {{ tile.key }}</div>
+            <div class="text-[15px] font-extrabold tabular-nums mt-[2px]">{{ fmt(tile.count) }}</div>
+            <div class="text-[10.5px] font-bold mt-[2px]">
+              <span v-if="tile.delta === null" class="text-text-muted font-normal">—</span>
+              <span v-else-if="tile.delta > 0" :style="{ color: 'var(--ok)' }">▲ {{ tile.delta }}%</span>
+              <span v-else-if="tile.delta < 0" :style="{ color: 'var(--fail)' }">▼ {{ Math.abs(tile.delta) }}%</span>
+              <span v-else class="text-text-secondary">0%</span>
             </div>
           </div>
         </div>
