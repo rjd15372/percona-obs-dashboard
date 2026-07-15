@@ -80,3 +80,81 @@ func PruneMetricsSamples(db *sql.DB, cutoff time.Time) (int64, error) {
 	}
 	return res.RowsAffected()
 }
+
+// SeriesBuckets is the fixed length of the 24h request series: one bucket
+// per 5 minutes.
+const SeriesBuckets = 288
+
+// QueryMetricsPrevWindows returns summed request counts over the previous
+// adjacent periods of the trailing windows — (now-12h, now-6h],
+// (now-24h, now-12h], (now-48h, now-24h] and (now-14d, now-7d] — keyed
+// "6h"/"12h"/"24h"/"7d". There is no "30d" key: its baseline would need
+// 60d of samples, beyond the default retention.
+func QueryMetricsPrevWindows(db *sql.DB, now time.Time) (map[string]int64, error) {
+	cutoff := func(d time.Duration) string {
+		return now.Add(-d).UTC().Format(time.RFC3339Nano)
+	}
+	row := db.QueryRow(`
+		SELECT
+		  COALESCE(SUM(CASE WHEN ts > ? AND ts <= ? THEN count END), 0),
+		  COALESCE(SUM(CASE WHEN ts > ? AND ts <= ? THEN count END), 0),
+		  COALESCE(SUM(CASE WHEN ts > ? AND ts <= ? THEN count END), 0),
+		  COALESCE(SUM(CASE WHEN ts > ? AND ts <= ? THEN count END), 0)
+		FROM metrics_samples
+		WHERE ts > ?`,
+		cutoff(12*time.Hour), cutoff(6*time.Hour),
+		cutoff(24*time.Hour), cutoff(12*time.Hour),
+		cutoff(48*time.Hour), cutoff(24*time.Hour),
+		cutoff(14*24*time.Hour), cutoff(7*24*time.Hour),
+		cutoff(14*24*time.Hour),
+	)
+	var s6, s12, s24, s7d int64
+	if err := row.Scan(&s6, &s12, &s24, &s7d); err != nil {
+		return nil, err
+	}
+	return map[string]int64{"6h": s6, "12h": s12, "24h": s24, "7d": s7d}, nil
+}
+
+// QueryMetricsSeries returns total requests per 5-minute bucket over the
+// trailing 24h: a slice of exactly SeriesBuckets sums, oldest bucket
+// first, missing buckets zero.
+func QueryMetricsSeries(db *sql.DB, now time.Time) ([]int64, error) {
+	rows, err := db.Query(`SELECT ts, count FROM metrics_samples WHERE ts > ?`,
+		now.Add(-24*time.Hour).UTC().Format(time.RFC3339Nano))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]int64, SeriesBuckets)
+	for rows.Next() {
+		var tsStr string
+		var count int64
+		if err := rows.Scan(&tsStr, &count); err != nil {
+			return nil, err
+		}
+		ts, err := time.Parse(time.RFC3339Nano, tsStr)
+		if err != nil {
+			return nil, err
+		}
+		idx := SeriesBuckets - 1 - int(now.Sub(ts)/(5*time.Minute))
+		if idx < 0 || idx >= SeriesBuckets {
+			continue
+		}
+		out[idx] += count
+	}
+	return out, rows.Err()
+}
+
+// OldestMetricsSample returns the earliest sample timestamp, or the zero
+// time when the table is empty.
+func OldestMetricsSample(db *sql.DB) (time.Time, error) {
+	var tsStr sql.NullString
+	if err := db.QueryRow(`SELECT MIN(ts) FROM metrics_samples`).Scan(&tsStr); err != nil {
+		return time.Time{}, err
+	}
+	if !tsStr.Valid {
+		return time.Time{}, nil
+	}
+	return time.Parse(time.RFC3339Nano, tsStr.String)
+}
