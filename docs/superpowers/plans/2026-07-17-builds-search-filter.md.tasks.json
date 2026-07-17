@@ -1,0 +1,13 @@
+{
+  "planPath": "docs/superpowers/plans/2026-07-17-builds-search-filter.md",
+  "tasks": [
+    {
+      "id": 1,
+      "nativeTaskId": 65,
+      "subject": "Task 1: search filter in FailureBoard",
+      "status": "pending",
+      "description": "**Goal:** `FailureBoard.vue` renders the search box and filters cards, strip, count line, and empty states per the spec.\n\n**Files:**\n- Modify: `frontend/src/components/FailureBoard.vue` (whole file — complete replacement in the plan)\n\n**Acceptance Criteria:**\n- [ ] Header row gains a right-aligned `<input type=\"search\">` with placeholder `filter packages…`, `aria-label=\"Filter packages by name\"`, Escape-to-clear\n- [ ] Typing filters both the failing-card grid and the `GreenStrip` chips by case-insensitive name substring\n- [ ] Count line: empty query → `17 packages · sorted by severity` (unchanged); active query → `3 of 17 packages · matching \"pg\"` (visible failing vs unfiltered failing)\n- [ ] Query active + zero visible packages → centered muted `No packages match \"pg\"`; the \"All packages green\" and \"No packages found\" blocks never render while a query is active\n- [ ] `npm run build` exits 0\n\n**Verify:** `cd frontend && npm run build` → exit 0\n\n**Steps:** Replace the whole component with the plan's Task 1 code (query ref, isFailing helper, visiblePackages computed, totalFailing, conditional count span, search input, no-match block, !query guards on green/empty blocks); build; commit `git commit -s -m \"feat(builds): search box filters active packages by name\"` (never Co-Authored-By).\n\n```json:metadata\n{\"files\": [\"frontend/src/components/FailureBoard.vue\"], \"verifyCommand\": \"cd frontend && npm run build\", \"acceptanceCriteria\": [\"right-aligned search input with aria-label and Escape-to-clear\", \"cards + green strip filter by name substring\", \"count line N of M while searching\", \"no-match notice suppresses green/empty blocks\", \"build exit 0\"], \"modelTier\": \"mechanical\"}\n```"
+    }
+  ],
+  "lastUpdated": "2026-07-17T00:00:00Z"
+}
