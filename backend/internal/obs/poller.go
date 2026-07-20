@@ -13,7 +13,7 @@ import (
 	"github.com/percona/obs-dashboard/internal/workingset"
 )
 
-// PollGate lets the poller pause while no dashboard client is connected.
+// PollGate lets the poller pause while no dashboard tab is watching.
 // See internal/presence. A nil gate means "always poll".
 type PollGate interface {
 	Active() bool

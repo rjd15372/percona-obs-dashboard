@@ -53,7 +53,6 @@ func run() error {
 	obsClient.SetMinuteBudget(cfg.OBS.MinuteRequestBudget)
 	h := hub.New()
 	gate := presence.New(cfg.Idle.Enabled, cfg.Idle.Linger)
-	h.Presence = gate
 
 	scanner := cve.NewScanner(db, h, 2)
 	scanner.Start(ctx)

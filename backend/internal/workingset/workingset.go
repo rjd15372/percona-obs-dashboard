@@ -36,7 +36,7 @@ type Job struct {
 }
 
 // Gate lets the working set pause OBS-bound dispatching while no dashboard
-// client is connected. See internal/presence. A nil gate means "always
+// tab is watching. See internal/presence. A nil gate means "always
 // dispatch".
 type Gate interface {
 	Active() bool

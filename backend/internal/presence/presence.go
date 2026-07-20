@@ -1,6 +1,7 @@
-// Package presence tracks whether any dashboard client is connected so
-// background OBS polling can pause while nobody is looking.
-// Design: docs/superpowers/specs/2026-07-14-idle-mode-design.md
+// Package presence tracks whether any dashboard tab is actually visible
+// (via heartbeats from the frontend) so background OBS polling can pause
+// while nobody is looking.
+// Design: docs/superpowers/specs/2026-07-20-visibility-heartbeat-design.md
 package presence
 
 import (
@@ -13,59 +14,43 @@ import (
 // subscribers once per idle→active transition. Safe for concurrent use.
 // A disabled Gate is permanently active and never signals.
 type Gate struct {
-	mu             sync.Mutex
-	enabled        bool
-	linger         time.Duration
-	clients        int
-	lastDisconnect time.Time
-	now            func() time.Time // injectable for tests
-	subs           []chan struct{}
-	wasActive      bool // last observed state, for transition logging
+	mu        sync.Mutex
+	enabled   bool
+	linger    time.Duration
+	lastSeen  time.Time
+	now       func() time.Time // injectable for tests
+	subs      []chan struct{}
+	wasActive bool // last observed state, for transition logging
 }
 
-// New returns a Gate. lastDisconnect starts at now (boot grace): a
-// restarted backend runs one convergence window before idling, so
-// post-redeploy reconciliation doesn't wait for the next visitor.
+// New returns a Gate. lastSeen starts at now (boot grace): a restarted
+// backend runs one linger window before idling, so post-redeploy
+// reconciliation doesn't wait for the next visitor.
 func New(enabled bool, linger time.Duration) *Gate {
 	g := &Gate{enabled: enabled, linger: linger, now: time.Now, wasActive: true}
-	g.lastDisconnect = g.now()
+	g.lastSeen = g.now()
 	return g
 }
 
-// Connect records a new SSE client and wakes subscribers on idle→active.
-func (g *Gate) Connect() {
+// Heartbeat records that a visible dashboard tab is watching and wakes
+// subscribers on idle→active.
+func (g *Gate) Heartbeat() {
 	if !g.enabled {
 		return
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	wasActive := g.activeLocked()
-	g.clients++
+	g.lastSeen = g.now()
 	if !wasActive {
 		g.wasActive = true
-		slog.Info("presence: active — resuming background polling", "clients", g.clients)
+		slog.Info("presence: active — resuming background polling")
 		for _, ch := range g.subs {
 			select {
 			case ch <- struct{}{}:
 			default:
 			}
 		}
-	}
-}
-
-// Disconnect records a departing SSE client; the linger window starts when
-// the last one leaves.
-func (g *Gate) Disconnect() {
-	if !g.enabled {
-		return
-	}
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if g.clients > 0 {
-		g.clients--
-	}
-	if g.clients == 0 {
-		g.lastDisconnect = g.now()
 	}
 }
 
@@ -84,8 +69,17 @@ func (g *Gate) Active() bool {
 	return active
 }
 
+// State returns "active" or "idle" for observability endpoints. A
+// disabled gate is always "active".
+func (g *Gate) State() string {
+	if g.Active() {
+		return "active"
+	}
+	return "idle"
+}
+
 func (g *Gate) activeLocked() bool {
-	return g.clients > 0 || g.now().Sub(g.lastDisconnect) < g.linger
+	return g.now().Sub(g.lastSeen) < g.linger
 }
 
 // Subscribe returns a buffered channel signaled once per idle→active
