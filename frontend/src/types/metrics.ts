@@ -12,4 +12,5 @@ export interface MetricsSnapshot {
   working_set: { packages: number; inflight: number; by_state: Record<string, number> }
   uptime_seconds: number
   sse_clients: number
+  polling: string
 }

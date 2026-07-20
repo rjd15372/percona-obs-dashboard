@@ -14,9 +14,14 @@ import { useEvents } from './composables/useEvents'
 import { usePRPackages } from './composables/usePRPackages'
 import { useRealtimeStream } from './composables/useRealtimeStream'
 import { useUrlState } from './composables/useUrlState'
+import { usePresenceHeartbeat } from './composables/usePresenceHeartbeat'
 
 // Main tab (Overview is the default landing view)
 const mainTab = ref<'board' | 'artifacts' | 'overview'>('overview')
+
+// Heartbeats drive the backend's idle-mode gate: only Builds/Artifacts
+// viewers need live OBS polling (Overview stays fresh via MQ events).
+usePresenceHeartbeat(computed(() => mainTab.value !== 'overview'))
 
 // Theme
 // Default to the OS color scheme; a manual toggle is remembered in
