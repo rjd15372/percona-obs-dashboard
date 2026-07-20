@@ -29,8 +29,14 @@ actually visible.
   gate idles when no heartbeat has arrived for `linger`; seeding the
   timestamp at boot makes the existing boot-grace behavior fall out of
   the same rule.
-- Heartbeat cadence: 60s while the tab is visible, plus an immediate
-  beat on mount and on `visibilitychange` → visible.
+- **Heartbeats fire only from the Builds and Artifacts tabs** (user
+  decision). Overview renders from the DB, which the MQ consumer keeps
+  updated while polling is idle — an Overview viewer doesn't need OBS
+  polling. Switching to Builds/Artifacts beats immediately and wakes
+  polling.
+- Heartbeat cadence: 60s while the tab is visible and on an eligible
+  main tab, plus an immediate beat on mount, on `visibilitychange` →
+  visible, and on switching onto an eligible tab.
 - New observability: `/api/metrics` reports `polling: "active"|"idle"`
   and the panel header shows it.
 
@@ -106,17 +112,27 @@ type PollState interface{ State() string }
 
 ### 4. Frontend heartbeat — `composables/usePresenceHeartbeat.ts` (new)
 
-- Mounted once from `App.vue`'s setup.
+- Signature: `usePresenceHeartbeat(eligible: Ref<boolean>)`; `App.vue`
+  calls it once from setup with
+  `computed(() => mainTab.value !== 'overview')` — i.e. Builds
+  ('board') and Artifacts tabs are eligible, Overview is not.
+- `shouldBeat()` = `document.visibilityState === 'visible' &&
+  eligible.value`.
 - Behavior: `beat()` = `fetch('/api/presence', { method: 'POST' })`
   with errors swallowed (a missed beat is harmless; the next one
   retries).
-  - On mount: `beat()` if `document.visibilityState === 'visible'`,
-    and start a 60s interval that beats only while visible.
-  - On `visibilitychange` → visible: immediate `beat()`.
-  - On unmount: clear the interval and remove the listener.
-- Multiple tabs beat independently — idempotent by design.
-- The heartbeat runs regardless of which tab/panel is open inside the
-  app; it represents "a dashboard tab is visible", nothing finer.
+  - On mount: `beat()` if `shouldBeat()`, and start a 60s interval
+    that beats only while `shouldBeat()`.
+  - On `visibilitychange` → visible: immediate `beat()` if eligible.
+  - On `eligible` flipping false→true (watch): immediate `beat()` if
+    visible.
+  - On unmount: clear the interval, remove the listener, stop the
+    watcher.
+- Multiple browser tabs beat independently — idempotent by design.
+- Consequence (accepted): a viewer parked on Overview for more than
+  one linger window sends the backend idle; their Overview keeps
+  updating via MQ events, and switching to Builds/Artifacts wakes
+  polling immediately.
 
 ## Error handling
 
@@ -142,8 +158,10 @@ type PollState interface{ State() string }
   call; `TestMetricsHandler` asserts `polling` present and equal to the
   stub's value.
 - **frontend**: `npm run build`; visual — header shows
-  `polling active`; hide every dashboard tab and watch the server log
-  flip to `presence: idle` after ~5m, tiles/sparkline confirm reduced
+  `polling active` while on Builds/Artifacts; sitting on Overview (or
+  hiding every dashboard tab) flips the server log to `presence: idle`
+  after ~5m and the header to `polling idle`; switching back to Builds
+  logs the resume line immediately. Tiles/sparkline confirm reduced
   OBS traffic overnight.
 
 ## Alternatives considered
