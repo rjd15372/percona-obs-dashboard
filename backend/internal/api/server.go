@@ -13,8 +13,15 @@ import (
 	"github.com/percona/obs-dashboard/internal/obs"
 )
 
+// PresenceGate is what the router needs from the idle-mode gate:
+// heartbeats in, polling state out.
+type PresenceGate interface {
+	Beater
+	PollState
+}
+
 // NewRouter creates the chi router with all API routes registered.
-func NewRouter(db *sql.DB, h *hub.Hub, obsClient *obs.Client, root string, ws Statter, telemetryEnabled *atomic.Bool, telemetryInterval time.Duration) http.Handler {
+func NewRouter(db *sql.DB, h *hub.Hub, obsClient *obs.Client, root string, ws Statter, telemetryEnabled *atomic.Bool, telemetryInterval time.Duration, gate PresenceGate) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
@@ -56,8 +63,9 @@ func NewRouter(db *sql.DB, h *hub.Hub, obsClient *obs.Client, root string, ws St
 
 	r.Get("/api/telemetry", telemetryStatusHandler(telemetryEnabled, telemetryInterval))
 	r.Post("/api/telemetry", telemetrySetHandler(telemetryEnabled))
+	r.Post("/api/presence", presenceHandler(gate))
 
-	r.Get("/api/metrics", metricsHandler(obsClient, ws, h, db))
+	r.Get("/api/metrics", metricsHandler(obsClient, ws, h, db, gate))
 
 	r.Get("/api/overview", overviewHandler(db, root, overview))
 	r.Get("/api/cve/scans", cveScansHandler(db))

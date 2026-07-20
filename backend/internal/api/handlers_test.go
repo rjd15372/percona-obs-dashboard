@@ -40,7 +40,7 @@ func setupTestServer(t *testing.T) http.Handler {
 	t.Cleanup(func() { db.Close() })
 	obsSrv := stubOBSServer(t)
 	obsClient := obs.NewClient(obsSrv.URL, "user", "pass")
-	return NewRouter(db, hub.New(), obsClient, "isv:percona", fakeStatter{}, new(atomic.Bool), time.Duration(0))
+	return NewRouter(db, hub.New(), obsClient, "isv:percona", fakeStatter{}, new(atomic.Bool), time.Duration(0), fakePollState{s: "active"})
 }
 
 func TestPackagesHandler_EmptyDB(t *testing.T) {
@@ -273,7 +273,7 @@ func TestReposSubprojectParam(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 	obsSrv := stubOBSServer(t)
 	obsClient := obs.NewClient(obsSrv.URL, "user", "pass")
-	router := NewRouter(db, hub.New(), obsClient, "isv:percona", fakeStatter{}, new(atomic.Bool), time.Duration(0))
+	router := NewRouter(db, hub.New(), obsClient, "isv:percona", fakeStatter{}, new(atomic.Bool), time.Duration(0), fakePollState{s: "active"})
 
 	falseVal := false
 	now := time.Now()
@@ -614,7 +614,7 @@ func TestEventsHandlerIncludesCommonTrees(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 	obsSrv := stubOBSServer(t)
 	obsClient := obs.NewClient(obsSrv.URL, "user", "pass")
-	router := NewRouter(db, hub.New(), obsClient, "isv:percona", fakeStatter{}, new(atomic.Bool), time.Duration(0))
+	router := NewRouter(db, hub.New(), obsClient, "isv:percona", fakeStatter{}, new(atomic.Bool), time.Duration(0), fakePollState{s: "active"})
 
 	now := time.Now().UTC()
 	seed := func(id, project string) {

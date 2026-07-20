@@ -22,12 +22,16 @@ type Statter interface{ Stats() workingset.Stats }
 // ClientCounter reports the number of connected SSE clients.
 type ClientCounter interface{ Clients() int }
 
+// PollState reports whether background OBS polling is active or idle.
+type PollState interface{ State() string }
+
 type metricsResponse struct {
 	OBS           obsSection     `json:"obs"`
 	Limiter       limiterSection `json:"limiter"`
 	WorkingSet    wsSection      `json:"working_set"`
 	UptimeSeconds int64          `json:"uptime_seconds"`
 	SSEClients    int            `json:"sse_clients"`
+	Polling       string         `json:"polling"`
 }
 
 type obsSection struct {
@@ -57,8 +61,9 @@ type wsSection struct {
 // the trailing-minute request rate, persisted trailing 6h/12h/24h/7d/30d
 // window totals, previous-period window baselines, the 24h 5-minute request
 // series, and the oldest persisted sample timestamp, limiter gauges,
-// working-set stats, process uptime, and connected SSE clients.
-func metricsHandler(obsClient *obs.Client, ws Statter, clients ClientCounter, db *sql.DB) http.HandlerFunc {
+// working-set stats, process uptime, connected SSE clients, and the
+// current polling state (active/idle).
+func metricsHandler(obsClient *obs.Client, ws Statter, clients ClientCounter, db *sql.DB, gate PollState) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		byEndpoint := obsClient.MetricsSnapshot()
 		var total int64
@@ -118,6 +123,7 @@ func metricsHandler(obsClient *obs.Client, ws Statter, clients ClientCounter, db
 			},
 			UptimeSeconds: int64(time.Since(processStart).Seconds()),
 			SSEClients:    clients.Clients(),
+			Polling:       gate.State(),
 		})
 	}
 }

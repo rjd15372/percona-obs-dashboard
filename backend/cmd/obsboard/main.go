@@ -113,7 +113,7 @@ func run() error {
 	}
 	go reporter.Run(ctx)
 
-	router := api.NewRouter(db, h, obsClient, cfg.OBSRoot, ws, telemetryEnabled, cfg.Telemetry.Interval)
+	router := api.NewRouter(db, h, obsClient, cfg.OBSRoot, ws, telemetryEnabled, cfg.Telemetry.Interval, gate)
 
 	var handler http.Handler = router
 	if cfg.Server.FrontendDir != "" {

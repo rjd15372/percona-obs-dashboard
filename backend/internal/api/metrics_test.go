@@ -20,6 +20,14 @@ type fakeClientCounter struct{ n int }
 
 func (f fakeClientCounter) Clients() int { return f.n }
 
+type fakePollState struct{ s string }
+
+func (f fakePollState) State() string { return f.s }
+
+// Heartbeat is a no-op so fakePollState also satisfies PresenceGate for
+// tests that construct the full router.
+func (f fakePollState) Heartbeat() {}
+
 func TestMetricsHandler(t *testing.T) {
 	c := obs.NewClient("https://obs.example", "u", "p")
 	c.SetMinuteBudget(60)
@@ -57,7 +65,7 @@ func TestMetricsHandler(t *testing.T) {
 	}
 
 	rec := httptest.NewRecorder()
-	metricsHandler(c, ws, fakeClientCounter{n: 3}, db)(rec, httptest.NewRequest(http.MethodGet, "/api/metrics", nil))
+	metricsHandler(c, ws, fakeClientCounter{n: 3}, db, fakePollState{s: "active"})(rec, httptest.NewRequest(http.MethodGet, "/api/metrics", nil))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
@@ -127,6 +135,12 @@ func TestMetricsHandler(t *testing.T) {
 	}
 	if _, ok := raw["sse_clients"]; !ok {
 		t.Fatalf("sse_clients key missing from raw response")
+	}
+	if got.Polling != "active" {
+		t.Fatalf("polling = %q, want active", got.Polling)
+	}
+	if _, ok := raw["polling"]; !ok {
+		t.Fatalf("polling key missing from raw response")
 	}
 	for _, k := range []string{"windows_prev", "series", "oldest_sample"} {
 		if _, ok := raw["obs"].(map[string]any)[k]; !ok {
