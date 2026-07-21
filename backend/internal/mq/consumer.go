@@ -409,7 +409,7 @@ func mqStateToRollup(key string) model.RollupState {
 		return model.RollupFailed
 	default:
 		// build_unchanged: the build completed with an identical result. Treat
-		// it as finished so the worker's wake pass derives the real terminal
+		// it as finished so the signaled worker pass derives the real terminal
 		// state (and its events) from OBS instead of jumping to succeeded.
 		return model.RollupFinished
 	}

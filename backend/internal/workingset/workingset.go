@@ -129,13 +129,19 @@ func (ws *WorkingSet) Add(pkg *model.Package) {
 // immediately (unless in-flight, in which case it is marked to wake as soon
 // as the in-flight pass completes). Used by the MQ consumer for real-time
 // reactions.
+//
+// Signaled jobs bypass the presence gate: MQ events are authoritative
+// change notifications, so the targeted fetch runs even while the dashboard
+// is idle — that is how state transitions get recorded with correct
+// timestamps overnight. The cost is proportional to real build activity and
+// still passes the background rate limiter.
 func (ws *WorkingSet) Signal(pkg *model.Package) {
 	key := pkg.Project + "/" + pkg.Name
 	ws.mu.Lock()
 	defer ws.mu.Unlock()
 	ws.entries[key] = &entry{pkg: pkg, state: string(pkg.RollupState), interval: ws.base, nextDue: ws.now(), wake: ws.inflight[key]}
 	if !ws.inflight[key] {
-		ws.sendJob(Job{Pkgs: []*model.Package{pkg}})
+		ws.enqueue(Job{Pkgs: []*model.Package{pkg}})
 	}
 }
 
@@ -245,16 +251,12 @@ func (ws *WorkingSet) StartScheduler(ctx context.Context) {
 	}()
 }
 
-// sendJob attempts a non-blocking enqueue and marks every package in the job
+// enqueue attempts a non-blocking enqueue and marks every package in the job
 // as in-flight on success. Drops the job if the channel is full — the
-// packages stay due and are retried on the next tick. While the presence
-// gate is idle, jobs are dropped the same way (drained on wake). Must be
+// packages stay due and are retried on the next tick or signal. Must be
 // called with ws.mu held. Callers must ensure no package in the job is
 // already in-flight.
-func (ws *WorkingSet) sendJob(job Job) {
-	if ws.gate != nil && !ws.gate.Active() {
-		return
-	}
+func (ws *WorkingSet) enqueue(job Job) {
 	select {
 	case ws.dispatch <- job:
 		for _, p := range job.Pkgs {
@@ -262,4 +264,15 @@ func (ws *WorkingSet) sendJob(job Job) {
 		}
 	default:
 	}
+}
+
+// sendJob is enqueue behind the presence gate: while the gate is idle the
+// job is dropped (the packages stay due and are drained on wake). Used by
+// the scheduler-driven paths (Add, DispatchDue); Signal bypasses it
+// deliberately — see Signal.
+func (ws *WorkingSet) sendJob(job Job) {
+	if ws.gate != nil && !ws.gate.Active() {
+		return
+	}
+	ws.enqueue(job)
 }

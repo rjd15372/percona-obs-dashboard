@@ -395,3 +395,30 @@ func TestGateBlocksDispatchWhileIdle(t *testing.T) {
 		t.Fatal("wake did not drain the due package")
 	}
 }
+
+func TestSignalBypassesIdleGate(t *testing.T) {
+	ws := workingset.New(10, 20*time.Millisecond, 5*time.Minute, 4)
+	g := &stubGate{wake: make(chan struct{}, 1)}
+	ws.SetGate(g) // active stays false: idle
+
+	// Signal must dispatch immediately even while the gate is idle — MQ
+	// events drive targeted fetches overnight.
+	ws.Signal(pkg("proj", "pkg-a", model.RollupFailed))
+	select {
+	case j := <-ws.Dispatch():
+		if j.Pkgs[0].Name != "pkg-a" {
+			t.Fatalf("unexpected package %s", j.Pkgs[0].Name)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("Signal must dispatch while the gate is idle")
+	}
+
+	// A second Signal while the first pass is in flight must not
+	// double-dispatch — it marks the wake flag exactly as before.
+	ws.Signal(pkg("proj", "pkg-a", model.RollupFailed))
+	select {
+	case <-ws.Dispatch():
+		t.Fatal("in-flight Signal must not double-dispatch")
+	case <-time.After(80 * time.Millisecond):
+	}
+}

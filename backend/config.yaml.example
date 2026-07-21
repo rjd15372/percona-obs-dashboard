@@ -51,10 +51,11 @@ unblocker:
   # Trigger a rebuild when a target has been blocked longer than this.
   threshold: 30m
 
-# Idle mode: pause background OBS polling (discovery + working set) while
-# no dashboard tab is watching. Visible Builds/Artifacts tabs send a
-# heartbeat every minute; RabbitMQ events keep the database current while
-# idle, and the first heartbeat triggers an immediate refresh.
+# Idle mode: pause periodic OBS polling (discovery + working-set sweeps)
+# while no dashboard tab is watching. Visible Builds/Artifacts tabs send
+# a heartbeat every minute; the first heartbeat triggers an immediate
+# refresh. While idle, RabbitMQ build events still trigger targeted
+# per-package fetches, so state transitions are recorded as they happen.
 # Enabled by default — set enabled: false to poll continuously.
 idle:
   enabled: true
