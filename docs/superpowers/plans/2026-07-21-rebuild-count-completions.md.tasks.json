@@ -1,0 +1,13 @@
+{
+  "planPath": "docs/superpowers/plans/2026-07-21-rebuild-count-completions.md",
+  "tasks": [
+    {
+      "id": 1,
+      "nativeTaskId": 70,
+      "subject": "Task 1: count build completions",
+      "status": "pending",
+      "description": "**Goal:** `QueryBuildCompletions` returns `finished`/`failed` entries; every caller and test renamed/reseeded; a `building` row is the regression guard.\n\n**Files:**\n- Modify: `backend/internal/store/overview.go:8-41` (type + function rename, SQL, doc comments)\n- Modify: `backend/internal/store/overview_test.go:8-42` (test rewrite)\n- Modify: `backend/internal/api/overview.go` (three rename sites: the aggregate signature ~line 116, the two query calls ~lines 326/330)\n- Modify: `backend/internal/api/overview_test.go` (three `store.BuildingEntry` literals ~lines 54/60/174; one seeded state ~line 155)\n\n**Acceptance Criteria:**\n- [ ] Seeded rows (in-window `finished`, in-window `failed`, in-window `building`, before-window `finished`, in-window `scheduled`) → current window returns exactly the 2 completions, previous window exactly 1; the `building` row never counts\n- [ ] `grep -rn \"BuildingEntry\\|QueryBuildingEntries\" internal/` → no matches\n- [ ] `TestOverviewHandler` (api) passes with its seed state flipped to `finished` and unchanged expectations\n- [ ] `go test ./... -count=1 && go build ./...` pass\n\n**Verify:** `cd backend && go test ./internal/store/ -run TestOverviewBuildCompletions -count=1 -v && go test ./internal/api/ -count=1` → all PASS\n\n**Steps:** TDD per plan Task 1 (full code in the plan): rewrite the store test first (5 seeds, 2 counted, building guard); then replace BuildingEntry/QueryBuildingEntries with BuildCompletion/QueryBuildCompletions (`state IN ('finished','failed')`); rename the three api call sites + three test literals; flip the api test seed `'building'`→`'finished'`. Commit `git commit -s -m \"fix(overview): count rebuilds from build completions, not observed starts\"` (never Co-Authored-By).\n\n```json:metadata\n{\"files\": [\"backend/internal/store/overview.go\", \"backend/internal/store/overview_test.go\", \"backend/internal/api/overview.go\", \"backend/internal/api/overview_test.go\"], \"verifyCommand\": \"cd backend && go test ./internal/store/ -run TestOverviewBuildCompletions -count=1 -v && go test ./internal/api/ -count=1\", \"acceptanceCriteria\": [\"2 in-window completions counted, building row never counts\", \"old identifiers fully gone (grep empty)\", \"api overview test green with finished seed\", \"suite + build green\"], \"modelTier\": \"mechanical\"}\n```"
+    }
+  ],
+  "lastUpdated": "2026-07-21T00:00:00Z"
+}
