@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func TestOverviewBuildingEntries(t *testing.T) {
+func TestOverviewBuildCompletions(t *testing.T) {
 	db, err := Open(":memory:")
 	if err != nil {
 		t.Fatal(err)
@@ -21,18 +21,27 @@ func TestOverviewBuildingEntries(t *testing.T) {
 	}
 	now := time.Now().UTC()
 	fmtT := func(d time.Duration) string { return now.Add(d).Format(time.RFC3339Nano) }
-	ins("isv:percona:ppg:17", "pkg-a", "UBI_9", "building", fmtT(-1*time.Hour))  // in window
-	ins("isv:percona:ppg:17", "pkg-a", "UBI_9", "building", fmtT(-30*time.Hour)) // before window
+	ins("isv:percona:ppg:17", "pkg-a", "UBI_9", "finished", fmtT(-1*time.Hour))  // in window: counted
+	ins("isv:percona:ppg:17", "pkg-b", "UBI_9", "failed", fmtT(-2*time.Hour))    // in window: counted
+	ins("isv:percona:ppg:17", "pkg-c", "UBI_9", "building", fmtT(-1*time.Hour))  // build start: must NOT count
+	ins("isv:percona:ppg:17", "pkg-a", "UBI_9", "finished", fmtT(-30*time.Hour)) // before window
 	ins("isv:percona:ppg:17", "pkg-a", "UBI_9", "scheduled", fmtT(-1*time.Hour)) // wrong state
 
-	got, err := QueryBuildingEntries(db, now.Add(-24*time.Hour), now)
+	got, err := QueryBuildCompletions(db, now.Add(-24*time.Hour), now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 1 || got[0].Repo != "UBI_9" || got[0].Package != "pkg-a" {
-		t.Fatalf("QueryBuildingEntries = %+v, want 1 in-window building row", got)
+	if len(got) != 2 {
+		t.Fatalf("QueryBuildCompletions = %+v, want the 2 in-window completions", got)
 	}
-	prev, err := QueryBuildingEntries(db, now.Add(-48*time.Hour), now.Add(-24*time.Hour))
+	pkgs := map[string]bool{}
+	for _, e := range got {
+		pkgs[e.Package] = true
+	}
+	if !pkgs["pkg-a"] || !pkgs["pkg-b"] {
+		t.Fatalf("QueryBuildCompletions = %+v, want pkg-a (finished) and pkg-b (failed)", got)
+	}
+	prev, err := QueryBuildCompletions(db, now.Add(-48*time.Hour), now.Add(-24*time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}

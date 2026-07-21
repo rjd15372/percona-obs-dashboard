@@ -5,33 +5,37 @@ import (
 	"time"
 )
 
-// BuildingEntry is one target entering the "building" state (the Overview's
-// unit of "one rebuild").
-type BuildingEntry struct {
+// BuildCompletion is one target entering a build-completion state —
+// "finished" (successful or unchanged build) or "failed" — the Overview's
+// unit of "one rebuild". The MQ consumer's merge writes exactly one such
+// transition per completed build at event time, so the count is
+// polling-independent (build starts are only observable by polling and
+// vanish while the idle gate pauses it).
+type BuildCompletion struct {
 	Project string
 	Package string
 	Repo    string
 }
 
-// QueryBuildingEntries returns every target_state_durations row that entered
-// "building" within [since, until). Timestamps in the table are RFC3339Nano
-// strings (UTC); lexicographic comparison is chronologically correct to
-// within sub-second edge cases (a whole-second timestamp sorts after the
-// same second with a fractional part), which is negligible for window
-// counting.
-func QueryBuildingEntries(db *sql.DB, since, until time.Time) ([]BuildingEntry, error) {
+// QueryBuildCompletions returns every target_state_durations row that
+// entered "finished" or "failed" within [since, until). Timestamps in the
+// table are RFC3339Nano strings (UTC); lexicographic comparison is
+// chronologically correct to within sub-second edge cases (a whole-second
+// timestamp sorts after the same second with a fractional part), which is
+// negligible for window counting.
+func QueryBuildCompletions(db *sql.DB, since, until time.Time) ([]BuildCompletion, error) {
 	rows, err := db.Query(`
 		SELECT project, package, repo FROM target_state_durations
-		WHERE state = 'building' AND entered_at >= ? AND entered_at < ?`,
+		WHERE state IN ('finished', 'failed') AND entered_at >= ? AND entered_at < ?`,
 		since.UTC().Format(time.RFC3339Nano), until.UTC().Format(time.RFC3339Nano),
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []BuildingEntry
+	var out []BuildCompletion
 	for rows.Next() {
-		var e BuildingEntry
+		var e BuildCompletion
 		if err := rows.Scan(&e.Project, &e.Package, &e.Repo); err != nil {
 			return nil, err
 		}

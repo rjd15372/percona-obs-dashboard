@@ -51,13 +51,13 @@ func TestOverviewSnapshotBuilder(t *testing.T) {
 	now := time.Date(2026, 7, 7, 12, 0, 0, 0, time.UTC)
 	day := func(n int) time.Time { return now.Add(time.Duration(-n) * 24 * time.Hour) }
 
-	cur := []store.BuildingEntry{
+	cur := []store.BuildCompletion{
 		{Project: "isv:percona:ppg:17", Package: "pkg-a", Repo: "UBI_9"},
 		{Project: "isv:percona:ppg:17:containers:ubi9", Package: "img-x", Repo: "images"},
 		{Project: "isv:percona:ppg:17", Package: "pkg-a", Repo: "Debian_12"},
 		{Project: "isv:percona:PR:pr-9:ppg:18", Package: "pkg-b", Repo: "UBI_9"},
 	}
-	prev := []store.BuildingEntry{{Project: "isv:percona:ppg:17", Package: "pkg-a", Repo: "UBI_9"}}
+	prev := []store.BuildCompletion{{Project: "isv:percona:ppg:17", Package: "pkg-a", Repo: "UBI_9"}}
 	scans := []store.OverviewCveScan{
 		{Project: "isv:percona:ppg:17:containers:ubi9", Package: "img-x", Arch: "x86_64", Critical: 2, High: 6, CveSince: ptrTime(day(34))},
 		{Project: "isv:percona:ppg:17:containers:ubi9", Package: "img-x", Arch: "aarch64", Critical: 1, High: 7, CveSince: ptrTime(day(10))},
@@ -152,7 +152,7 @@ func TestOverviewHandlerCaches(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec(`INSERT INTO target_state_durations (project, package, repo, arch, state, entered_at)
-		VALUES ('isv:percona:ppg:17','p','r','x86_64','building',?)`,
+		VALUES ('isv:percona:ppg:17','p','r','x86_64','finished',?)`,
 		time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +171,7 @@ func TestOverviewTopTieBreakDeterministic(t *testing.T) {
 	now := time.Date(2026, 7, 7, 12, 0, 0, 0, time.UTC)
 	// Two packages and two repos, all at equal counts: the
 	// lexicographically-smaller name must win regardless of map order.
-	cur := []store.BuildingEntry{
+	cur := []store.BuildCompletion{
 		{Project: "isv:percona:ppg:17", Package: "pkg-b", Repo: "UBI_9"},
 		{Project: "isv:percona:ppg:17", Package: "pkg-a", Repo: "Debian_12"},
 	}

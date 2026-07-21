@@ -113,7 +113,7 @@ var overviewWindows = map[string]time.Duration{
 // non-nil CveSince among vulnerable archs, avg_fix_days as the rounded mean of
 // the image's closed episodes.
 func buildOverviewSnapshot(root, window string, now time.Time,
-	cur, prev []store.BuildingEntry, scans []store.OverviewCveScan, periods []store.OverviewCvePeriod,
+	cur, prev []store.BuildCompletion, scans []store.OverviewCveScan, periods []store.OverviewCvePeriod,
 ) OverviewSnapshot {
 	type projAgg struct {
 		rebuilds int
@@ -323,11 +323,11 @@ func overviewHandler(db *sql.DB, root string, cache *overviewCache) http.Handler
 		}
 		snap, err := cache.Get(r.Context(), window, func(ctx context.Context) (OverviewSnapshot, error) {
 			now := time.Now().UTC()
-			cur, err := store.QueryBuildingEntries(db, now.Add(-dur), now)
+			cur, err := store.QueryBuildCompletions(db, now.Add(-dur), now)
 			if err != nil {
 				return OverviewSnapshot{}, err
 			}
-			prev, err := store.QueryBuildingEntries(db, now.Add(-2*dur), now.Add(-dur))
+			prev, err := store.QueryBuildCompletions(db, now.Add(-2*dur), now.Add(-dur))
 			if err != nil {
 				return OverviewSnapshot{}, err
 			}
