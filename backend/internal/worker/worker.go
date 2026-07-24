@@ -176,7 +176,6 @@ func (p *Pool) ProcessOnce(ctx context.Context, pkg *model.Package, env *obs.Env
 			Project:    pkg.Project,
 			Package:    pkg.Name,
 			Tags:       pkg.Tags,
-			ImageBase:  cve.ImageBase(pkg.Project, pkg.Name),
 			PrimaryTag: pkg.ContainerTags[len(pkg.ContainerTags)-1],
 			Targets:    cve.SucceededTargets(pkg.Targets),
 		})

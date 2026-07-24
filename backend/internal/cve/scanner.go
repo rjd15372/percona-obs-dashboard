@@ -34,7 +34,6 @@ type ScanRequest struct {
 	Project    string
 	Package    string
 	Tags       []string
-	ImageBase  string
 	PrimaryTag string
 	Targets    []model.Target
 }
@@ -126,8 +125,6 @@ func (s *Scanner) scanPackage(ctx context.Context, req ScanRequest) {
 			"targets", len(req.Targets))
 		return
 	}
-	imageRef := req.ImageBase + ":" + req.PrimaryTag
-
 	for _, target := range req.Targets {
 		if ctx.Err() != nil {
 			return
@@ -137,6 +134,8 @@ func (s *Scanner) scanPackage(ctx context.Context, req ScanRequest) {
 			slog.Warn("cve: unknown OBS arch, skipping", "arch", target.Arch)
 			continue
 		}
+
+		imageRef := ImageBase(req.Project, target.Repo, req.Package) + ":" + req.PrimaryTag
 
 		obsURL := fmt.Sprintf("%s/package/show/%s/%s", obsBase, req.Project, req.Package)
 		s.appendEvent(&model.Event{
@@ -155,7 +154,7 @@ func (s *Scanner) scanPackage(ctx context.Context, req ScanRequest) {
 		})
 
 		slog.Info("cve: scanning", "pkg", req.Package, "arch", target.Arch, "image", imageRef)
-		scan, err := s.runTrivy(ctx, imageRef, platform, target.Arch)
+		scan, err := s.runTrivy(ctx, imageRef, platform, target.Repo, target.Arch)
 		if err != nil {
 			slog.Warn("cve: trivy failed", "pkg", req.Package, "arch", target.Arch, "err", err)
 			s.appendEvent(&model.Event{
@@ -209,7 +208,7 @@ func (s *Scanner) scanPackage(ctx context.Context, req ScanRequest) {
 	s.hub.Notify(hubpkg.PackageUpdate(pkg))
 }
 
-func (s *Scanner) runTrivy(ctx context.Context, imageRef, platform, arch string) (model.CveScan, error) {
+func (s *Scanner) runTrivy(ctx context.Context, imageRef, platform, repo, arch string) (model.CveScan, error) {
 	s.trivyMu.Lock()
 	out, err := s.execFn(ctx, "trivy",
 		"image",
@@ -226,7 +225,7 @@ func (s *Scanner) runTrivy(ctx context.Context, imageRef, platform, arch string)
 		// Exit code 2 means trivy found vulnerabilities — treat as success.
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) && exitErr.ExitCode() == 2 {
-			return parseTrivyOutput(out, imageRef, arch)
+			return parseTrivyOutput(out, imageRef, repo, arch)
 		}
 		// Include stderr in the error so failures show the actual trivy message.
 		stderr := ""
@@ -235,7 +234,7 @@ func (s *Scanner) runTrivy(ctx context.Context, imageRef, platform, arch string)
 		}
 		return model.CveScan{}, fmt.Errorf("trivy: %w%s", err, stderr)
 	}
-	return parseTrivyOutput(out, imageRef, arch)
+	return parseTrivyOutput(out, imageRef, repo, arch)
 }
 
 type trivyOutput struct {
@@ -251,12 +250,13 @@ type trivyOutput struct {
 	} `json:"Results"`
 }
 
-func parseTrivyOutput(data []byte, imageRef, arch string) (model.CveScan, error) {
+func parseTrivyOutput(data []byte, imageRef, repo, arch string) (model.CveScan, error) {
 	var raw trivyOutput
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return model.CveScan{}, fmt.Errorf("parse trivy JSON: %w", err)
 	}
 	scan := model.CveScan{
+		Repo:      repo,
 		Arch:      arch,
 		ImageRef:  imageRef,
 		ScannedAt: time.Now().UTC(),
@@ -291,10 +291,15 @@ func (s *Scanner) appendEvent(evt *model.Event) {
 	s.hub.Notify(hubpkg.NewEvent(evt))
 }
 
-// ImageBase constructs the OBS container registry path for a package.
-// Example: "isv:percona:ppg:17" → "registry.opensuse.org/isv/percona/ppg/17/images/<name>"
-func ImageBase(project, name string) string {
-	return "registry.opensuse.org/" + strings.ToLower(strings.ReplaceAll(project, ":", "/")) + "/images/" + name
+// ImageBase constructs the OBS container registry path for a package's build
+// in a given repo (the base-image distro, e.g. "ubi9"; older containers built
+// against a repo literally named "images"). Example:
+// ("isv:percona:ppg:staging:17:containers", "ubi9", "pg") →
+// "registry.opensuse.org/isv/percona/ppg/staging/17/containers/ubi9/pg"
+func ImageBase(project, repo, name string) string {
+	return "registry.opensuse.org/" +
+		strings.ToLower(strings.ReplaceAll(project, ":", "/")) +
+		"/" + repo + "/" + name
 }
 
 // SucceededTargets returns targets with state "succeeded". For release containers

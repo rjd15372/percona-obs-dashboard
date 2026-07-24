@@ -84,7 +84,6 @@ func packageToRequest(pkg *model.Package) ScanRequest {
 		Project:    pkg.Project,
 		Package:    pkg.Name,
 		Tags:       pkg.Tags,
-		ImageBase:  ImageBase(pkg.Project, pkg.Name),
 		PrimaryTag: primaryTag,
 		Targets:    SucceededTargets(pkg.Targets),
 	}

@@ -2,6 +2,7 @@ package cve_test
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,8 +19,8 @@ const trivyVulnJSON = `{"SchemaVersion":2,"Results":[{"Vulnerabilities":[
 ]}]}`
 
 func TestImageBase(t *testing.T) {
-	got := cve.ImageBase("isv:percona:ppg:17:containers:ubi9", "percona-distribution-postgresql")
-	want := "registry.opensuse.org/isv/percona/ppg/17/containers/ubi9/images/percona-distribution-postgresql"
+	got := cve.ImageBase("isv:percona:ppg:staging:17:containers", "ubi9", "percona-distribution-postgresql")
+	want := "registry.opensuse.org/isv/percona/ppg/staging/17/containers/ubi9/percona-distribution-postgresql"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -55,7 +56,7 @@ func TestScannerEnqueueDropsWhenFull(t *testing.T) {
 	s.Start(ctx)
 
 	req := cve.ScanRequest{
-		Project: "p", Package: "pkg", ImageBase: "reg/img", PrimaryTag: "1.0",
+		Project: "p", Package: "pkg", PrimaryTag: "1.0",
 		Targets: []model.Target{{Repo: "images", Arch: "x86_64", State: "succeeded"}},
 	}
 	for i := 0; i < 102; i++ {
@@ -82,7 +83,7 @@ func TestScannerParsesTrivyVulns(t *testing.T) {
 	s.Start(ctx)
 
 	req := cve.ScanRequest{
-		Project: "proj", Package: "mypkg", ImageBase: "reg/img", PrimaryTag: "1.0",
+		Project: "proj", Package: "mypkg", PrimaryTag: "1.0",
 		Targets: []model.Target{{Repo: "images", Arch: "x86_64", State: "succeeded"}},
 	}
 	s.Enqueue(req)
@@ -104,6 +105,67 @@ func TestScannerParsesTrivyVulns(t *testing.T) {
 	}
 	if scans[0].CriticalCount != 1 || scans[0].HighCount != 1 {
 		t.Errorf("wrong counts: critical=%d high=%d", scans[0].CriticalCount, scans[0].HighCount)
+	}
+}
+
+func TestScanPackageBuildsPerTargetImageRef(t *testing.T) {
+	db, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	h := hub.New()
+
+	var mu sync.Mutex
+	var refs []string
+	s := cve.NewScanner(db, h, 1, cve.WithExecFn(func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		mu.Lock()
+		refs = append(refs, args[len(args)-1]) // trivy image ref is the last arg
+		mu.Unlock()
+		return []byte(trivyCleanJSON), nil
+	}))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s.Start(ctx)
+
+	s.Enqueue(cve.ScanRequest{
+		Project: "isv:percona:ppg:staging:17:containers", Package: "pg", PrimaryTag: "17.5-1",
+		Targets: []model.Target{
+			{Repo: "ubi8", Arch: "x86_64", State: "succeeded"},
+			{Repo: "ubi9", Arch: "x86_64", State: "succeeded"},
+		},
+	})
+
+	deadline := time.After(2 * time.Second)
+	for {
+		mu.Lock()
+		n := len(refs)
+		mu.Unlock()
+		if n >= 2 {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("expected 2 image refs, got %d", n)
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	want := map[string]bool{
+		"registry.opensuse.org/isv/percona/ppg/staging/17/containers/ubi8/pg:17.5-1": false,
+		"registry.opensuse.org/isv/percona/ppg/staging/17/containers/ubi9/pg:17.5-1": false,
+	}
+	for _, r := range refs {
+		if _, ok := want[r]; !ok {
+			t.Fatalf("unexpected image ref %q", r)
+		}
+		want[r] = true
+	}
+	for r, seen := range want {
+		if !seen {
+			t.Fatalf("missing image ref %q", r)
+		}
 	}
 }
 
