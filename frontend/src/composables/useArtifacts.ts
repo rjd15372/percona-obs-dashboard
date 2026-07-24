@@ -47,18 +47,24 @@ export interface ContainerImage {
   cveScans: CveScan[]
 }
 
-export function deriveBaseOs(project: string): string {
+function baseOsFromRepo(repo?: string): string {
+  switch (repo) {
+    case 'ubi8': return 'UBI 8'
+    case 'ubi9': return 'UBI 9'
+    case 'noble': return 'Ubuntu 24.04 Noble'
+    case 'bookworm': return 'Debian 12 Bookworm'
+    default: return ''
+  }
+}
+
+export function deriveBaseOs(project: string, repo?: string): string {
+  const fromRepo = baseOsFromRepo(repo)
+  if (fromRepo) return fromRepo
   const parts = project.split(':')
   const containerIdx = parts.lastIndexOf('containers')
   if (containerIdx >= 0 && containerIdx < parts.length - 1) {
     const suffix = parts[containerIdx + 1]
-    const osMap: Record<string, string> = {
-      'ubi8': 'UBI 8',
-      'ubi9': 'UBI 9',
-      'noble': 'Ubuntu 24.04 Noble',
-      'bookworm': 'Debian 12 Bookworm',
-    }
-    return osMap[suffix] ?? suffix
+    return baseOsFromRepo(suffix) || suffix
   }
   return project
 }
@@ -130,31 +136,36 @@ export function useArtifacts(
         pkg.is_container === true &&
         matchesProject(pkg.project, ver)
       )
-      .map(pkg => {
+      .flatMap(pkg => {
         const tags = pkg.container_tags ?? []
-        const baseOs = deriveBaseOs(pkg.project)
-        const published = pkg.targets?.some((t: Target) => t.published === true) ?? false
-
-        const registryPath = pkg.project.toLowerCase().split(':').join('/')
-        const registry = `registry.opensuse.org/${registryPath}/images/${pkg.name}`
-
         const pullTag = tags[tags.length - 1] ?? ''
-        const pullCmd = pullTag
-          ? `docker pull ${registry}:${pullTag}`
-          : `docker pull ${registry}`
-
-        return {
-          id: pkg.project + '/' + pkg.name,
-          project: pkg.project,
-          imageName: pkg.name,
-          baseOs,
-          registry,
-          tags,
-          pullCmd,
-          rollupState: pkg.rollup_state ?? '',
-          published,
-          cveScans: pkg.cve_scans ?? [],
-        }
+        // Distinct build repos = base images. Old-layout containers built against
+        // a single "images" repo (base OS in the project); new-layout containers
+        // build against ubi8/ubi9/… — one row per repo.
+        const targets = pkg.targets ?? []
+        const repos = [...new Set(targets.map((t: Target) => t.repo))]
+        const effectiveRepos = repos.length > 0 ? repos : ['images']
+        return effectiveRepos.map(repo => {
+          const baseOs = deriveBaseOs(pkg.project, repo)
+          const registryPath = pkg.project.toLowerCase().split(':').join('/')
+          const registry = `registry.opensuse.org/${registryPath}/${repo}/${pkg.name}`
+          const pullCmd = pullTag
+            ? `docker pull ${registry}:${pullTag}`
+            : `docker pull ${registry}`
+          const published = targets.some((t: Target) => t.repo === repo && t.published === true)
+          return {
+            id: pkg.project + '/' + pkg.name + '/' + repo,
+            project: pkg.project,
+            imageName: pkg.name,
+            baseOs,
+            registry,
+            tags,
+            pullCmd,
+            rollupState: pkg.rollup_state ?? '',
+            published,
+            cveScans: (pkg.cve_scans ?? []).filter((s: CveScan) => s.repo === repo),
+          }
+        })
       })
   })
 
