@@ -65,16 +65,6 @@ function aggregate(project: string): Aggregate {
   return aggregates.value[project] ?? { critical: 0, high: 0, oldest: 0, avgFix: null }
 }
 
-// Every image row shows where it lives relative to the row's logical project
-// (e.g. "ubi8" under ppg:17, or "17:ubi9" under the aggregated releases row).
-// Always-on — the image name alone can't tell a ubi8 build from a ubi9 one,
-// and the base image is exactly what you need to know to fix a CVE.
-function imageSuffix(rowProject: string, img: { project: string; name: string }): string {
-  const prefix = rowProject + ':'
-  const remainder = img.project.startsWith(prefix) ? img.project.slice(prefix.length) : img.project
-  const segments = remainder.split(':').filter(s => s !== 'containers' && s !== '')
-  return segments.join(':')
-}
 
 function badgeClass(n: number, kind: 'crit' | 'high'): string {
   if (n > 0) {
@@ -102,15 +92,15 @@ const reportCache = reactive(new Map<string, ReportEntry>())
 const reportLoading = reactive<Record<string, boolean>>({})
 const reportError = reactive<Record<string, boolean>>({})
 
-function imgKey(img: { project: string; name: string }): string {
-  return img.project + '/' + img.name
+function imgKey(img: { project: string; name: string; repo: string }): string {
+  return img.project + '/' + img.name + '/' + img.repo
 }
 
 function reportRegionId(key: string): string {
   return `cve-report-${key.replace(/[^a-z0-9]/gi, '-')}`
 }
 
-function toggleReport(img: { project: string; name: string }) {
+function toggleReport(img: { project: string; name: string; repo: string }) {
   const key = imgKey(img)
   reportOpen[key] = !reportOpen[key]
   if (!reportOpen[key]) return
@@ -126,7 +116,7 @@ function toggleReport(img: { project: string; name: string }) {
 // settlement must not clobber the newer result. Plain object — never rendered.
 const reportSeq: Record<string, number> = {}
 
-async function fetchReport(img: { project: string; name: string }) {
+async function fetchReport(img: { project: string; name: string; repo: string }) {
   const key = imgKey(img)
   const seq = (reportSeq[key] = (reportSeq[key] ?? 0) + 1)
   reportLoading[key] = true
@@ -138,7 +128,7 @@ async function fetchReport(img: { project: string; name: string }) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const scans: CveScan[] = await res.json()
     if (seq !== reportSeq[key]) return // superseded by a newer request
-    reportCache.set(key, { scans, fetchedAt: Date.now() })
+    reportCache.set(key, { scans: scans.filter(s => s.repo === img.repo), fetchedAt: Date.now() })
   } catch {
     if (seq !== reportSeq[key]) return
     reportError[key] = true
@@ -231,7 +221,7 @@ function reportScans(key: string): CveScan[] | null {
               >▸</span>
               <span class="font-mono text-[12px] text-text-secondary truncate">
                 {{ img.name }}
-                <span v-if="imageSuffix(p.project, img)" class="text-text-muted text-[10.5px]"> · {{ imageSuffix(p.project, img) }}</span>
+                <span v-if="img.base_os" class="text-text-muted text-[10.5px]"> · {{ img.base_os }}</span>
               </span>
             </span>
             <span

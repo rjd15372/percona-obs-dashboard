@@ -5,6 +5,8 @@ export interface OverviewCount { name: string; count: number }
 export interface OverviewImage {
   project: string
   name: string
+  repo: string
+  base_os: string
   critical: number
   high: number
   oldest_open_days: number   // 0 = none open / unknown
