@@ -39,13 +39,14 @@ export interface CveFinding {
 }
 
 export interface CveScan {
+  repo: string
   arch: string
   image_ref: string
   scanned_at: string
   critical_count: number
   high_count: number
-  cve_since?: string    // ISO timestamp — present when arch currently has CVEs
-  clean_since?: string  // ISO timestamp — present when arch is currently clean
+  cve_since?: string    // ISO timestamp — present when repo+arch currently has CVEs
+  clean_since?: string  // ISO timestamp — present when repo+arch is currently clean
   findings?: CveFinding[]
 }
 

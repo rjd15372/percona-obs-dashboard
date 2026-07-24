@@ -9,8 +9,8 @@ defineProps<{
 
 <template>
   <div class="flex flex-col gap-3">
-    <div v-for="scan in scans" :key="scan.arch" class="cve-arch-block">
-      <div class="text-[11px] font-bold text-text-muted uppercase [letter-spacing:0.06em] mb-[6px]">{{ scan.arch }}</div>
+    <div v-for="scan in scans" :key="scan.repo + '/' + scan.arch" class="cve-arch-block">
+      <div class="text-[11px] font-bold text-text-muted uppercase [letter-spacing:0.06em] mb-[6px]">{{ scan.repo }} · {{ scan.arch }}</div>
       <div v-if="scan.cve_since" class="text-[11px] text-warn mb-[6px]">
         CVEs present for {{ cveDuration(scan.cve_since) }}
       </div>
