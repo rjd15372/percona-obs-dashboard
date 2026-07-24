@@ -248,3 +248,85 @@ func TestOpenSchemaHasCvePeriods(t *testing.T) {
 		t.Error("cve_scans.clean_since column missing")
 	}
 }
+
+func TestCveScanRepoDimensionNoCollision(t *testing.T) {
+	db, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	mk := func(repo string, crit int) model.CveScan {
+		return model.CveScan{
+			Repo: repo, Arch: "x86_64",
+			ImageRef:      "registry.opensuse.org/x/" + repo + "/img:1",
+			ScannedAt:     time.Now().UTC(),
+			CriticalCount: crit,
+		}
+	}
+	if err := store.UpsertCveScan(db, "proj", "pkg", mk("ubi8", 0)); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.UpsertCveScan(db, "proj", "pkg", mk("ubi9", 3)); err != nil {
+		t.Fatal(err)
+	}
+
+	scans, err := store.QueryCveScans(db, "proj", "pkg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(scans) != 2 {
+		t.Fatalf("got %d scans, want 2 (ubi8 + ubi9, same arch)", len(scans))
+	}
+	byRepo := map[string]model.CveScan{}
+	for _, s := range scans {
+		byRepo[s.Repo] = s
+	}
+	if byRepo["ubi8"].CriticalCount != 0 || byRepo["ubi9"].CriticalCount != 3 {
+		t.Fatalf("repo rows collided: ubi8=%+v ubi9=%+v", byRepo["ubi8"], byRepo["ubi9"])
+	}
+}
+
+func TestCveScanRepoIndependentAgeTracking(t *testing.T) {
+	db, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	// ubi9 has CVEs (cve_since set); ubi8 clean (clean_since set).
+	if err := store.UpsertCveScan(db, "proj", "pkg", model.CveScan{Repo: "ubi9", Arch: "x86_64", ImageRef: "r9", ScannedAt: time.Now().UTC(), CriticalCount: 2}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.UpsertCveScan(db, "proj", "pkg", model.CveScan{Repo: "ubi8", Arch: "x86_64", ImageRef: "r8", ScannedAt: time.Now().UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	scans, err := store.QueryCveScans(db, "proj", "pkg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range scans {
+		switch s.Repo {
+		case "ubi9":
+			if s.CveSince == nil || s.CleanSince != nil {
+				t.Fatalf("ubi9 should have cve_since only, got %+v", s)
+			}
+		case "ubi8":
+			if s.CleanSince == nil || s.CveSince != nil {
+				t.Fatalf("ubi8 should have clean_since only, got %+v", s)
+			}
+		}
+	}
+
+	// ubi9 CVE→clean: records a cve_periods row scoped to ubi9, ubi8 unaffected.
+	if err := store.UpsertCveScan(db, "proj", "pkg", model.CveScan{Repo: "ubi9", Arch: "x86_64", ImageRef: "r9", ScannedAt: time.Now().UTC()}); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM cve_periods WHERE project='proj' AND package='pkg' AND repo='ubi9'`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("expected 1 ubi9 cve_period, got %d", n)
+	}
+}

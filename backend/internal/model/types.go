@@ -62,6 +62,7 @@ type CveFinding struct {
 }
 
 type CveScan struct {
+	Repo          string       `json:"repo"`
 	Arch          string       `json:"arch"`
 	ImageRef      string       `json:"image_ref"`
 	ScannedAt     time.Time    `json:"scanned_at"`

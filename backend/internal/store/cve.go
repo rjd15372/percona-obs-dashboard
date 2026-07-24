@@ -21,8 +21,8 @@ func UpsertCveScan(db *sql.DB, project, pkg string, scan model.CveScan) error {
 
 	var prevCveSince, prevCleanSince sql.NullString
 	if err := tx.QueryRow(
-		`SELECT cve_since, clean_since FROM cve_scans WHERE project=? AND package=? AND arch=?`,
-		project, pkg, scan.Arch,
+		`SELECT cve_since, clean_since FROM cve_scans WHERE project=? AND package=? AND repo=? AND arch=?`,
+		project, pkg, scan.Repo, scan.Arch,
 	).Scan(&prevCveSince, &prevCleanSince); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
@@ -43,8 +43,8 @@ func UpsertCveScan(db *sql.DB, project, pkg string, scan model.CveScan) error {
 		if prevCveSince.Valid {
 			// CVE→clean transition: record completed episode
 			if _, err := tx.Exec(
-				`INSERT OR IGNORE INTO cve_periods (project, package, arch, cve_since, clean_since) VALUES (?, ?, ?, ?, ?)`,
-				project, pkg, scan.Arch, prevCveSince.String, now,
+				`INSERT OR IGNORE INTO cve_periods (project, package, repo, arch, cve_since, clean_since) VALUES (?, ?, ?, ?, ?, ?)`,
+				project, pkg, scan.Repo, scan.Arch, prevCveSince.String, now,
 			); err != nil {
 				return err
 			}
@@ -64,9 +64,9 @@ func UpsertCveScan(db *sql.DB, project, pkg string, scan model.CveScan) error {
 
 	_, err = tx.Exec(`
 		INSERT OR REPLACE INTO cve_scans
-			(project, package, arch, image_ref, scanned_at, critical_count, high_count, findings_json, cve_since, clean_since)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		project, pkg, scan.Arch, scan.ImageRef,
+			(project, package, repo, arch, image_ref, scanned_at, critical_count, high_count, findings_json, cve_since, clean_since)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		project, pkg, scan.Repo, scan.Arch, scan.ImageRef,
 		scan.ScannedAt.UTC().Format(time.RFC3339),
 		scan.CriticalCount, scan.HighCount, string(findingsJSON),
 		newCveSince, newCleanSince,
@@ -80,7 +80,7 @@ func UpsertCveScan(db *sql.DB, project, pkg string, scan model.CveScan) error {
 // QueryCveScans returns all arch scan results for a package.
 func QueryCveScans(db *sql.DB, project, pkg string) ([]model.CveScan, error) {
 	rows, err := db.Query(`
-		SELECT arch, image_ref, scanned_at, critical_count, high_count, findings_json, cve_since, clean_since
+		SELECT repo, arch, image_ref, scanned_at, critical_count, high_count, findings_json, cve_since, clean_since
 		FROM cve_scans WHERE project = ? AND package = ?`,
 		project, pkg,
 	)
@@ -116,7 +116,7 @@ func AttachCveScans(db *sql.DB, packages []*model.Package) error {
 		placeholders = append(placeholders, '?')
 	}
 	rows, err := db.Query(
-		`SELECT project, package, arch, image_ref, scanned_at, critical_count, high_count, findings_json, cve_since, clean_since
+		`SELECT project, package, repo, arch, image_ref, scanned_at, critical_count, high_count, findings_json, cve_since, clean_since
 		 FROM cve_scans WHERE project || '/' || package IN (`+string(placeholders)+`)`,
 		keys...,
 	)
@@ -131,7 +131,7 @@ func AttachCveScans(db *sql.DB, packages []*model.Package) error {
 		var scannedAtStr string
 		var findingsJSON string
 		var cveSinceStr, cleanSinceStr sql.NullString
-		if err := rows.Scan(&project, &pkg, &scan.Arch, &scan.ImageRef,
+		if err := rows.Scan(&project, &pkg, &scan.Repo, &scan.Arch, &scan.ImageRef,
 			&scannedAtStr, &scan.CriticalCount, &scan.HighCount, &findingsJSON,
 			&cveSinceStr, &cleanSinceStr); err != nil {
 			return err
@@ -235,7 +235,7 @@ func scanCveRows(rows *sql.Rows) ([]model.CveScan, error) {
 		var scan model.CveScan
 		var scannedAtStr, findingsJSON string
 		var cveSinceStr, cleanSinceStr sql.NullString
-		if err := rows.Scan(&scan.Arch, &scan.ImageRef, &scannedAtStr,
+		if err := rows.Scan(&scan.Repo, &scan.Arch, &scan.ImageRef, &scannedAtStr,
 			&scan.CriticalCount, &scan.HighCount, &findingsJSON,
 			&cveSinceStr, &cleanSinceStr); err != nil {
 			return nil, err

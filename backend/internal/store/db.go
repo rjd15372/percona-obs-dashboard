@@ -68,22 +68,24 @@ CREATE INDEX IF NOT EXISTS idx_tsd_open_pkg ON target_state_durations (project, 
 CREATE TABLE IF NOT EXISTS cve_scans (
     project        TEXT     NOT NULL,
     package        TEXT     NOT NULL,
+    repo           TEXT     NOT NULL DEFAULT '',
     arch           TEXT     NOT NULL,
     image_ref      TEXT     NOT NULL,
     scanned_at     DATETIME NOT NULL,
     critical_count INTEGER  NOT NULL DEFAULT 0,
     high_count     INTEGER  NOT NULL DEFAULT 0,
     findings_json  TEXT     NOT NULL DEFAULT '[]',
-    PRIMARY KEY (project, package, arch)
+    PRIMARY KEY (project, package, repo, arch)
 );
 
 CREATE TABLE IF NOT EXISTS cve_periods (
     project     TEXT     NOT NULL,
     package     TEXT     NOT NULL,
+    repo        TEXT     NOT NULL DEFAULT '',
     arch        TEXT     NOT NULL,
     cve_since   DATETIME NOT NULL,
     clean_since DATETIME NOT NULL,
-    PRIMARY KEY (project, package, arch, cve_since)
+    PRIMARY KEY (project, package, repo, arch, cve_since)
 );
 
 CREATE TABLE IF NOT EXISTS metrics_samples (
@@ -126,6 +128,17 @@ func Open(path string) (*sql.DB, error) {
 	db.Exec(`ALTER TABLE cve_scans ADD COLUMN cve_since DATETIME`)
 	db.Exec(`ALTER TABLE cve_scans ADD COLUMN clean_since DATETIME`)
 	db.Exec(`ALTER TABLE packages ADD COLUMN settled INTEGER NOT NULL DEFAULT 0`)
+
+	// cve_scans/cve_periods gained a repo dimension in the primary key.
+	// SQLite can't ALTER a primary key, so rebuild both tables once (when the
+	// repo column is absent), backfilling repo='images' for pre-change rows —
+	// every container built against the images repo before the ubiN layout.
+	if !columnExists(db, "cve_scans", "repo") {
+		if err := migrateCveRepoColumn(db); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("migrate cve repo column: %w", err)
+		}
+	}
 
 	// Data migration: backfill packages.tags and is_release from scope.
 	// Must run BEFORE migrateIsContainerNullable because that rebuilds the table
@@ -199,6 +212,44 @@ func cleanupOrphanedCveRows(db *sql.DB) error {
 		}
 	}
 	return nil
+}
+
+// migrateCveRepoColumn rebuilds cve_scans and cve_periods with a repo column
+// in the primary key, backfilling existing rows with repo='images'. SQLite
+// cannot ALTER a primary key, so each table is recreated and copied. Runs in
+// one transaction; a failure leaves the original tables untouched.
+func migrateCveRepoColumn(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	stmts := []string{
+		`CREATE TABLE cve_scans_new (
+			project TEXT NOT NULL, package TEXT NOT NULL, repo TEXT NOT NULL DEFAULT '', arch TEXT NOT NULL,
+			image_ref TEXT NOT NULL, scanned_at DATETIME NOT NULL,
+			critical_count INTEGER NOT NULL DEFAULT 0, high_count INTEGER NOT NULL DEFAULT 0,
+			findings_json TEXT NOT NULL DEFAULT '[]', cve_since DATETIME, clean_since DATETIME,
+			PRIMARY KEY (project, package, repo, arch))`,
+		`INSERT INTO cve_scans_new (project, package, repo, arch, image_ref, scanned_at, critical_count, high_count, findings_json, cve_since, clean_since)
+		 SELECT project, package, 'images', arch, image_ref, scanned_at, critical_count, high_count, findings_json, cve_since, clean_since FROM cve_scans`,
+		`DROP TABLE cve_scans`,
+		`ALTER TABLE cve_scans_new RENAME TO cve_scans`,
+		`CREATE TABLE cve_periods_new (
+			project TEXT NOT NULL, package TEXT NOT NULL, repo TEXT NOT NULL DEFAULT '', arch TEXT NOT NULL,
+			cve_since DATETIME NOT NULL, clean_since DATETIME NOT NULL,
+			PRIMARY KEY (project, package, repo, arch, cve_since))`,
+		`INSERT INTO cve_periods_new (project, package, repo, arch, cve_since, clean_since)
+		 SELECT project, package, 'images', arch, cve_since, clean_since FROM cve_periods`,
+		`DROP TABLE cve_periods`,
+		`ALTER TABLE cve_periods_new RENAME TO cve_periods`,
+	}
+	for _, s := range stmts {
+		if _, err := tx.Exec(s); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // migrateIsContainerNullable recreates the packages table without the NOT NULL
