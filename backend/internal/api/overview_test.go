@@ -202,3 +202,38 @@ func TestOverviewEmptySnapshotProjectsNotNull(t *testing.T) {
 		t.Fatalf("empty snapshot JSON = %s, want \"projects\":[]", b)
 	}
 }
+
+func TestOverviewSnapshotSplitsByRepo(t *testing.T) {
+	now := time.Now().UTC()
+	day := func(n int) time.Time { return now.Add(time.Duration(-n) * 24 * time.Hour) }
+	scans := []store.OverviewCveScan{
+		{Project: "isv:percona:ppg:staging:17:containers", Package: "pdp", Repo: "ubi8", Arch: "x86_64", Critical: 0, High: 1, CveSince: nil},
+		{Project: "isv:percona:ppg:staging:17:containers", Package: "pdp", Repo: "ubi9", Arch: "x86_64", Critical: 3, High: 2, CveSince: ptrTime(day(5))},
+	}
+	s := buildOverviewSnapshot("isv:percona", "24h", now, nil, nil, scans, nil)
+
+	var imgs []OverviewImage
+	for _, pr := range s.Projects {
+		for _, img := range pr.Images {
+			if img.Name == "pdp" {
+				imgs = append(imgs, img)
+			}
+		}
+	}
+	if len(imgs) != 2 {
+		t.Fatalf("want 2 pdp images (ubi8 + ubi9), got %d: %+v", len(imgs), imgs)
+	}
+	byOS := map[string]OverviewImage{}
+	for _, img := range imgs {
+		byOS[img.BaseOS] = img
+	}
+	if byOS["UBI 8"].Repo != "ubi8" || byOS["UBI 8"].Critical != 0 || byOS["UBI 8"].High != 1 {
+		t.Fatalf("ubi8 image wrong: %+v", byOS["UBI 8"])
+	}
+	if byOS["UBI 9"].Repo != "ubi9" || byOS["UBI 9"].Critical != 3 || byOS["UBI 9"].High != 2 {
+		t.Fatalf("ubi9 image wrong: %+v", byOS["UBI 9"])
+	}
+	if byOS["UBI 9"].OldestOpenDays != 5 {
+		t.Fatalf("ubi9 oldest_open_days = %d, want 5", byOS["UBI 9"].OldestOpenDays)
+	}
+}

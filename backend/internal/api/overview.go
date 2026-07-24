@@ -80,6 +80,8 @@ type OverviewCount struct {
 type OverviewImage struct {
 	Project        string `json:"project"` // raw OBS project (logical rows can aggregate several)
 	Name           string `json:"name"`
+	Repo           string `json:"repo"`
+	BaseOS         string `json:"base_os"`
 	Critical       int    `json:"critical"`
 	High           int    `json:"high"`
 	OldestOpenDays int    `json:"oldest_open_days"` // 0 = none open / unknown
@@ -149,7 +151,7 @@ func buildOverviewSnapshot(root, window string, now time.Time,
 		}
 	}
 
-	type imgKey struct{ project, pkg string }
+	type imgKey struct{ project, pkg, repo string }
 	imgSince := map[imgKey]*time.Time{}
 	imgAt := map[imgKey]*OverviewImage{}
 	imgLogical := map[imgKey]string{}
@@ -158,10 +160,10 @@ func buildOverviewSnapshot(root, window string, now time.Time,
 		if logical == "" {
 			continue
 		}
-		k := imgKey{s.Project, s.Package}
+		k := imgKey{s.Project, s.Package, s.Repo}
 		img, ok := imgAt[k]
 		if !ok {
-			img = &OverviewImage{Project: s.Project, Name: s.Package}
+			img = &OverviewImage{Project: s.Project, Name: s.Package, Repo: s.Repo, BaseOS: deriveBaseOS(s.Project, s.Repo)}
 			imgAt[k] = img
 			imgLogical[k] = logical
 		}
@@ -183,7 +185,7 @@ func buildOverviewSnapshot(root, window string, now time.Time,
 
 	fixDays := map[imgKey][]float64{}
 	for _, p := range periods {
-		k := imgKey{p.Project, p.Package}
+		k := imgKey{p.Project, p.Package, p.Repo}
 		fixDays[k] = append(fixDays[k], p.CleanSince.Sub(p.CveSince).Hours()/24)
 	}
 	for k, days := range fixDays {
@@ -199,7 +201,7 @@ func buildOverviewSnapshot(root, window string, now time.Time,
 	}
 
 	for k, img := range imgAt {
-		getAgg(imgLogical[k]).images[k.project+"/"+k.pkg] = img
+		getAgg(imgLogical[k]).images[k.project+"/"+k.pkg+"/"+k.repo] = img
 	}
 
 	projects := []OverviewProject{}

@@ -48,6 +48,7 @@ func QueryBuildCompletions(db *sql.DB, since, until time.Time) ([]BuildCompletio
 type OverviewCveScan struct {
 	Project  string
 	Package  string
+	Repo     string
 	Arch     string
 	Critical int
 	High     int
@@ -57,7 +58,7 @@ type OverviewCveScan struct {
 // QueryAllCveScans returns every cve_scans row (counts + open-since).
 func QueryAllCveScans(db *sql.DB) ([]OverviewCveScan, error) {
 	rows, err := db.Query(`
-		SELECT project, package, arch, critical_count, high_count, cve_since FROM cve_scans`)
+		SELECT project, package, repo, arch, critical_count, high_count, cve_since FROM cve_scans`)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +67,7 @@ func QueryAllCveScans(db *sql.DB) ([]OverviewCveScan, error) {
 	for rows.Next() {
 		var s OverviewCveScan
 		var since sql.NullString
-		if err := rows.Scan(&s.Project, &s.Package, &s.Arch, &s.Critical, &s.High, &since); err != nil {
+		if err := rows.Scan(&s.Project, &s.Package, &s.Repo, &s.Arch, &s.Critical, &s.High, &since); err != nil {
 			return nil, err
 		}
 		if since.Valid {
@@ -83,13 +84,14 @@ func QueryAllCveScans(db *sql.DB) ([]OverviewCveScan, error) {
 type OverviewCvePeriod struct {
 	Project    string
 	Package    string
+	Repo       string
 	CveSince   time.Time
 	CleanSince time.Time
 }
 
 // QueryAllCvePeriods returns every closed CVE episode.
 func QueryAllCvePeriods(db *sql.DB) ([]OverviewCvePeriod, error) {
-	rows, err := db.Query(`SELECT project, package, cve_since, clean_since FROM cve_periods`)
+	rows, err := db.Query(`SELECT project, package, repo, cve_since, clean_since FROM cve_periods`)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +100,7 @@ func QueryAllCvePeriods(db *sql.DB) ([]OverviewCvePeriod, error) {
 	for rows.Next() {
 		var p OverviewCvePeriod
 		var cs, cl string
-		if err := rows.Scan(&p.Project, &p.Package, &cs, &cl); err != nil {
+		if err := rows.Scan(&p.Project, &p.Package, &p.Repo, &cs, &cl); err != nil {
 			return nil, err
 		}
 		p.CveSince, _ = parseRFC3339(cs)
