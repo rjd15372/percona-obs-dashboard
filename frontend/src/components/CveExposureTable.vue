@@ -205,7 +205,7 @@ function reportScans(key: string): CveScan[] | null {
         :id="regionId(p.project)"
         class="bg-bg-card-2 border-b border-border"
       >
-        <template v-for="(img, idx) in p.images" :key="img.project + '/' + img.name">
+        <template v-for="(img, idx) in p.images" :key="imgKey(img)">
           <button
             type="button"
             class="w-full text-left pl-10 p-[9px_20px] grid grid-cols-[1fr_90px_90px_130px_130px] gap-3 items-center"
