@@ -38,15 +38,16 @@ type ReleasePackageArtifact struct {
 }
 
 type ReleaseContainerArtifact struct {
-	Project   string           `json:"project"`
-	ImageName string           `json:"image_name"`
-	BaseOS    string           `json:"base_os"`
-	Registry  string           `json:"registry"`
-	Tags      []string         `json:"tags"`
-	PullCmd   string           `json:"pull_cmd"`
-	MTime     int64            `json:"mtime"`
-	BuiltAt   string           `json:"built_at"`
-	CveScans  []model.CveScan  `json:"cve_scans,omitempty"`
+	Project   string          `json:"project"`
+	ImageName string          `json:"image_name"`
+	Repo      string          `json:"repo"`
+	BaseOS    string          `json:"base_os"`
+	Registry  string          `json:"registry"`
+	Tags      []string        `json:"tags"`
+	PullCmd   string          `json:"pull_cmd"`
+	MTime     int64           `json:"mtime"`
+	BuiltAt   string          `json:"built_at"`
+	CveScans  []model.CveScan `json:"cve_scans,omitempty"`
 }
 
 type ReleaseArtifactsResponse struct {
@@ -155,7 +156,13 @@ func attachReleaseCveScans(db *sql.DB, images []ReleaseContainerArtifact) {
 			slog.Warn("api: release cve scans", "pkg", images[i].ImageName, "err", err)
 			continue
 		}
-		images[i].CveScans = scans
+		var filtered []model.CveScan
+		for _, s := range scans {
+			if s.Repo == images[i].Repo {
+				filtered = append(filtered, s)
+			}
+		}
+		images[i].CveScans = filtered
 	}
 }
 
@@ -281,15 +288,15 @@ func buildReleaseContainerArtifacts(ctx context.Context, client *obs.Client, bin
 		if !strings.HasSuffix(binary.Filename, ".containerinfo") {
 			continue
 		}
-		key := binary.Project + "\x00" + binary.Package
+		key := binary.Project + "\x00" + binary.Package + "\x00" + binary.Repo
 		artifact := byKey[key]
 		if artifact == nil {
-			registry := "registry.opensuse.org/" + strings.ReplaceAll(binary.Project, ":", "/") + "/images/" + binary.Package
 			artifact = &ReleaseContainerArtifact{
 				Project:   binary.Project,
 				ImageName: binary.Package,
-				BaseOS:    deriveBaseOS(binary.Project),
-				Registry:  registry,
+				Repo:      binary.Repo,
+				BaseOS:    deriveBaseOS(binary.Project, binary.Repo),
+				Registry:  containerRegistryPath(binary.Project, binary.Repo, binary.Package),
 			}
 			byKey[key] = artifact
 			seenTags[key] = map[string]bool{}
@@ -366,22 +373,49 @@ func binaryBaseName(filename string) string {
 	return filename
 }
 
-func deriveBaseOS(project string) string {
+// baseOSFromRepo maps a base-image build repo (ubi8/ubi9/noble/bookworm) to a
+// display label. Returns "" for the legacy "images" repo or an unknown repo,
+// so the caller falls back to parsing the project name.
+func baseOSFromRepo(repo string) string {
+	switch repo {
+	case "ubi8":
+		return "UBI 8"
+	case "ubi9":
+		return "UBI 9"
+	case "noble":
+		return "Ubuntu 24.04 Noble"
+	case "bookworm":
+		return "Debian 12 Bookworm"
+	default:
+		return ""
+	}
+}
+
+// containerRegistryPath builds the OBS registry pull path for a container
+// package built in a given repo. The base-image repo (ubi8/ubi9/…) is a path
+// segment; legacy release containers use the repo literally named "images",
+// reproducing the pre-restructure path. (Same formula as cve.ImageBase; kept
+// local to avoid an api→cve import for a one-liner.)
+func containerRegistryPath(project, repo, name string) string {
+	return "registry.opensuse.org/" + strings.ReplaceAll(project, ":", "/") + "/" + repo + "/" + name
+}
+
+// deriveBaseOS returns the base-OS display label for a container build,
+// preferring the repo (new layout, where the base image is the build repo)
+// and falling back to the project name (legacy layout, where the base image
+// is a `containers:<baseos>` project segment). The last resort is the project
+// string itself.
+func deriveBaseOS(project, repo string) string {
+	if os := baseOSFromRepo(repo); os != "" {
+		return os
+	}
 	parts := strings.Split(project, ":")
 	for i, part := range parts {
 		if part == "containers" && i+1 < len(parts) {
-			switch parts[i+1] {
-			case "ubi8":
-				return "UBI 8"
-			case "ubi9":
-				return "UBI 9"
-			case "noble":
-				return "Ubuntu 24.04 Noble"
-			case "bookworm":
-				return "Debian 12 Bookworm"
-			default:
-				return parts[i+1]
+			if os := baseOSFromRepo(parts[i+1]); os != "" {
+				return os
 			}
+			return parts[i+1]
 		}
 	}
 	return project
