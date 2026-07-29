@@ -1,0 +1,13 @@
+{
+  "planPath": "docs/superpowers/plans/2026-07-29-pr-artifacts-tier-contexts.md",
+  "tasks": [
+    {
+      "id": 1,
+      "nativeTaskId": 82,
+      "subject": "Task 1: per-tier PR artifacts contexts",
+      "status": "pending",
+      "description": "**Goal:** `prArtifactsContexts` builds one context per `(PR, tier)` with the tier-deep prefix; `App.vue` uses it.\n\n**Files:**\n- Modify: `frontend/src/lib/contexts.ts` (add `PRGroup` import + `prArtifactsContexts` + `PR_TIERS`)\n- Modify: `frontend/src/App.vue` (import the helper; replace the inline PR loop in `artifactsContexts`)\n- Create: `frontend/src/lib/contexts.test-d.ts` (pin the helper's signature/return shape)\n\n**Acceptance Criteria:**\n- [ ] `prArtifactsContexts` emits, for `isv:percona:PR:pr-4:ppg:staging:18`, a context `{label:'PR #4 · Staging', apiBase:'/api/pr/pr-4', prefix:'isv:percona:PR:pr-4:ppg:staging', allowedSubprojects:['containers']}`; a PR with both `ppg:staging:17` and `ppg:devel:19` yields two contexts\n- [ ] Non-tier PR projects (`…:ppg:common:deps`, `…:common:deps:build`) yield no context\n- [ ] Contexts sort PR-number descending, staging before devel within a PR\n- [ ] `App.vue`'s `artifactsContexts` returns `[devel, staging, releases, ...prArtifactsContexts(prGroups.value)]` with the old inline PR loop removed\n- [ ] `npm run build` exits 0\n\n**Verify:** `cd frontend && npm run build` → exit 0\n\n**Steps:** Per plan Task 1 (full code in the plan): add `PRGroup` to the contexts.ts import + append `PR_TIERS` and `prArtifactsContexts` (parse `…:PR:<pr>:ppg:<tier>:<version>`, tier∈{staging,devel}, numeric version, dedup by (pr,tier), sort PR desc then staging-before-devel); import the helper in App.vue and replace the inline `artifactsContexts` PR loop with the `[devel, staging, releases, ...prArtifactsContexts(prGroups.value)]` spread; create contexts.test-d.ts pinning the `PRGroup[] → Context[]` signature. Build + reason through the AC against the real prod project names. Commit `git commit -s -m \"fix(artifacts): per-tier PR contexts so PR packages and containers show\"` (never Co-Authored-By).\n\n```json:metadata\n{\"files\": [\"frontend/src/lib/contexts.ts\", \"frontend/src/App.vue\", \"frontend/src/lib/contexts.test-d.ts\"], \"verifyCommand\": \"cd frontend && npm run build\", \"acceptanceCriteria\": [\"pr-4 staging -> one context with tier-deep prefix + containers absorbed; multi-tier PR -> two contexts\", \"non-tier PR projects yield no context\", \"sort PR desc then staging before devel\", \"App.vue wired to helper, inline loop removed\", \"build exit 0\"], \"modelTier\": \"standard\"}\n```"
+    }
+  ],
+  "lastUpdated": "2026-07-29T00:00:00Z"
+}
