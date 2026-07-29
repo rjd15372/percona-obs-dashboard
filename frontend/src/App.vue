@@ -8,7 +8,7 @@ import ArtifactsPanel from './components/ArtifactsPanel.vue'
 import OverviewPanel from './components/OverviewPanel.vue'
 import type { Context } from './types/api'
 import type { WindowKey } from './types/overview'
-import { PPG_DEVEL_CONTEXT, PPG_STAGING_CONTEXT, RELEASES_CONTEXT } from './lib/contexts'
+import { PPG_DEVEL_CONTEXT, PPG_STAGING_CONTEXT, RELEASES_CONTEXT, prArtifactsContexts } from './lib/contexts'
 import { usePackages } from './composables/usePackages'
 import { useEvents } from './composables/useEvents'
 import { usePRPackages } from './composables/usePRPackages'
@@ -144,36 +144,13 @@ const artifactsContext = ref<Context>(PPG_STAGING_CONTEXT)
 // Overview panel state (lifted for URL sync)
 const overviewWindow = ref<WindowKey>('24h')
 
-// Artifacts contexts: PPG + Releases + one context per PR (all subprojects)
-const artifactsContexts = computed<Context[]>(() => {
-  const seen = new Set<string>()
-  const prContexts: Context[] = []
-
-  for (const group of prGroups.value) {
-    for (const pkg of group.packages) {
-      const parts = pkg.project.split(':')
-      const prIdx = parts.findIndex(p => p.toLowerCase() === 'pr')
-      if (prIdx < 0 || prIdx + 1 >= parts.length) continue
-      const prSegment = parts[prIdx + 1]
-      if (seen.has(prSegment)) continue
-      seen.add(prSegment)
-      const prNum = prSegment.replace(/^pr-/i, '')
-      prContexts.push({
-        label: `PR #${prNum}`,
-        apiBase: `/api/pr/${prSegment}`,
-        prefix: `isv:percona:PR:${prSegment}`,
-      })
-    }
-  }
-
-  prContexts.sort((a, b) => {
-    const na = parseInt(a.prefix.split(':')[3]?.replace(/^pr-/i, '') ?? '0')
-    const nb = parseInt(b.prefix.split(':')[3]?.replace(/^pr-/i, '') ?? '0')
-    return nb - na
-  })
-
-  return [PPG_DEVEL_CONTEXT, PPG_STAGING_CONTEXT, RELEASES_CONTEXT, ...prContexts]
-})
+// Artifacts contexts: PPG devel/staging + Releases + one context per (PR, tier).
+const artifactsContexts = computed<Context[]>(() => [
+  PPG_DEVEL_CONTEXT,
+  PPG_STAGING_CONTEXT,
+  RELEASES_CONTEXT,
+  ...prArtifactsContexts(prGroups.value),
+])
 
 useUrlState({
   mainTab,
