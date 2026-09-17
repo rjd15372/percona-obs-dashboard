@@ -197,6 +197,39 @@ func TestBuildReleaseContainerArtifactsPerRepo(t *testing.T) {
 	}
 }
 
+func TestBuildReleaseTarballArtifacts(t *testing.T) {
+	base := time.Date(2026, 9, 17, 5, 0, 0, 0, time.UTC)
+	proj := "isv:percona:ppg:releases:17:tarballs"
+	binaries := []obs.BinaryArtifact{
+		{Project: proj, Package: "percona-postgresql-tarball", Repo: "ssl3", Arch: "x86_64", Filename: "percona-postgresql-tarball.tar.gz", MTime: base.Unix(), BuiltAt: base},
+		{Project: proj, Package: "percona-postgresql-tarball", Repo: "ssl3", Arch: "aarch64", Filename: "percona-postgresql-tarball.tar.gz", MTime: base.Unix(), BuiltAt: base},
+		{Project: proj, Package: "percona-postgresql-tarball", Repo: "ssl1.1", Arch: "x86_64", Filename: "percona-postgresql-tarball.tar.gz", MTime: base.Unix(), BuiltAt: base},
+		// RockyLinux build inside :tarballs — NOT a tarball, must be excluded.
+		{Project: proj, Package: "percona-psql", Repo: "RockyLinux_9", Arch: "x86_64", Filename: "percona-psql.rpm", MTime: base.Unix(), BuiltAt: base},
+	}
+
+	out := buildReleaseTarballArtifacts(binaries)
+
+	if len(out) != 3 {
+		t.Fatalf("want 3 tarball artifacts, got %d: %+v", len(out), out)
+	}
+	for _, a := range out {
+		if !isTarballRepo(a.Repo) {
+			t.Errorf("non-ssl repo leaked: %q", a.Repo)
+		}
+		if a.Name != "percona-postgresql-tarball" {
+			t.Errorf("unexpected name %q", a.Name)
+		}
+		if a.BuiltAt == "" {
+			t.Errorf("built_at not set for %s/%s", a.Repo, a.Arch)
+		}
+	}
+	// Sorted by repo then name then arch → ssl1.1 first.
+	if out[0].Repo != "ssl1.1" {
+		t.Errorf("want ssl1.1 first, got %q", out[0].Repo)
+	}
+}
+
 func TestAttachReleaseCveScansFiltersByRepo(t *testing.T) {
 	db, err := store.Open(":memory:")
 	if err != nil {

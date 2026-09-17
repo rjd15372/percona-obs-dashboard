@@ -50,11 +50,21 @@ type ReleaseContainerArtifact struct {
 	CveScans  []model.CveScan `json:"cve_scans,omitempty"`
 }
 
+type ReleaseTarballArtifact struct {
+	Project string `json:"project"`
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	Repo    string `json:"repo"`
+	Arch    string `json:"arch"`
+	BuiltAt string `json:"built_at"`
+}
+
 type ReleaseArtifactsResponse struct {
 	Version         string                     `json:"version"`
 	RefreshedAt     string                     `json:"refreshed_at"`
 	Packages        []ReleasePackageArtifact   `json:"packages"`
 	ContainerImages []ReleaseContainerArtifact `json:"container_images"`
+	Tarballs        []ReleaseTarballArtifact   `json:"tarballs"`
 }
 
 type releaseArtifactsCache struct {
@@ -187,6 +197,19 @@ func buildReleaseArtifacts(ctx context.Context, client *obs.Client, root, versio
 		containerBinaries = append(containerBinaries, items...)
 	}
 
+	tarballProjects, err := client.SearchProjects(ctx, project+":tarballs")
+	if err != nil {
+		return ReleaseArtifactsResponse{}, err
+	}
+	var tarballBinaries []obs.BinaryArtifact
+	for _, tarballProject := range tarballProjects {
+		items, err := client.ProjectBinaryList(ctx, tarballProject)
+		if err != nil {
+			return ReleaseArtifactsResponse{}, err
+		}
+		tarballBinaries = append(tarballBinaries, items...)
+	}
+
 	// Fetch binary EVR versions: one goroutine per distinct (repo, arch) pair.
 	type repoArch struct{ repo, arch string }
 	pairs := map[repoArch]struct{}{}
@@ -223,6 +246,7 @@ func buildReleaseArtifacts(ctx context.Context, client *obs.Client, root, versio
 		RefreshedAt:     time.Now().UTC().Format(time.RFC3339),
 		Packages:        buildReleasePackageArtifacts(binaries, versions),
 		ContainerImages: buildReleaseContainerArtifacts(ctx, client, containerBinaries),
+		Tarballs:        buildReleaseTarballArtifacts(tarballBinaries),
 	}
 	return response, nil
 }
@@ -336,6 +360,58 @@ func buildReleaseContainerArtifacts(ctx context.Context, client *obs.Client, bin
 		return out[i].ImageName < out[j].ImageName
 	})
 	return out
+}
+
+// buildReleaseTarballArtifacts groups tarball binaries into per-(name,repo,arch)
+// artifacts. A tarball is a binary in a :tarballs subproject built against an
+// OpenSSL-versioned repo (ssl1.1 / ssl3 / ssl3.5 / …); binaries built against
+// other repos (e.g. RockyLinux_*) are not tarballs and are skipped. Version is
+// left empty in this iteration (the UI omits it) pending confirmation of the
+// released-tarball binary/version naming.
+func buildReleaseTarballArtifacts(binaries []obs.BinaryArtifact) []ReleaseTarballArtifact {
+	byKey := map[string]*ReleaseTarballArtifact{}
+	latestMTime := map[string]int64{}
+	for _, binary := range binaries {
+		if !isTarballRepo(binary.Repo) {
+			continue
+		}
+		key := binary.Project + "\x00" + binary.Package + "\x00" + binary.Repo + "\x00" + binary.Arch
+		artifact := byKey[key]
+		if artifact == nil {
+			artifact = &ReleaseTarballArtifact{
+				Project: binary.Project,
+				Name:    binary.Package,
+				Repo:    binary.Repo,
+				Arch:    binary.Arch,
+			}
+			byKey[key] = artifact
+		}
+		if binary.MTime > latestMTime[key] {
+			latestMTime[key] = binary.MTime
+			artifact.BuiltAt = binary.BuiltAt.Format(time.RFC3339)
+		}
+	}
+
+	out := make([]ReleaseTarballArtifact, 0, len(byKey))
+	for _, artifact := range byKey {
+		out = append(out, *artifact)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Repo != out[j].Repo {
+			return out[i].Repo < out[j].Repo
+		}
+		if out[i].Name != out[j].Name {
+			return out[i].Name < out[j].Name
+		}
+		return out[i].Arch < out[j].Arch
+	})
+	return out
+}
+
+// isTarballRepo reports whether an OBS build repo is an OpenSSL-versioned
+// tarball repo (ssl1.1 / ssl3 / ssl3.5 / …).
+func isTarballRepo(repo string) bool {
+	return strings.HasPrefix(strings.ToLower(repo), "ssl")
 }
 
 func releaseBinary(binary obs.BinaryArtifact) ArtifactBinary {
