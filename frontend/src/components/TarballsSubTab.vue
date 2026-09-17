@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Tarball } from '../composables/useArtifacts'
-import { tarballRepoOrder } from '../lib/tarballs'
+import { tarballRepoOrder, tarballDownloadUrl } from '../lib/tarballs'
 import { formatArtifactTime } from '../lib/cve'
 
 const props = defineProps<{
@@ -112,6 +112,22 @@ function rebuildBadge(t: Tarball): { label: string; cls: string } | null {
                 >{{ arch }}</code>
               </div>
               <span v-else class="block mt-[6px] text-[12px] text-text-muted">No architectures yet</span>
+            </div>
+
+            <!-- Download (per arch) — only when version is known, so the
+                 constructed download.opensuse.org URL is never partial. -->
+            <div v-if="tarball.version && tarball.arches.length > 0" class="px-[18px] py-3 border-b border-border">
+              <div class="section-label">DOWNLOAD</div>
+              <div class="flex flex-wrap gap-[6px] mt-2">
+                <a
+                  v-for="arch in tarball.arches"
+                  :key="arch"
+                  :href="tarballDownloadUrl(tarball.project, tarball.repo, tarball.name, tarball.version, arch)"
+                  target="_blank"
+                  rel="noopener"
+                  class="inline-flex items-center gap-[5px] font-mono text-[11px] px-[9px] py-[4px] rounded-[6px] bg-brand-purple-tint text-brand-purple font-bold no-underline"
+                >↓ {{ arch }} · .tar.gz</a>
+              </div>
             </div>
 
             <!-- Built -->

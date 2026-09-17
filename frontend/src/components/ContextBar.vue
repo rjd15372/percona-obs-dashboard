@@ -22,6 +22,7 @@ const TAGS = [
   { id: 'ppg', label: 'PPG' },
   { id: 'common', label: 'Common' },
   { id: 'container', label: 'Container' },
+  { id: 'tarball', label: 'Tarball' },
 ]
 
 function formatTime(iso: string | null): string {

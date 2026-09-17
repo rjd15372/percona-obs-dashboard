@@ -2,6 +2,13 @@ import { ref, computed, toValue } from 'vue'
 import type { MaybeRef, ComputedRef } from 'vue'
 import type { Context, Package } from '../types/api'
 import { deriveVersionKeys, matchesVersionKey } from '../lib/versions'
+import { isTarballRepo } from '../lib/tarballs'
+
+// A tarball package: in a :tarballs subproject, built against an ssl* repo.
+// Detection is structural (no backend tag), matching the board card + Artifacts.
+function isTarballPkg(p: Package): boolean {
+  return p.project.endsWith(':tarballs') && (p.targets ?? []).some(t => isTarballRepo(t.repo))
+}
 
 const SEVERITY: Record<string, number> = {
   broken: 5,
@@ -71,7 +78,7 @@ export function usePackages(
   function filterByTags(tags: string[]): Package[] {
     if (tags.length === 0) return sorted.value
     return sorted.value.filter(p =>
-      tags.every(t => (p.tags ?? []).includes(t))
+      tags.every(t => t === 'tarball' ? isTarballPkg(p) : (p.tags ?? []).includes(t))
     )
   }
 

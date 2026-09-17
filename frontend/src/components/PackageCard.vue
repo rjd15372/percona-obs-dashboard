@@ -4,8 +4,16 @@ import type { Package, Target } from '../types/api'
 import { displayVersion, TAG_LABEL } from '../composables/useEventDisplay'
 import { useRebuild } from '../composables/useRebuild'
 import { shortProject } from '../lib/project'
+import { isTarballRepo } from '../lib/tarballs'
 
 const props = defineProps<{ pkg: Package; spotlightStates?: string[] }>()
+
+// A tarball package: lives in a :tarballs subproject and builds against an
+// ssl* repo (structural detection, matching the Artifacts Tarballs sub-tab).
+const isTarball = computed(() =>
+  props.pkg.project.endsWith(':tarballs') &&
+  (props.pkg.targets ?? []).some(t => isTarballRepo(t.repo)),
+)
 
 const { trigger: triggerRebuild, isLoading: isRebuildLoading, errorFor: rebuildErrorFor } = useRebuild()
 
@@ -216,11 +224,16 @@ const isDimmed = computed(() => !!props.spotlightStates?.length && !props.spotli
         class="text-[9.5px] font-bold uppercase tracking-[0.05em] py-[2px] px-[7px] rounded-[5px] bg-blocked-tint text-blocked"
       >{{ TAG_LABEL[tag] ?? tag }}</span>
       <span
+        v-if="isTarball"
+        class="text-[9.5px] font-bold uppercase tracking-[0.05em] py-[2px] px-[7px] rounded-[5px]"
+        :style="{ background: 'var(--brand-purple-tint)', color: 'var(--brand-purple)' }"
+      >Tarball</span>
+      <span
         v-if="versionLabel"
         class="font-mono text-[10px] font-bold py-[2px] px-[7px] rounded-[5px] border border-border whitespace-nowrap flex-shrink-0"
         :style="{
-          background: pkg.is_container ? 'var(--brand-purple-tint)' : 'var(--bg-muted, var(--blocked-tint))',
-          color: pkg.is_container ? 'var(--brand-purple)' : 'var(--text-secondary)',
+          background: (pkg.is_container || isTarball) ? 'var(--brand-purple-tint)' : 'var(--bg-muted, var(--blocked-tint))',
+          color: (pkg.is_container || isTarball) ? 'var(--brand-purple)' : 'var(--text-secondary)',
         }"
       >{{ versionLabel }}</span>
     </div>

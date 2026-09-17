@@ -2,6 +2,13 @@ import { ref, toValue } from 'vue'
 import type { MaybeRef } from 'vue'
 import type { Context, Event } from '../types/api'
 import { matchesVersionKey } from '../lib/versions'
+import { isTarballRepo } from '../lib/tarballs'
+
+// A tarball build event: in a :tarballs subproject, on an ssl* repo. Structural,
+// matching the package-side tarball filter (no backend 'tarball' tag exists).
+function isTarballEvent(e: Event): boolean {
+  return e.project.endsWith(':tarballs') && isTarballRepo(e.repo ?? '')
+}
 
 export function useEvents(apiBase: MaybeRef<string>, version: MaybeRef<string>) {
   const data = ref<Event[]>([])
@@ -61,7 +68,7 @@ export function useEvents(apiBase: MaybeRef<string>, version: MaybeRef<string>) 
   function filterEvents(tags: string[], version: string, ctx: Context): Event[] {
     return data.value.filter(e => {
       if (!matchesContext(e.project, ctx.prefix)) return false
-      if (tags.length > 0 && !tags.every(t => (e.tags ?? []).includes(t))) return false
+      if (tags.length > 0 && !tags.every(t => t === 'tarball' ? isTarballEvent(e) : (e.tags ?? []).includes(t))) return false
       return matchesEventVersion(e, version, ctx)
     })
   }
