@@ -23,7 +23,7 @@ interface UrlStateOptions {
   activeTags: Ref<string[]>
   artifactsCtx: Ref<Context>
   artifactsVersion: Ref<string>
-  artifactsTab: Ref<'packages' | 'containers'>
+  artifactsTab: Ref<'packages' | 'containers' | 'tarballs'>
   boardContexts: Ref<Context[]>
   artifactsContexts: Ref<Context[]>
   overviewWindow: Ref<WindowKey>
@@ -58,7 +58,7 @@ export function useUrlState(state: UrlStateOptions): void {
     if (aver) artifactsVersion.value = aver
 
     const sub = params.get('sub')
-    if (sub === 'packages' || sub === 'containers') artifactsTab.value = sub
+    if (sub === 'packages' || sub === 'containers' || sub === 'tarballs') artifactsTab.value = sub
 
     const owin = params.get('owin')
     if (owin === '24h' || owin === '48h' || owin === '7d') overviewWindow.value = owin

@@ -26,11 +26,17 @@
     />
 
     <ContainersSubTab
-      v-else
+      v-else-if="props.artifactsTab === 'containers'"
       :container-images="containerImages"
       :copied-key="copiedKey"
       :loading="isLoading"
       @copy="onCopy"
+    />
+
+    <TarballsSubTab
+      v-else
+      :tarballs="tarballs"
+      :loading="isLoading"
     />
   </div>
 </template>
@@ -38,25 +44,27 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import type { Context, CveScan } from '../types/api'
-import type { ArtifactBinary, ContainerImage, PackageRow, RepoInfo } from '../composables/useArtifacts'
+import type { ArtifactBinary, ContainerImage, PackageRow, RepoInfo, Tarball } from '../composables/useArtifacts'
 import { useArtifacts } from '../composables/useArtifacts'
 import { useArtifactMetadata } from '../composables/useArtifactMetadata'
 import { deriveVersionKeys, splitVersionKey } from '../lib/versions'
 import ArtifactsVersionBar from './ArtifactsVersionBar.vue'
 import PackagesSubTab from './PackagesSubTab.vue'
 import ContainersSubTab from './ContainersSubTab.vue'
+import TarballsSubTab from './TarballsSubTab.vue'
+import { isTarballRepo } from '../lib/tarballs'
 
 const props = defineProps<{
   artifactsContexts: Context[]
   artifactsVersion: string
   artifactsContext: Context
-  artifactsTab: 'packages' | 'containers'
+  artifactsTab: 'packages' | 'containers' | 'tarballs'
 }>()
 
 const emit = defineEmits<{
   'update:artifactsVersion': [v: string]
   'update:artifactsContext': [ctx: Context]
-  'update:artifactsTab': [tab: 'packages' | 'containers']
+  'update:artifactsTab': [tab: 'packages' | 'containers' | 'tarballs']
 }>()
 
 // Computed aliases so the rest of the component body can use them unchanged
@@ -118,7 +126,7 @@ async function fetchRepos(versionKey: string) {
     const next: RepoInfo[] = [
       ...data.rpm.map(r => ({ ...r, type: 'rpm' as const })),
       ...data.deb.map(r => ({ ...r, type: 'deb' as const })),
-    ]
+    ].filter(r => !isTarballRepo(r.obs))
     repos.value = next
     if (repos.value.length > 0 && !repos.value.find(r => r.obs === artRepoObs.value)) {
       artRepoObs.value = repos.value.find(r => r.type === 'rpm')?.obs ?? repos.value[0].obs
@@ -195,7 +203,7 @@ function onVersionChange(v: string) {
   emit('update:artifactsVersion', v)
 }
 
-const { packageRows: livePackageRows, containerImages: liveContainerImages } = useArtifacts(
+const { packageRows: livePackageRows, containerImages: liveContainerImages, tarballs: liveTarballs } = useArtifacts(
   artifactsPackages,
   localVersion,
   selectedRepo,
@@ -250,6 +258,36 @@ const containerImages = computed<ContainerImage[]>(() => {
   }))
 })
 
+const tarballs = computed<Tarball[]>(() => {
+  if (!isReleaseContext.value) return liveTarballs.value
+  if (!releaseArtifacts.value) return []
+  // Backend emits one ReleaseTarballArtifact per (name, repo, arch); group by
+  // (project, name, repo) into one card with collected arches + latest built_at,
+  // matching the live path's per-(package, ssl-repo) granularity.
+  const byKey = new Map<string, Tarball>()
+  for (const t of releaseArtifacts.value.tarballs ?? []) {
+    const id = `${t.project}/${t.name}/${t.repo}`
+    const existing = byKey.get(id)
+    if (existing) {
+      if (!existing.arches.includes(t.arch)) existing.arches.push(t.arch)
+      if (t.built_at > existing.builtAt) existing.builtAt = t.built_at
+    } else {
+      byKey.set(id, {
+        id,
+        project: t.project,
+        name: t.name,
+        version: t.version,
+        repo: t.repo,
+        arches: [t.arch],
+        rollupState: 'succeeded',
+        published: true,
+        builtAt: t.built_at,
+      })
+    }
+  }
+  return [...byKey.values()]
+})
+
 function reposFromReleaseArtifacts(data: ReleaseArtifactsResponse): RepoInfo[] {
   const byObs = new Map<string, RepoInfo>()
   for (const pkg of data.packages) {
@@ -291,11 +329,21 @@ interface ReleaseContainerArtifact {
   cve_scans?: CveScan[]
 }
 
+interface ReleaseTarballArtifact {
+  project: string
+  name: string
+  version: string
+  repo: string
+  arch: string
+  built_at: string
+}
+
 interface ReleaseArtifactsResponse {
   version: string
   refreshed_at: string
   packages: ReleasePackageArtifact[]
   container_images: ReleaseContainerArtifact[]
+  tarballs?: ReleaseTarballArtifact[]
 }
 
 let copyTimer: ReturnType<typeof setTimeout> | null = null

@@ -5,14 +5,14 @@ import { contextToKey } from '../composables/useUrlState'
 defineProps<{
   version: string
   availableVersions: string[]
-  activeTab: 'packages' | 'containers'
+  activeTab: 'packages' | 'containers' | 'tarballs'
   contexts: Context[]
   selectedContext: Context
 }>()
 
 const emit = defineEmits<{
   'update:version': [v: string]
-  'update:tab': [tab: 'packages' | 'containers']
+  'update:tab': [tab: 'packages' | 'containers' | 'tarballs']
   'update:context': [ctx: Context]
 }>()
 </script>
@@ -75,6 +75,13 @@ const emit = defineEmits<{
               : 'bg-transparent text-text-muted font-medium border-transparent'"
             @click="emit('update:tab', 'containers')"
           >Container Images</button>
+          <button
+            class="px-3 py-1 rounded-[7px] border text-[13px] cursor-pointer [font-family:inherit]"
+            :class="activeTab === 'tarballs'
+              ? 'bg-bg-card text-text-primary font-bold border-border-strong shadow-[0_1px_2px_rgba(0,0,0,0.12)]'
+              : 'bg-transparent text-text-muted font-medium border-transparent'"
+            @click="emit('update:tab', 'tarballs')"
+          >Tarballs</button>
         </div>
       </div>
     </div>

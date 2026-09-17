@@ -138,7 +138,7 @@ const contexts = computed<Context[]>(() => {
 
 // Artifacts panel state (lifted for URL sync)
 const artifactsVersion = ref('')
-const artifactsTab = ref<'packages' | 'containers'>('packages')
+const artifactsTab = ref<'packages' | 'containers' | 'tarballs'>('packages')
 const artifactsContext = ref<Context>(PPG_STAGING_CONTEXT)
 
 // Overview panel state (lifted for URL sync)
