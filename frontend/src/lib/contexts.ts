@@ -7,14 +7,14 @@ export const PPG_DEVEL_CONTEXT: Context = {
   // Subprojects absorbed into the plain version entry; every other
   // subproject (extras, tde, …) surfaces as a <version>:<sub> entry in
   // the version selector.
-  allowedSubprojects: ['containers'],
+  allowedSubprojects: ['containers', 'tarballs'],
 }
 
 export const PPG_STAGING_CONTEXT: Context = {
   label: 'PPG Staging',
   apiBase: '/api/products/ppg/staging',
   prefix: 'isv:percona:ppg:staging',
-  allowedSubprojects: ['containers'],
+  allowedSubprojects: ['containers', 'tarballs'],
 }
 
 export const RELEASES_CONTEXT: Context = {
@@ -57,7 +57,7 @@ export function prArtifactsContexts(groups: PRGroup[]): Context[] {
         label: `PR #${prNum} · ${tierLabel}`,
         apiBase: `/api/pr/${prSegment}`,
         prefix: `isv:percona:PR:${prSegment}:ppg:${tier}`,
-        allowedSubprojects: ['containers'],
+        allowedSubprojects: ['containers', 'tarballs'],
       })
     }
   }
