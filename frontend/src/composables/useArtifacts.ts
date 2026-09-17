@@ -2,6 +2,7 @@ import { computed, toValue } from 'vue'
 import type { MaybeRef } from 'vue'
 import type { Package, Target, CveScan, Context } from '../types/api'
 import { matchesVersionKey } from '../lib/versions'
+import { isTarballTarget } from '../lib/tarballs'
 
 export interface RepoInfo {
   obs: string
@@ -45,6 +46,18 @@ export interface ContainerImage {
   builtAt?: string
   isRebuilding?: boolean
   cveScans: CveScan[]
+}
+
+export interface Tarball {
+  id: string          // `${project}/${name}/${repo}`
+  project: string
+  name: string
+  version: string     // pkg.version, e.g. "18.6-3"
+  repo: string        // ssl1.1 | ssl3 | ssl3.5
+  arches: string[]    // distinct arches for this (pkg, repo)
+  rollupState: string
+  published: boolean
+  builtAt: string     // latest target started_at for this repo ("" if none)
 }
 
 function baseOsFromRepo(repo?: string): string {
@@ -169,5 +182,50 @@ export function useArtifacts(
       })
   })
 
-  return { packageRows, containerImages }
+  // Tarballs: PostgreSQL distribution tarballs built against ssl* repos inside
+  // a :tarballs subproject. Detection is structural (isTarballTarget) — no
+  // backend flag. One card per (package, ssl-repo); built time/state come from
+  // the package targets directly, so no metadata/CVE enrichment is involved.
+  const tarballs = computed<Tarball[]>(() => {
+    const pkgs = toValue(packages)
+    const ver = toValue(version)
+
+    return pkgs
+      .filter(pkg =>
+        matchesProject(pkg.project, ver) &&
+        pkg.project.endsWith(':tarballs')
+      )
+      .flatMap(pkg => {
+        const targets = pkg.targets ?? []
+        const repos = [...new Set(
+          targets
+            .filter((t: Target) => isTarballTarget(pkg.project, t.repo))
+            .map((t: Target) => t.repo),
+        )]
+        return repos.map(repo => {
+          const repoTargets = targets.filter((t: Target) => t.repo === repo)
+          const arches = [...new Set(repoTargets.map((t: Target) => t.arch))]
+          const builtAt = repoTargets.reduce(
+            (latest: string, t: Target) => {
+              const at = t.started_at ?? ''
+              return at > latest ? at : latest
+            },
+            '',
+          )
+          return {
+            id: pkg.project + '/' + pkg.name + '/' + repo,
+            project: pkg.project,
+            name: pkg.name,
+            version: pkg.version ?? '',
+            repo,
+            arches,
+            rollupState: pkg.rollup_state ?? '',
+            published: repoTargets.some((t: Target) => t.published === true),
+            builtAt,
+          }
+        })
+      })
+  })
+
+  return { packageRows, containerImages, tarballs }
 }
