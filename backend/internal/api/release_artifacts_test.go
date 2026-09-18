@@ -201,11 +201,13 @@ func TestBuildReleaseTarballArtifacts(t *testing.T) {
 	base := time.Date(2026, 9, 17, 5, 0, 0, 0, time.UTC)
 	proj := "isv:percona:ppg:releases:17:tarballs"
 	binaries := []obs.BinaryArtifact{
-		{Project: proj, Package: "percona-postgresql-tarball", Repo: "ssl3", Arch: "x86_64", Filename: "percona-postgresql-tarball.tar.gz", MTime: base.Unix(), BuiltAt: base},
-		{Project: proj, Package: "percona-postgresql-tarball", Repo: "ssl3", Arch: "aarch64", Filename: "percona-postgresql-tarball.tar.gz", MTime: base.Unix(), BuiltAt: base},
-		{Project: proj, Package: "percona-postgresql-tarball", Repo: "ssl1.1", Arch: "x86_64", Filename: "percona-postgresql-tarball.tar.gz", MTime: base.Unix(), BuiltAt: base},
+		{Project: proj, Package: "percona-postgresql-tarball", Repo: "ssl3", Arch: "x86_64", Filename: "percona-postgresql-17.11-ssl3-linux-x86_64.tar.gz", MTime: base.Unix(), BuiltAt: base},
+		{Project: proj, Package: "percona-postgresql-tarball", Repo: "ssl3", Arch: "aarch64", Filename: "percona-postgresql-17.11-ssl3-linux-aarch64.tar.gz", MTime: base.Unix(), BuiltAt: base},
+		{Project: proj, Package: "percona-postgresql-tarball", Repo: "ssl1.1", Arch: "x86_64", Filename: "percona-postgresql-17.11-ssl1.1-linux-x86_64.tar.gz", MTime: base.Unix(), BuiltAt: base},
 		// RockyLinux build inside :tarballs — NOT a tarball, must be excluded.
 		{Project: proj, Package: "percona-psql", Repo: "RockyLinux_9", Arch: "x86_64", Filename: "percona-psql.rpm", MTime: base.Unix(), BuiltAt: base},
+		// .repo metadata under an ssl repo — not a .tar.gz, must be excluded.
+		{Project: proj, Package: "percona-postgresql-tarball", Repo: "ssl3", Arch: "x86_64", Filename: "isv:percona:ppg:releases:17:tarballs.repo", MTime: base.Unix(), BuiltAt: base},
 	}
 
 	out := buildReleaseTarballArtifacts(binaries)
@@ -223,10 +225,31 @@ func TestBuildReleaseTarballArtifacts(t *testing.T) {
 		if a.BuiltAt == "" {
 			t.Errorf("built_at not set for %s/%s", a.Repo, a.Arch)
 		}
+		if a.Version != "17.11" {
+			t.Errorf("version not parsed for %s/%s: got %q", a.Repo, a.Arch, a.Version)
+		}
 	}
 	// Sorted by repo then name then arch → ssl1.1 first.
 	if out[0].Repo != "ssl1.1" {
 		t.Errorf("want ssl1.1 first, got %q", out[0].Repo)
+	}
+}
+
+func TestTarballFileVersion(t *testing.T) {
+	cases := []struct {
+		filename, repo, arch, want string
+	}{
+		{"percona-postgresql-18.6-ssl3-linux-x86_64.tar.gz", "ssl3", "x86_64", "18.6"},
+		{"percona-postgresql-17.11-ssl1.1-linux-aarch64.tar.gz", "ssl1.1", "aarch64", "17.11"},
+		{"percona-postgresql-16.15-ssl3.5-linux-x86_64.tar.gz", "ssl3.5", "x86_64", "16.15"},
+		// Wrong shape / metadata → no version.
+		{"isv:percona:ppg:releases:17:tarballs.repo", "ssl3", "x86_64", ""},
+		{"percona-postgresql-tarball.tar.gz", "ssl3", "x86_64", ""},
+	}
+	for _, c := range cases {
+		if got := tarballFileVersion(c.filename, c.repo, c.arch); got != c.want {
+			t.Errorf("tarballFileVersion(%q,%q,%q) = %q, want %q", c.filename, c.repo, c.arch, got, c.want)
+		}
 	}
 }
 

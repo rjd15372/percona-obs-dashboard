@@ -383,16 +383,16 @@ func buildReleaseContainerArtifacts(ctx context.Context, client *obs.Client, bin
 }
 
 // buildReleaseTarballArtifacts groups tarball binaries into per-(name,repo,arch)
-// artifacts. A tarball is a binary in a :tarballs subproject built against an
-// OpenSSL-versioned repo (ssl1.1 / ssl3 / ssl3.5 / …); binaries built against
-// other repos (e.g. RockyLinux_*) are not tarballs and are skipped. Version is
-// left empty in this iteration (the UI omits it) pending confirmation of the
-// released-tarball binary/version naming.
+// artifacts. A tarball is a .tar.gz binary in a :tarballs subproject built
+// against an OpenSSL-versioned repo (ssl1.1 / ssl3 / ssl3.5 / …); binaries built
+// against other repos (e.g. RockyLinux_*) or of other types are skipped. Version
+// is parsed from the published filename
+// (percona-postgresql-<version>-<repo>-linux-<arch>.tar.gz).
 func buildReleaseTarballArtifacts(binaries []obs.BinaryArtifact) []ReleaseTarballArtifact {
 	byKey := map[string]*ReleaseTarballArtifact{}
 	latestMTime := map[string]int64{}
 	for _, binary := range binaries {
-		if !isTarballRepo(binary.Repo) {
+		if !isTarballRepo(binary.Repo) || !strings.HasSuffix(binary.Filename, ".tar.gz") {
 			continue
 		}
 		key := binary.Project + "\x00" + binary.Package + "\x00" + binary.Repo + "\x00" + binary.Arch
@@ -405,6 +405,9 @@ func buildReleaseTarballArtifacts(binaries []obs.BinaryArtifact) []ReleaseTarbal
 				Arch:    binary.Arch,
 			}
 			byKey[key] = artifact
+		}
+		if artifact.Version == "" {
+			artifact.Version = tarballFileVersion(binary.Filename, binary.Repo, binary.Arch)
 		}
 		if binary.MTime > latestMTime[key] {
 			latestMTime[key] = binary.MTime
@@ -432,6 +435,23 @@ func buildReleaseTarballArtifacts(binaries []obs.BinaryArtifact) []ReleaseTarbal
 // tarball repo (ssl1.1 / ssl3 / ssl3.5 / …).
 func isTarballRepo(repo string) bool {
 	return strings.HasPrefix(strings.ToLower(repo), "ssl")
+}
+
+// tarballFileVersion extracts the upstream version from a published tarball
+// filename of the form <name>-<version>-<repo>-linux-<arch>.tar.gz. The repo and
+// arch are known, so the version is the last '-' segment of the head remaining
+// after the fixed suffix is stripped (e.g.
+// "percona-postgresql-18.6-ssl3-linux-x86_64.tar.gz" -> "18.6"). Returns "" when
+// the filename does not match the expected shape.
+func tarballFileVersion(filename, repo, arch string) string {
+	head := strings.TrimSuffix(filename, "-"+repo+"-linux-"+arch+".tar.gz")
+	if head == filename {
+		return ""
+	}
+	if i := strings.LastIndex(head, "-"); i >= 0 {
+		return head[i+1:]
+	}
+	return ""
 }
 
 func releaseBinary(binary obs.BinaryArtifact) ArtifactBinary {
