@@ -266,3 +266,40 @@ func TestAttachReleaseCveScansFiltersByRepo(t *testing.T) {
 		}
 	}
 }
+
+func TestSubprojectCandidatesIncludesFlatProject(t *testing.T) {
+	base := "isv:percona:ppg:releases:18"
+
+	eq := func(got, want []string) bool {
+		if len(got) != len(want) {
+			return false
+		}
+		for i := range got {
+			if got[i] != want[i] {
+				return false
+			}
+		}
+		return true
+	}
+
+	// New flat layout: SearchProjects finds nothing (its XPath appends ':'),
+	// yet the flat :containers project must still be a candidate.
+	if got := subprojectCandidates(base, "containers", nil); !eq(got, []string{base + ":containers"}) {
+		t.Fatalf("flat layout: got %v", got)
+	}
+
+	// Old nested layout: flat first, then the nested project; a duplicate of the
+	// flat project in the search results is deduped.
+	got := subprojectCandidates(base, "containers", []string{
+		base + ":containers",
+		base + ":containers:ubi9",
+	})
+	if !eq(got, []string{base + ":containers", base + ":containers:ubi9"}) {
+		t.Fatalf("nested layout: got %v", got)
+	}
+
+	// Tarballs flat project present even with an empty search result.
+	if got := subprojectCandidates(base, "tarballs", nil); !eq(got, []string{base + ":tarballs"}) {
+		t.Fatalf("tarballs flat: got %v", got)
+	}
+}

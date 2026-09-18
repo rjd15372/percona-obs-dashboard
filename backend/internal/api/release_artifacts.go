@@ -183,32 +183,8 @@ func buildReleaseArtifacts(ctx context.Context, client *obs.Client, root, versio
 		return ReleaseArtifactsResponse{}, err
 	}
 
-	containerProjects, err := client.SearchProjects(ctx, project+":containers")
-	if err != nil {
-		return ReleaseArtifactsResponse{}, err
-	}
-
-	var containerBinaries []obs.BinaryArtifact
-	for _, containerProject := range containerProjects {
-		items, err := client.ProjectBinaryList(ctx, containerProject)
-		if err != nil {
-			return ReleaseArtifactsResponse{}, err
-		}
-		containerBinaries = append(containerBinaries, items...)
-	}
-
-	tarballProjects, err := client.SearchProjects(ctx, project+":tarballs")
-	if err != nil {
-		return ReleaseArtifactsResponse{}, err
-	}
-	var tarballBinaries []obs.BinaryArtifact
-	for _, tarballProject := range tarballProjects {
-		items, err := client.ProjectBinaryList(ctx, tarballProject)
-		if err != nil {
-			return ReleaseArtifactsResponse{}, err
-		}
-		tarballBinaries = append(tarballBinaries, items...)
-	}
+	containerBinaries := collectSubprojectBinaries(ctx, client, project, "containers")
+	tarballBinaries := collectSubprojectBinaries(ctx, client, project, "tarballs")
 
 	// Fetch binary EVR versions: one goroutine per distinct (repo, arch) pair.
 	type repoArch struct{ repo, arch string }
@@ -249,6 +225,50 @@ func buildReleaseArtifacts(ctx context.Context, client *obs.Client, root, versio
 		Tarballs:        buildReleaseTarballArtifacts(tarballBinaries),
 	}
 	return response, nil
+}
+
+// subprojectCandidates lists the projects that may hold a release subproject's
+// artifacts, covering BOTH layouts:
+//   - flat/new:   <base>:<sub>        (artifacts built against per-flavor repos,
+//                                       e.g. …:releases:18:containers on ubi8/ubi9,
+//                                       …:releases:18:tarballs on ssl1.1/ssl3/…)
+//   - nested/old: <base>:<sub>:<x>    (flavor baked into the project name)
+// SearchProjects only returns nested sub-namespaces — its XPath appends ':' — so
+// the flat project is added explicitly here (deduped), which is what the flat
+// layout needs. Order: flat first, then any nested projects from the search.
+func subprojectCandidates(base, sub string, searched []string) []string {
+	prefix := base + ":" + sub
+	out := []string{prefix}
+	seen := map[string]bool{prefix: true}
+	for _, p := range searched {
+		if !seen[p] {
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// collectSubprojectBinaries returns the published binaries across every candidate
+// project for a release subproject. Per-project list errors are logged and
+// skipped — an absent subproject (e.g. a version with no tarballs, or no flat
+// project in the old layout) means "no such artifacts", not a failed response.
+func collectSubprojectBinaries(ctx context.Context, client *obs.Client, base, sub string) []obs.BinaryArtifact {
+	prefix := base + ":" + sub
+	searched, err := client.SearchProjects(ctx, prefix)
+	if err != nil {
+		slog.Warn("api: release subproject search", "prefix", prefix, "err", err)
+	}
+	var out []obs.BinaryArtifact
+	for _, p := range subprojectCandidates(base, sub, searched) {
+		items, err := client.ProjectBinaryList(ctx, p)
+		if err != nil {
+			slog.Warn("api: release subproject binaries", "project", p, "err", err)
+			continue
+		}
+		out = append(out, items...)
+	}
+	return out
 }
 
 // buildReleasePackageArtifacts groups distributable binaries into per-package
