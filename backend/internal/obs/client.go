@@ -215,14 +215,23 @@ func (c *Client) Rebuild(ctx context.Context, project, repo, arch, pkg string) e
 
 // PublishFlags answers whether a repository publishes, resolved from a project's
 // _meta <publish> block. Zero value = everything publishes (safe default).
+// A Fleet-built composite delegates each repo to its owning instance's flags.
 type PublishFlags struct {
 	hasDefault     bool
 	defaultPublish bool
 	perRepo        map[string]bool
+
+	delegate map[string]PublishFlags // slug → that instance's flags
+	owner    func(repo string) string
 }
 
 // Publishes reports whether repo publishes for this project.
 func (f PublishFlags) Publishes(repo string) bool {
+	if f.owner != nil {
+		if d, ok := f.delegate[f.owner(repo)]; ok {
+			return d.Publishes(repo)
+		}
+	}
 	if f.perRepo != nil {
 		if v, ok := f.perRepo[repo]; ok {
 			return v
@@ -373,6 +382,8 @@ type PackageBuildState struct {
 	State   string
 	Details string
 	Versrel string // version-release string, e.g. "17.5-1"; empty if not available
+
+	Instance string // slug of the OBS instance that reported it; set by Fleet
 }
 
 // BinaryArtifact is one binary entry from OBS _result?view=binarylist.
@@ -385,6 +396,8 @@ type BinaryArtifact struct {
 	Size     int64
 	MTime    int64
 	BuiltAt  time.Time
+
+	Instance string // slug of the OBS instance that reported it; set by Fleet
 }
 
 // BuildReasonResult represents the result of a build reason query.

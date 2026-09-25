@@ -37,8 +37,12 @@ func (s RollupState) Severity() int {
 }
 
 type Target struct {
-	Repo                string     `json:"repo"`
-	Arch                string     `json:"arch"`
+	Repo string `json:"repo"`
+	Arch string `json:"arch"`
+	// Instance is the slug of the OBS instance that hosts this repo/arch
+	// target. Empty until the fleet records a repo owner (single-instance
+	// deployments never set it).
+	Instance            string     `json:"instance,omitempty"`
 	State               string     `json:"state"`
 	StartedAt           *time.Time `json:"started_at,omitempty"`
 	Details             string     `json:"details,omitempty"`

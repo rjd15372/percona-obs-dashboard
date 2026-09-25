@@ -58,10 +58,10 @@ func TestIdentityInstance(t *testing.T) {
 func TestInstanceURLs(t *testing.T) {
 	in := testInstance("percona")
 	cases := map[string]string{
-		in.ProjectURL("ppg:17"):                         "https://obs.example.com/project/show/percona:ppg:17",
-		in.PackageURL("ppg:17", "pg"):                   "https://obs.example.com/package/show/percona:ppg:17/pg",
-		in.LiveLogURL("ppg:17", "pg", "RHEL_9", "x86_64"): "https://obs.example.com/package/live_build_log/percona:ppg:17/pg/RHEL_9/x86_64",
-		in.DownloadURL("ppg:17", "RHEL_9"):              "https://dl.example.com/repositories/percona:/ppg:/17/RHEL_9/",
+		in.ProjectURL("ppg:17"):                                 "https://obs.example.com/project/show/percona:ppg:17",
+		in.PackageURL("ppg:17", "pg"):                           "https://obs.example.com/package/show/percona:ppg:17/pg",
+		in.LiveLogURL("ppg:17", "pg", "RHEL_9", "x86_64"):       "https://obs.example.com/package/live_build_log/percona:ppg:17/pg/RHEL_9/x86_64",
+		in.DownloadURL("ppg:17", "RHEL_9"):                      "https://dl.example.com/repositories/percona:/ppg:/17/RHEL_9/",
 		in.ImageBase("ppg:staging:17:containers", "ubi9", "pg"): "registry.example.com/percona/ppg/staging/17/containers/ubi9/pg",
 	}
 	for got, want := range cases {
