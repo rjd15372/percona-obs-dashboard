@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -20,6 +21,13 @@ type Config struct {
 	Telemetry  TelemetryConfig
 	Unblocker  UnblockerConfig
 	Idle       IdleConfig
+	// Instances lists every OBS instance the dashboard reads from, in config
+	// order. Always at least one (the legacy instance when obs_instances is
+	// absent).
+	Instances []InstanceConfig
+	// LegacyRoot is obs_root: the root stored project names carried before
+	// the root-free migration. Used only by that migration.
+	LegacyRoot string
 }
 
 type OBSConfig struct {
@@ -31,6 +39,48 @@ type OBSConfig struct {
 
 type MQConfig struct {
 	URL string
+}
+
+// MQInstanceConfig is one instance's AMQP event bus.
+type MQInstanceConfig struct {
+	URL           string `mapstructure:"url"`
+	Exchange      string `mapstructure:"exchange"`
+	RoutingPrefix string `mapstructure:"routing_prefix"`
+}
+
+// InstanceConfig describes one OBS instance.
+type InstanceConfig struct {
+	Name                string           `mapstructure:"name"`
+	Slug                string           `mapstructure:"-"`
+	Root                string           `mapstructure:"root"`
+	APIURL              string           `mapstructure:"api_url"`
+	WebURL              string           `mapstructure:"web_url"`
+	DownloadURL         string           `mapstructure:"download_url"`
+	Registry            string           `mapstructure:"registry"`
+	Username            string           `mapstructure:"username"`
+	Password            string           `mapstructure:"password"`
+	MinuteRequestBudget int              `mapstructure:"-"`
+	MQ                  MQInstanceConfig `mapstructure:"mq"`
+}
+
+// rawInstance distinguishes an omitted budget (default 60) from an explicit 0.
+type rawInstance struct {
+	InstanceConfig      `mapstructure:",squash"`
+	MinuteRequestBudget *int `mapstructure:"minute_request_budget"`
+}
+
+// Slug derives an instance's stable identifier from its display name:
+// lowercase, every character outside [a-z0-9] replaced by '_'.
+func Slug(name string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(name) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('_')
+		}
+	}
+	return b.String()
 }
 
 type PollerConfig struct {
@@ -71,6 +121,82 @@ type IdleConfig struct {
 	Linger  time.Duration
 }
 
+func loadInstances(v *viper.Viper, cfg *Config) ([]InstanceConfig, error) {
+	var raw []rawInstance
+	if v.IsSet("obs_instances") {
+		if err := v.UnmarshalKey("obs_instances", &raw); err != nil {
+			return nil, fmt.Errorf("obs_instances: %w", err)
+		}
+	}
+	if len(raw) == 0 {
+		if cfg.OBS.Username == "" {
+			return nil, fmt.Errorf("OBS_USERNAME is required")
+		}
+		return []InstanceConfig{{
+			Name:                "openSUSE",
+			Slug:                "opensuse",
+			Root:                cfg.OBSRoot,
+			APIURL:              cfg.OBS.BaseURL,
+			WebURL:              "https://build.opensuse.org",
+			DownloadURL:         "https://download.opensuse.org/repositories",
+			Registry:            "registry.opensuse.org",
+			Username:            cfg.OBS.Username,
+			Password:            cfg.OBS.Password,
+			MinuteRequestBudget: cfg.OBS.MinuteRequestBudget,
+			MQ:                  MQInstanceConfig{URL: cfg.MQ.URL, Exchange: "pubsub", RoutingPrefix: "opensuse.obs"},
+		}}, nil
+	}
+
+	out := make([]InstanceConfig, 0, len(raw))
+	seen := map[string]bool{}
+	for i, r := range raw {
+		in := r.InstanceConfig
+		in.Slug = Slug(in.Name)
+		label := fmt.Sprintf("obs_instances[%d] (%s)", i, in.Name)
+		if in.Name == "" {
+			return nil, fmt.Errorf("obs_instances[%d]: name is required", i)
+		}
+		if seen[in.Slug] {
+			return nil, fmt.Errorf("%s: duplicate instance slug %q", label, in.Slug)
+		}
+		seen[in.Slug] = true
+		env := "OBS_" + strings.ToUpper(in.Slug)
+		if u := os.Getenv(env + "_USERNAME"); u != "" {
+			in.Username = u
+		}
+		if p := os.Getenv(env + "_PASSWORD"); p != "" {
+			in.Password = p
+		}
+		in.MinuteRequestBudget = 60
+		if r.MinuteRequestBudget != nil {
+			in.MinuteRequestBudget = *r.MinuteRequestBudget
+		}
+		if in.MQ.Exchange == "" {
+			in.MQ.Exchange = "pubsub"
+		}
+		if in.MQ.RoutingPrefix == "" {
+			in.MQ.RoutingPrefix = "opensuse.obs"
+		}
+		in.APIURL = strings.TrimRight(in.APIURL, "/")
+		in.WebURL = strings.TrimRight(in.WebURL, "/")
+		in.DownloadURL = strings.TrimRight(in.DownloadURL, "/")
+		in.Registry = strings.TrimRight(in.Registry, "/")
+		for field, val := range map[string]string{
+			"root": in.Root, "api_url": in.APIURL, "web_url": in.WebURL,
+			"download_url": in.DownloadURL, "registry": in.Registry, "mq.url": in.MQ.URL,
+		} {
+			if val == "" {
+				return nil, fmt.Errorf("%s: %s is required", label, field)
+			}
+		}
+		if in.Username == "" {
+			return nil, fmt.Errorf("%s: username is required (or set %s_USERNAME)", label, env)
+		}
+		out = append(out, in)
+	}
+	return out, nil
+}
+
 func Load() (*Config, error) {
 	v := viper.New()
 
@@ -100,7 +226,7 @@ func Load() (*Config, error) {
 
 	// Config file (optional)
 	cfgFile := "config.yaml"
-	if f := v.GetString("CONFIG_FILE"); f != "" {
+	if f := os.Getenv("CONFIG_FILE"); f != "" {
 		cfgFile = f
 	}
 	v.SetConfigFile(cfgFile)
@@ -216,9 +342,12 @@ func Load() (*Config, error) {
 		},
 	}
 
-	if cfg.OBS.Username == "" {
-		return nil, fmt.Errorf("OBS_USERNAME is required")
+	instances, err := loadInstances(v, cfg)
+	if err != nil {
+		return nil, err
 	}
+	cfg.Instances = instances
+	cfg.LegacyRoot = cfg.OBSRoot
 
 	return cfg, nil
 }
