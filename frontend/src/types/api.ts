@@ -4,7 +4,7 @@ export type EventType = 'triggered' | 'started' | 'succeeded' | 'failed' | 'unre
 export interface Context {
   label: string
   apiBase: string  // e.g. "/api/products/ppg/staging" or "/api/pr/pr-92"
-  prefix: string   // e.g. "isv:percona:ppg:staging" or "isv:percona:PR:pr-92"
+  prefix: string   // e.g. "ppg:staging" or "PR:pr-92"
   /** Direct subprojects of prefix:ver absorbed into the plain version entry
    *  (e.g. "containers"); all others become <ver>:<sub> version-extension
    *  entries. Undefined = catch-all (PR/Releases contexts). */

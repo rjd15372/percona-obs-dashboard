@@ -47,7 +47,7 @@ const showPackageList = computed(() => props.selectedRepo !== null || props.pack
 const snippet = computed(() => {
   const repo = props.selectedRepo
   if (!repo) return ''
-  const obsProject = props.packageRows[0]?.project ?? `isv:percona:ppg:${props.version}`
+  const obsProject = props.packageRows[0]?.project ?? `ppg:${props.version}`
   const obsProjectUrl = obsProject.split(':').join(':/')
   const baseUrl = `https://download.opensuse.org/repositories/${obsProjectUrl}/${repo.obs}/`
   const projectId = obsProject.split(':').join('_')

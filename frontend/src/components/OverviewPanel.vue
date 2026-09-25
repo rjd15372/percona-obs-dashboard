@@ -8,7 +8,6 @@ import CategoryBreakdown from './CategoryBreakdown.vue'
 import RebuildBarChart from './RebuildBarChart.vue'
 import CveExposureTable from './CveExposureTable.vue'
 import MetricsPanel from './MetricsPanel.vue'
-import { shortProject } from '../lib/project'
 
 const props = defineProps<{
   overviewWindow: WindowKey
@@ -135,7 +134,7 @@ const cveSegments = computed(() => {
           </template>
           <template #footnote>
             <template v-if="topPackage">
-              <b class="text-text-secondary">{{ topPackage.count }}</b> rebuilds · <span class="font-mono text-[10.5px]">{{ shortProject(topPackage.project) }}</span>
+              <b class="text-text-secondary">{{ topPackage.count }}</b> rebuilds · <span class="font-mono text-[10.5px]">{{ topPackage.project }}</span>
             </template>
             <template v-else>no rebuilds in this window</template>
           </template>

@@ -49,7 +49,7 @@ function targetSummary(pkg: Package): string {
 }
 
 function subprojectLabel(project: string): string {
-  // "isv:percona:PR:pr-42:ppg17" → "ppg17"
+  // "PR:pr-42:ppg17" → "ppg17"
   const parts = project.split(':')
   // Find "PR" segment index and take everything after pr-<N>
   const prIdx = parts.findIndex(p => p.toLowerCase() === 'pr')
@@ -64,7 +64,7 @@ function obsUrl(pkg: Package): string {
 }
 
 function prProjectUrl(pr: string): string {
-  return `https://build.opensuse.org/project/show/isv:percona:PR:pr-${pr}`
+  return `https://build.opensuse.org/project/show/PR:pr-${pr}`
 }
 </script>
 

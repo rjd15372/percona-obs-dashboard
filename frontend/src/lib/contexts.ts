@@ -3,7 +3,7 @@ import type { Context, PRGroup } from '../types/api'
 export const PPG_DEVEL_CONTEXT: Context = {
   label: 'PPG Devel',
   apiBase: '/api/products/ppg/devel',
-  prefix: 'isv:percona:ppg:devel',
+  prefix: 'ppg:devel',
   // Subprojects absorbed into the plain version entry; every other
   // subproject (extras, tde, …) surfaces as a <version>:<sub> entry in
   // the version selector.
@@ -13,21 +13,21 @@ export const PPG_DEVEL_CONTEXT: Context = {
 export const PPG_STAGING_CONTEXT: Context = {
   label: 'PPG Staging',
   apiBase: '/api/products/ppg/staging',
-  prefix: 'isv:percona:ppg:staging',
+  prefix: 'ppg:staging',
   allowedSubprojects: ['containers', 'tarballs'],
 }
 
 export const RELEASES_CONTEXT: Context = {
   label: 'Releases',
   apiBase: '/api/releases/ppg',
-  prefix: 'isv:percona:ppg:releases',
+  prefix: 'ppg:releases',
 }
 
 const PR_TIERS = ['staging', 'devel'] as const
 
 // prArtifactsContexts expands PR package groups into one Artifacts context per
 // (PR, tier). PR projects follow the devel/staging-restructured layout
-// isv:percona:PR:<pr>:ppg:<tier>:<version>[:<sub>], so each tier needs its own
+// PR:<pr>:ppg:<tier>:<version>[:<sub>], so each tier needs its own
 // context whose prefix includes ppg:<tier> — that way the shared
 // deriveVersionKeys/matchesVersionKey (which read the version at the prefix
 // depth) resolve the numeric version, exactly as they do for the devel/staging
@@ -56,17 +56,17 @@ export function prArtifactsContexts(groups: PRGroup[]): Context[] {
       contexts.push({
         label: `PR #${prNum} · ${tierLabel}`,
         apiBase: `/api/pr/${prSegment}`,
-        prefix: `isv:percona:PR:${prSegment}:ppg:${tier}`,
+        prefix: `PR:${prSegment}:ppg:${tier}`,
         allowedSubprojects: ['containers', 'tarballs'],
       })
     }
   }
   contexts.sort((a, b) => {
-    const na = parseInt(a.prefix.split(':')[3]?.replace(/^pr-/i, '') ?? '0')
-    const nb = parseInt(b.prefix.split(':')[3]?.replace(/^pr-/i, '') ?? '0')
+    const na = parseInt(a.prefix.split(':')[1]?.replace(/^pr-/i, '') ?? '0')
+    const nb = parseInt(b.prefix.split(':')[1]?.replace(/^pr-/i, '') ?? '0')
     if (na !== nb) return nb - na // PR number descending
-    const ta = a.prefix.split(':')[5] ?? ''
-    const tb = b.prefix.split(':')[5] ?? ''
+    const ta = a.prefix.split(':')[3] ?? ''
+    const tb = b.prefix.split(':')[3] ?? ''
     if (ta === tb) return 0
     return ta === 'staging' ? -1 : 1 // staging before devel
   })

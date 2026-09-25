@@ -3,6 +3,7 @@ import type { MaybeRef } from 'vue'
 import type { Context, Event } from '../types/api'
 import { matchesVersionKey } from '../lib/versions'
 import { isTarballRepo } from '../lib/tarballs'
+import { projectInContext } from '../lib/project'
 
 // A tarball build event: in a :tarballs subproject, on an ssl* repo. Structural,
 // matching the package-side tarball filter (no backend 'tarball' tag exists).
@@ -45,29 +46,9 @@ export function useEvents(apiBase: MaybeRef<string>, version: MaybeRef<string>) 
     return matchesVersionKey(event.project, ctx.prefix, key, ctx.allowedSubprojects)
   }
 
-  function matchesContext(project: string, prefix: string): boolean {
-    if (!prefix || project === prefix || project.startsWith(prefix + ':')) return true
-
-    if (prefix.includes(':PR:')) {
-      const parts = prefix.split(':')
-      const commonPrefix = `${parts.slice(0, 4).join(':')}:common`
-      return project === commonPrefix || project.startsWith(`${commonPrefix}:`)
-    }
-    if (prefix.includes(':releases')) return false
-
-    // Product (devel/staging) boards include product-family and global
-    // common events, mirroring the packages query (root:product:common +
-    // root:common).
-    const parts = prefix.split(':')
-    const family = parts.slice(0, -1).join(':')
-    const root = parts.slice(0, -2).join(':')
-    return project === `${family}:common` || project.startsWith(`${family}:common:`) ||
-      project === `${root}:common` || project.startsWith(`${root}:common:`)
-  }
-
   function filterEvents(tags: string[], version: string, ctx: Context): Event[] {
     return data.value.filter(e => {
-      if (!matchesContext(e.project, ctx.prefix)) return false
+      if (!projectInContext(e.project, ctx.prefix)) return false
       if (tags.length > 0 && !tags.every(t => t === 'tarball' ? isTarballEvent(e) : (e.tags ?? []).includes(t))) return false
       return matchesEventVersion(e, version, ctx)
     })

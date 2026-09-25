@@ -122,14 +122,14 @@ const contexts = computed<Context[]>(() => {
       prContexts.push({
         label: `PR #${prNum}`,
         apiBase: `/api/pr/${prSegment}`,
-        prefix: `isv:percona:PR:${prSegment}`,
+        prefix: `PR:${prSegment}`,
       })
     }
   }
 
   prContexts.sort((a, b) => {
-    const na = parseInt(a.prefix.split(':')[3]?.replace(/^pr-/i, '') ?? '0')
-    const nb = parseInt(b.prefix.split(':')[3]?.replace(/^pr-/i, '') ?? '0')
+    const na = parseInt(a.prefix.split(':')[1]?.replace(/^pr-/i, '') ?? '0')
+    const nb = parseInt(b.prefix.split(':')[1]?.replace(/^pr-/i, '') ?? '0')
     return nb - na
   })
 

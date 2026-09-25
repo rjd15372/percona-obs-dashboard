@@ -1,6 +1,22 @@
-const ROOT = 'isv:percona:'
+// Logical project names are root-free: "ppg:staging:17", "ppg:common",
+// "common", "PR:pr-92:ppg:staging:17", "ppg:releases:17".
 
-/** Display-only: strip the constant root project prefix from an OBS project name. */
-export function shortProject(name: string): string {
-  return name.startsWith(ROOT) ? name.slice(ROOT.length) : name
+export function isPRProject(project: string): boolean {
+  return project.split(':')[0] === 'PR'
+}
+
+function inTree(project: string, base: string): boolean {
+  return project === base || project.startsWith(base + ':')
+}
+
+// Does project belong to the context with this prefix? A context covers its
+// own subtree plus shared common trees: PR contexts add PR:<pr>:common;
+// product (devel/staging) contexts add <product>:common and the global
+// common tree. Release contexts are exact subtrees.
+export function projectInContext(project: string, prefix: string): boolean {
+  if (!prefix || inTree(project, prefix)) return true
+  const parts = prefix.split(':')
+  if (parts[0] === 'PR') return inTree(project, `${parts.slice(0, 2).join(':')}:common`)
+  if (parts[1] === 'releases') return false
+  return inTree(project, `${parts[0]}:common`) || inTree(project, 'common')
 }

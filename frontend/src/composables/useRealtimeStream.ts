@@ -1,5 +1,6 @@
 import { onMounted, onUnmounted, type Ref } from 'vue'
 import type { Package, PRGroup, Event, Target } from '../types/api'
+import { projectInContext } from '../lib/project'
 
 const SEVERITY: Record<string, number> = {
   broken: 5, failed: 4, unresolvable: 3, blocked: 2,
@@ -13,30 +14,6 @@ function prNumberFromProject(project: string): string {
     return parts[idx + 1].toLowerCase().replace(/^pr-/, '')
   }
   return ''
-}
-
-function projectInContext(project: string, prefix: string): boolean {
-  if (project === prefix || project.startsWith(prefix + ':')) return true
-
-  if (prefix.includes(':PR:')) {
-    const parts = prefix.split(':')
-    const commonPrefix = `${parts.slice(0, 4).join(':')}:common`
-    return project === commonPrefix || project.startsWith(`${commonPrefix}:`)
-  }
-
-  // Product (devel/staging) boards include product-family and global common
-  // packages alongside the tier subtree. Release contexts are exact subtrees.
-  if (!prefix.includes(':PR:') && !prefix.includes(':releases')) {
-    const parts = prefix.split(':')             // e.g. isv:percona:ppg:staging
-    const family = parts.slice(0, -1).join(':') // isv:percona:ppg
-    const root = parts.slice(0, -2).join(':')   // isv:percona
-    return project === `${family}:common` ||
-      project.startsWith(`${family}:common:`) ||
-      project === `${root}:common` ||
-      project.startsWith(`${root}:common:`)
-  }
-
-  return false
 }
 
 function mergeTags(prev: string[] | undefined, next: string[] | undefined): string[] | undefined {

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { Package } from '../types/api'
-import { shortProject } from '../lib/project'
 
 const props = defineProps<{ packages: Package[] }>()
 
@@ -54,7 +53,7 @@ function packageUrl(project: string, name: string): string {
         target="_blank"
         rel="noopener"
         class="project-link font-mono text-[11px] text-text-muted no-underline inline-flex items-center gap-[3px]"
-      >{{ shortProject(group.project) }} ↗</a>
+      >{{ group.project }} ↗</a>
       <!-- Package pills linking to individual OBS package pages -->
       <div class="flex gap-[7px] flex-wrap">
         <a

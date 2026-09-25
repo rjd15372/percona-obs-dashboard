@@ -2,6 +2,8 @@
 // RebuildBarChart, CveExposureTable). Kept in one place so the age-color
 // escalation rule and project accent assignment can't drift between them.
 
+import { isPRProject } from './project'
+
 export const PROJECT_ACCENTS = ['#6E3FF3', '#2A78D4', '#1F9D55', '#E08A00', '#B0203A']
 
 export function ageColor(days: number): string {
@@ -37,9 +39,9 @@ export type ProjectCategory = 'Devel' | 'Staging' | 'Releases' | 'PRs'
 export const CATEGORY_ORDER: ProjectCategory[] = ['Devel', 'Staging', 'Releases', 'PRs']
 
 export function categoryOf(project: string): ProjectCategory {
-  if (project.includes(':PR:')) return 'PRs'
-  if (project.endsWith(':releases')) return 'Releases'
-  if (project.includes(':staging:')) return 'Staging'
+  if (isPRProject(project)) return 'PRs'
+  if (project.includes(':releases')) return 'Releases'
+  if (project.includes(':staging')) return 'Staging'
   return 'Devel'
 }
 
