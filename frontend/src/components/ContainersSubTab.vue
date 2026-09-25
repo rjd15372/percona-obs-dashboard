@@ -4,6 +4,7 @@ import type { ContainerImage } from '../composables/useArtifacts'
 import type { CveScan } from '../types/api'
 import CveFindingsTable from './CveFindingsTable.vue'
 import { formatArtifactTime, cveDuration, latestScanTime } from '../lib/cve'
+import InstanceBadge from './InstanceBadge.vue'
 
 const props = defineProps<{
   containerImages: ContainerImage[]
@@ -135,6 +136,7 @@ function toggleCvePanel(imageId: string) {
                   </svg>
                 </div>
                 <span class="text-[14px] font-bold">{{ image.imageName }}</span>
+                <InstanceBadge :slug="image.instance" />
               </div>
               <template v-for="badge in [rebuildBadge(image)]" :key="'rebuild-badge'">
                 <span v-if="badge" class="status-badge" :class="badge.cls">{{ badge.label }}</span>

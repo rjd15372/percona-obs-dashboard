@@ -4,7 +4,7 @@ import PackageCard from './PackageCard.vue'
 import GreenStrip from './GreenStrip.vue'
 import type { Package } from '../types/api'
 
-const props = defineProps<{ packages: Package[]; spotlightStates: string[] }>()
+const props = defineProps<{ packages: Package[]; spotlightStates: string[]; activeInstances: string[] }>()
 
 const query = ref('')
 
@@ -48,6 +48,7 @@ const totalFailing = computed(() => props.packages.filter(isFailing).length)
         :key="`${pkg.project}/${pkg.name}`"
         :pkg="pkg"
         :spotlight-states="spotlightStates"
+        :active-instances="activeInstances"
       />
     </div>
 

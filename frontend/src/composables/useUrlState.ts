@@ -27,6 +27,7 @@ interface UrlStateOptions {
   boardContexts: Ref<Context[]>
   artifactsContexts: Ref<Context[]>
   overviewWindow: Ref<WindowKey>
+  activeInstances: Ref<string[]>
 }
 
 export function useUrlState(state: UrlStateOptions): void {
@@ -34,6 +35,7 @@ export function useUrlState(state: UrlStateOptions): void {
     mainTab, boardCtx, version, activeTags,
     artifactsCtx, artifactsVersion, artifactsTab,
     boardContexts, artifactsContexts, overviewWindow,
+    activeInstances,
   } = state
 
   // Pending raw URL keys awaiting context list population (PR contexts load async)
@@ -53,6 +55,9 @@ export function useUrlState(state: UrlStateOptions): void {
 
     const tags = params.get('tags')
     if (tags) activeTags.value = tags.split(',').filter(Boolean)
+
+    const instancesParam = params.get('instances')
+    if (instancesParam) activeInstances.value = instancesParam.split(',').filter(Boolean)
 
     const aver = params.get('aversion')
     if (aver) artifactsVersion.value = aver
@@ -115,6 +120,8 @@ export function useUrlState(state: UrlStateOptions): void {
     if (version.value) params.set('version', version.value)
 
     if (activeTags.value.length > 0) params.set('tags', activeTags.value.join(','))
+
+    if (activeInstances.value.length > 0) params.set('instances', activeInstances.value.join(','))
 
     const artKey = contextToKey(artifactsCtx.value)
     if (artKey !== 'staging') params.set('actx', artKey)

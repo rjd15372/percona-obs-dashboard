@@ -6,10 +6,11 @@ import { useRebuild } from '../composables/useRebuild'
 import { isTarballRepo } from '../lib/tarballs'
 import { useInstances } from '../composables/useInstances'
 import { packageUrl, liveLogUrl } from '../lib/instances'
+import InstanceBadge from './InstanceBadge.vue'
 
 const { instanceFor, packageInstances } = useInstances()
 
-const props = defineProps<{ pkg: Package; spotlightStates?: string[] }>()
+const props = defineProps<{ pkg: Package; spotlightStates?: string[]; activeInstances?: string[] }>()
 
 // A tarball package: lives in a :tarballs subproject and builds against an
 // ssl* repo (structural detection, matching the Artifacts Tarballs sub-tab).
@@ -190,6 +191,11 @@ function logUrl(t: Target): string {
   return liveLogUrl(instanceFor(t.instance), props.pkg.project, props.pkg.name, t.repo, t.arch)
 }
 
+function targetDimmed(t: Target): boolean {
+  const sel = props.activeInstances ?? []
+  return sel.length > 0 && !!t.instance && !sel.includes(t.instance)
+}
+
 function targetAge(t: Target): string | null {
   return elapsedTime(t.started_at)
 }
@@ -264,7 +270,7 @@ const isDimmed = computed(() => !!props.spotlightStates?.length && !props.spotli
           v-for="t in visibleFailing"
           :key="targetKey(t)"
           class="rounded-[7px] overflow-hidden"
-          :style="{ background: targetBg(t) }"
+          :style="{ background: targetBg(t), opacity: targetDimmed(t) ? 0.45 : 1 }"
         >
           <!-- Target header row -->
           <div
@@ -274,6 +280,7 @@ const isDimmed = computed(() => !!props.spotlightStates?.length && !props.spotli
           >
             <span class="w-2 h-2 rounded-[2px] flex-shrink-0" :style="{ background: targetDotColor(t) }"></span>
             <code class="font-mono text-[11.5px] text-text-primary flex-shrink-0">{{ t.repo }}/{{ t.arch }}</code>
+            <InstanceBadge :slug="t.instance" />
             <span class="text-[11px] font-semibold ml-auto flex-shrink-0" :style="{ color: targetDotColor(t) }">
               {{ STATE_LABEL[t.state] ?? t.state }}<template v-if="targetAge(t)"> · {{ targetAge(t) }}</template>
             </span>

@@ -10,6 +10,7 @@ defineProps<{
   customFrom: string | null
   customTo: string | null
   spotlightStates: string[]
+  activeInstances: string[]
 }>()
 
 const emit = defineEmits<{
@@ -21,7 +22,7 @@ const emit = defineEmits<{
 
 <template>
   <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_440px] gap-[18px] items-start">
-    <FailureBoard :packages="packages" :spotlight-states="spotlightStates" />
+    <FailureBoard :packages="packages" :spotlight-states="spotlightStates" :active-instances="activeInstances" />
     <EventLog
       :events="events"
       :window-min="windowMin"

@@ -5,6 +5,7 @@ import { tarballRepoOrder, tarballDownloadUrl } from '../lib/tarballs'
 import { formatArtifactTime } from '../lib/cve'
 import { useInstances } from '../composables/useInstances'
 import { downloadBase } from '../lib/instances'
+import InstanceBadge from './InstanceBadge.vue'
 
 const props = defineProps<{
   tarballs: Tarball[]
@@ -84,6 +85,7 @@ function rebuildBadge(t: Tarball): { label: string; cls: string } | null {
                   </svg>
                 </div>
                 <span class="text-[14px] font-bold">{{ tarball.name }}</span>
+                <InstanceBadge :slug="tarball.instance" />
               </div>
               <template v-for="badge in [rebuildBadge(tarball)]" :key="'rebuild-badge'">
                 <span v-if="badge" class="status-badge" :class="badge.cls">{{ badge.label }}</span>

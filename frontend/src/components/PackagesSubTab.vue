@@ -5,6 +5,7 @@ import { distroGroup } from '../composables/useArtifacts'
 import { formatArtifactTime } from '../lib/cve'
 import { useInstances } from '../composables/useInstances'
 import { obsProject, downloadBase } from '../lib/instances'
+import InstanceBadge from './InstanceBadge.vue'
 
 const props = defineProps<{
   packageRows: PackageRow[]
@@ -330,6 +331,7 @@ function canExpand(row: PackageRow): boolean {
             >
               <span class="text-[9px] text-text-muted w-[10px] shrink-0">{{ canExpand(row) ? (expanded[rowKey(row)] ? '▼' : '▶') : '' }}</span>
               <code class="[font-family:var(--font-mono)] text-[13px] font-bold flex-1 min-w-0 text-left">{{ row.name }}</code>
+              <InstanceBadge :slug="row.instance" />
               <code v-if="row.version" class="[font-family:var(--font-mono)] text-[11px] text-text-muted whitespace-nowrap shrink-0">{{ row.version }}</code>
               <span v-if="row.builtAt" class="text-[11px] text-text-muted whitespace-nowrap shrink-0">{{ formatArtifactTime(row.builtAt) }}</span>
               <span

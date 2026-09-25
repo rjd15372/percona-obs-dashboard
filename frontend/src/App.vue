@@ -60,6 +60,7 @@ const selectedPrefix = computed(() => selectedContext.value.prefix)
 // Navigation state
 const version = ref('')
 const activeTags = ref<string[]>([])
+const activeInstances = ref<string[]>([])
 const spotlightStates = ref<string[]>([])
 
 function toggleSpotlight(states: string[]) {
@@ -77,9 +78,19 @@ function toggleTag(tag: string) {
   }
 }
 
+function toggleInstance(slug: string) {
+  const idx = activeInstances.value.indexOf(slug)
+  if (idx >= 0) {
+    activeInstances.value = activeInstances.value.filter(s => s !== slug)
+  } else {
+    activeInstances.value = [...activeInstances.value, slug]
+  }
+}
+
 function selectContext(ctx: Context) {
   selectedContext.value = ctx
   activeTags.value = []
+  activeInstances.value = []
   // Fetch immediately so packages update before availableVersions watcher fires.
   // The version watcher may fire a second request if version resets, but the
   // server ignores the version URL param so both return the same data.
@@ -163,10 +174,11 @@ useUrlState({
   boardContexts: contexts,
   artifactsContexts,
   overviewWindow,
+  activeInstances,
 })
 
-const filteredPackages = computed(() => filterByTags(activeTags.value))
-const filteredEvents = computed(() => filterEvents(activeTags.value, version.value, selectedContext.value))
+const filteredPackages = computed(() => filterByTags(activeTags.value, activeInstances.value))
+const filteredEvents = computed(() => filterEvents(activeTags.value, version.value, selectedContext.value, activeInstances.value))
 const updatedAt = ref<string | null>(null)
 const refreshing = ref(false)
 
@@ -214,8 +226,10 @@ watch([windowMin, customFrom, customTo], () => refresh())
           :contexts="contexts"
           :selected-context="selectedContext"
           :available-versions="availableVersions"
+          :active-instances="activeInstances"
           @update:version="version = $event"
           @toggle-tag="toggleTag"
+          @toggle-instance="toggleInstance"
           @update:context="selectContext"
           @refresh="refresh"
         />
@@ -227,6 +241,7 @@ watch([windowMin, customFrom, customTo], () => refresh())
           :custom-from="customFrom"
           :custom-to="customTo"
           :spotlight-states="spotlightStates"
+          :active-instances="activeInstances"
           @update:window-min="windowMin = $event"
           @update:custom-from="customFrom = $event"
           @update:custom-to="customTo = $event"

@@ -46,10 +46,11 @@ export function useEvents(apiBase: MaybeRef<string>, version: MaybeRef<string>) 
     return matchesVersionKey(event.project, ctx.prefix, key, ctx.allowedSubprojects)
   }
 
-  function filterEvents(tags: string[], version: string, ctx: Context): Event[] {
+  function filterEvents(tags: string[], version: string, ctx: Context, instances: string[] = []): Event[] {
     return data.value.filter(e => {
       if (!projectInContext(e.project, ctx.prefix)) return false
       if (tags.length > 0 && !tags.every(t => t === 'tarball' ? isTarballEvent(e) : (e.tags ?? []).includes(t))) return false
+      if (instances.length > 0 && e.instance && !instances.includes(e.instance)) return false
       return matchesEventVersion(e, version, ctx)
     })
   }

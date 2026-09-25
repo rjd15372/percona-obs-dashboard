@@ -75,11 +75,10 @@ export function usePackages(
       .sort((a, b) => (SEVERITY[b.rollup_state] ?? 0) - (SEVERITY[a.rollup_state] ?? 0))
   })
 
-  function filterByTags(tags: string[]): Package[] {
-    if (tags.length === 0) return sorted.value
+  function filterByTags(tags: string[], instances: string[] = []): Package[] {
     return sorted.value.filter(p =>
-      tags.every(t => t === 'tarball' ? isTarballPkg(p) : (p.tags ?? []).includes(t))
-    )
+      (tags.length === 0 || tags.every(t => t === 'tarball' ? isTarballPkg(p) : (p.tags ?? []).includes(t))) &&
+      (instances.length === 0 || (p.targets ?? []).some(t => !!t.instance && instances.includes(t.instance))))
   }
 
   return { data: sorted, rawData: data, availableVersions, loading, error, refresh, filterByTags }

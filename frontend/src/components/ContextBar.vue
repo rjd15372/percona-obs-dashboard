@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Context } from '../types/api'
+import { useInstances } from '../composables/useInstances'
 
 defineProps<{
   version: string
@@ -9,14 +10,18 @@ defineProps<{
   contexts: Context[]
   selectedContext: Context
   availableVersions: string[]
+  activeInstances: string[]
 }>()
 
 const emit = defineEmits<{
   'update:version': [version: string]
   'toggle-tag': [tag: string]
+  'toggle-instance': [slug: string]
   'update:context': [ctx: Context]
   'refresh': []
 }>()
+
+const { instances, multi } = useInstances()
 
 const TAGS = [
   { id: 'ppg', label: 'PPG' },
@@ -105,6 +110,17 @@ function tagStyle(_id: string, active: boolean): string {
         @click="emit('toggle-tag', t.id)"
         :style="tagStyle(t.id, activeTags.includes(t.id))"
       >{{ t.label }}</button>
+    </div>
+
+    <!-- Instance chips -->
+    <div v-if="multi" class="flex items-center gap-[9px] flex-wrap">
+      <span class="text-[11px] text-text-muted font-semibold uppercase tracking-[0.06em] mr-0.5">Instances</span>
+      <button
+        v-for="inst in instances"
+        :key="inst.slug"
+        @click="emit('toggle-instance', inst.slug)"
+        :style="tagStyle(inst.slug, activeInstances.includes(inst.slug))"
+      >{{ inst.name }}</button>
     </div>
   </div>
 </template>
