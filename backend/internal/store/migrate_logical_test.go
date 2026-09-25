@@ -61,3 +61,31 @@ func TestMigrateLogicalNames(t *testing.T) {
 		}
 	}
 }
+
+func TestStampMissingInstanceEmptyObject(t *testing.T) {
+	out, changed, err := stampMissingInstance(`[{}]`, "opensuse")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("expected changed = true")
+	}
+	if out != `[{"instance":"opensuse"}]` {
+		t.Errorf("out = %s, want %s", out, `[{"instance":"opensuse"}]`)
+	}
+}
+
+func TestStampMissingInstanceMixedRow(t *testing.T) {
+	raw := `[{"repo":"R","arch":"x","state":"failed"},{"repo":"R2","arch":"y","state":"succeeded","instance":"percona"}]`
+	out, changed, err := stampMissingInstance(raw, "opensuse")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed {
+		t.Fatal("expected changed = true")
+	}
+	want := `[{"repo":"R","arch":"x","state":"failed","instance":"opensuse"},{"repo":"R2","arch":"y","state":"succeeded","instance":"percona"}]`
+	if out != want {
+		t.Errorf("out = %s, want %s", out, want)
+	}
+}

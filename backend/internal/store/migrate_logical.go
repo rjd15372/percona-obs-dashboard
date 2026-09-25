@@ -43,7 +43,11 @@ func MigrateLogicalNames(db *sql.DB, legacyRoot, slug string) error {
 			return err
 		}
 		out, changed, err := stampMissingInstance(raw, slug)
-		if err != nil || !changed {
+		if err != nil {
+			slog.Warn("store: skipping unparseable targets_json", "project", project, "name", name, "error", err)
+			continue
+		}
+		if !changed {
 			continue
 		}
 		updates = append(updates, update{project, name, out})
@@ -87,11 +91,14 @@ func stampMissingInstance(raw, slug string) (out string, changed bool, err error
 		if _, ok := probe["instance"]; ok {
 			continue
 		}
-		trimmed := bytes.TrimRight(bytes.TrimSpace(t), "}")
+		trimmed := bytes.TrimSuffix(bytes.TrimSpace(t), []byte("}"))
 		trimmed = bytes.TrimRight(trimmed, " \t\n")
 		buf := bytes.Buffer{}
 		buf.Write(trimmed)
-		buf.WriteString(`,"instance":`)
+		if !bytes.HasSuffix(trimmed, []byte("{")) {
+			buf.WriteByte(',')
+		}
+		buf.WriteString(`"instance":`)
 		buf.Write(stamp)
 		buf.WriteByte('}')
 		targets[i] = buf.Bytes()

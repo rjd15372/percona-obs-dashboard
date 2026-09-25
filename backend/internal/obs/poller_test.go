@@ -179,7 +179,7 @@ func TestPollerFetchProjectResultsBypassesLimiter(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 
-	if _, _, _, err := p.fetchProjectResults(ctx, "isv:percona:ppg:devel:17"); err != nil {
+	if _, _, _, err := p.fetchProjectResults(ctx, "ppg:devel:17"); err != nil {
 		t.Fatalf("fetch blocked by exhausted limiter (no bypass): %v", err)
 	}
 	if hits.Load() != 1 {
