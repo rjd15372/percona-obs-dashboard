@@ -144,7 +144,7 @@ func (c *Client) get(ctx context.Context, op, path string) (*http.Response, erro
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		resp.Body.Close()
-		return nil, fmt.Errorf("OBS %s: %s — %s", path, resp.Status, strings.TrimSpace(string(body)))
+		return nil, &StatusError{Path: path, Code: resp.StatusCode, Status: resp.Status, Body: strings.TrimSpace(string(body))}
 	}
 	return resp, nil
 }
@@ -170,7 +170,7 @@ func (c *Client) getFile(ctx context.Context, op, path string) (*http.Response, 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 		resp.Body.Close()
-		return nil, fmt.Errorf("OBS %s: %s — %s", path, resp.Status, strings.TrimSpace(string(body)))
+		return nil, &StatusError{Path: path, Code: resp.StatusCode, Status: resp.Status, Body: strings.TrimSpace(string(body))}
 	}
 	return resp, nil
 }
@@ -196,7 +196,7 @@ func (c *Client) post(ctx context.Context, op, path string) error {
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("OBS %s: %s — %s", path, resp.Status, strings.TrimSpace(string(body)))
+		return &StatusError{Path: path, Code: resp.StatusCode, Status: resp.Status, Body: strings.TrimSpace(string(body))}
 	}
 	return nil
 }
