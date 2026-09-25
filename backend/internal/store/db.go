@@ -43,7 +43,8 @@ CREATE TABLE IF NOT EXISTS events (
     why      TEXT NOT NULL,
     url      TEXT NOT NULL,
     at       DATETIME NOT NULL,
-    version  TEXT NOT NULL DEFAULT ''
+    version  TEXT NOT NULL DEFAULT '',
+    instance TEXT
 );
 
 CREATE INDEX IF NOT EXISTS events_at ON events(at);
@@ -128,6 +129,7 @@ func Open(path string) (*sql.DB, error) {
 	db.Exec(`ALTER TABLE cve_scans ADD COLUMN cve_since DATETIME`)
 	db.Exec(`ALTER TABLE cve_scans ADD COLUMN clean_since DATETIME`)
 	db.Exec(`ALTER TABLE packages ADD COLUMN settled INTEGER NOT NULL DEFAULT 0`)
+	db.Exec(`ALTER TABLE events ADD COLUMN instance TEXT`)
 
 	// cve_scans/cve_periods gained a repo dimension in the primary key.
 	// SQLite can't ALTER a primary key, so rebuild both tables once (when the

@@ -383,7 +383,7 @@ func buildPackage(project, name string, tags []string, targets []PackageBuildSta
 	ok := 0
 	mTargets := make([]model.Target, len(active))
 	for i, t := range active {
-		mTargets[i] = model.Target{Repo: t.Repo, Arch: t.Arch, State: t.State, Details: t.Details}
+		mTargets[i] = model.Target{Repo: t.Repo, Arch: t.Arch, State: t.State, Details: t.Details, Instance: t.Instance}
 		if t.State == "succeeded" {
 			ok++
 		}
@@ -400,4 +400,3 @@ func buildPackage(project, name string, tags []string, targets []PackageBuildSta
 		UpdatedAt:    time.Now().UTC(),
 	}
 }
-

@@ -182,3 +182,26 @@ func TestQueryPRBuildEventsCoversWholePR(t *testing.T) {
 		t.Fatalf("unexpected event from another PR")
 	}
 }
+
+func TestEventInstanceRoundTrip(t *testing.T) {
+	db, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	now := time.Now().UTC()
+	evt := &model.Event{ID: "evt_1", Type: model.EventFailed, Project: "PR:pr-1:ppg:17", Package: "pg",
+		Repo: "R", Arch: "x", What: "w", Why: "", URL: "u", At: now, Instance: "percona"}
+	if err := AppendEvent(db, evt); err != nil {
+		t.Fatal(err)
+	}
+	for name, query := range map[string]func() ([]*model.Event, error){
+		"QueryEvents":    func() ([]*model.Event, error) { return QueryEvents(db, "PR:", now.Add(-time.Minute), now.Add(time.Minute)) },
+		"QueryEventsAny": func() ([]*model.Event, error) { return QueryEventsAny(db, []string{"PR:"}, now.Add(-time.Minute), now.Add(time.Minute)) },
+	} {
+		got, err := query()
+		if err != nil || len(got) != 1 || got[0].Instance != "percona" {
+			t.Errorf("%s: got %+v err %v", name, got, err)
+		}
+	}
+}

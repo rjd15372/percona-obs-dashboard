@@ -19,11 +19,11 @@ func AppendEvent(db *sql.DB, e *model.Event) error {
 		tagsJSON = []byte("[]")
 	}
 	_, err = db.Exec(`
-		INSERT INTO events (id, type, tags, project, package, repo, arch, what, why, url, at, version)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+		INSERT INTO events (id, type, tags, project, package, repo, arch, what, why, url, at, version, instance)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		e.ID, string(e.Type), string(tagsJSON),
 		e.Project, e.Package, nullStr(e.Repo), nullStr(e.Arch),
-		e.What, e.Why, e.URL, e.At, e.Version,
+		e.What, e.Why, e.URL, e.At, e.Version, nullStr(e.Instance),
 	)
 	return err
 }
@@ -33,7 +33,7 @@ func QueryEvents(db *sql.DB, projectPrefix string, from, to time.Time) ([]*model
 	rows, err := db.Query(`
 		SELECT id, type, tags, project, package,
 		       COALESCE(repo,''), COALESCE(arch,''),
-		       what, why, url, at, COALESCE(version,'')
+		       what, why, url, at, COALESCE(version,''), COALESCE(instance,'')
 		FROM events
 		WHERE project LIKE ? AND at >= ? AND at <= ?
 		ORDER BY at DESC
@@ -65,7 +65,7 @@ func QueryEventsAny(db *sql.DB, prefixes []string, from, to time.Time) ([]*model
 	rows, err := db.Query(`
 		SELECT id, type, tags, project, package,
 		       COALESCE(repo,''), COALESCE(arch,''),
-		       what, why, url, at, COALESCE(version,'')
+		       what, why, url, at, COALESCE(version,''), COALESCE(instance,'')
 		FROM events
 		WHERE (`+strings.Join(conds, " OR ")+`) AND at >= ? AND at <= ?
 		ORDER BY at DESC
@@ -88,7 +88,7 @@ func scanEventRows(rows *sql.Rows) ([]*model.Event, error) {
 		var tagsJSON string
 		if err := rows.Scan(
 			&e.ID, &e.Type, &tagsJSON, &e.Project, &e.Package,
-			&e.Repo, &e.Arch, &e.What, &e.Why, &e.URL, &e.At, &e.Version,
+			&e.Repo, &e.Arch, &e.What, &e.Why, &e.URL, &e.At, &e.Version, &e.Instance,
 		); err != nil {
 			return nil, err
 		}
@@ -107,7 +107,7 @@ func QueryPRBuildEvents(db *sql.DB, root, pr string, from, to time.Time) ([]*mod
 	rows, err := db.Query(`
 		SELECT id, type, tags, project, package,
 		       COALESCE(repo,''), COALESCE(arch,''),
-		       what, why, url, at, COALESCE(version,'')
+		       what, why, url, at, COALESCE(version,''), COALESCE(instance,'')
 		FROM events
 		WHERE at >= ? AND at <= ?
 		  AND (project = ? OR project LIKE ? || ':%')
@@ -126,7 +126,7 @@ func QueryPRBuildEvents(db *sql.DB, root, pr string, from, to time.Time) ([]*mod
 		var tagsJSON string
 		if err := rows.Scan(
 			&e.ID, &e.Type, &tagsJSON, &e.Project, &e.Package,
-			&e.Repo, &e.Arch, &e.What, &e.Why, &e.URL, &e.At, &e.Version,
+			&e.Repo, &e.Arch, &e.What, &e.Why, &e.URL, &e.At, &e.Version, &e.Instance,
 		); err != nil {
 			return nil, err
 		}

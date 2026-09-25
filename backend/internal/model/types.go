@@ -155,4 +155,7 @@ type Event struct {
 	Version string    `json:"version,omitempty"`
 	URL     string    `json:"url"`
 	At      time.Time `json:"at"`
+	// Instance is the slug of the OBS instance the event came from; empty for
+	// logical events (e.g. CVE scans).
+	Instance string `json:"instance,omitempty"`
 }
