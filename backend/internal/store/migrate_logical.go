@@ -5,12 +5,18 @@ import (
 	"database/sql"
 	"encoding/json"
 	"log/slog"
+	"time"
 )
+
+// logicalNamesMarker is the meta key recording that MigrateLogicalNames ran.
+const logicalNamesMarker = "logical_names_migrated"
 
 // MigrateLogicalNames converts a single-instance database to root-free
 // logical project names: it strips "<legacyRoot>:" from project columns and
 // stamps slug on targets and target-level events that carry no instance.
-// Idempotent; runs in one transaction.
+// It runs once: a marker in the meta table, written in the same transaction,
+// makes every later call a no-op, so instance-less rows written by a
+// multi-instance deployment never get the legacy slug on restart.
 func MigrateLogicalNames(db *sql.DB, legacyRoot, slug string) error {
 	tx, err := db.Begin()
 	if err != nil {
@@ -18,15 +24,28 @@ func MigrateLogicalNames(db *sql.DB, legacyRoot, slug string) error {
 	}
 	defer tx.Rollback()
 
-	prefix := legacyRoot + ":"
-	for _, table := range []string{"packages", "events", "target_state_durations", "cve_scans", "cve_periods"} {
-		res, err := tx.Exec(`UPDATE `+table+` SET project = substr(project, ?)
-			WHERE substr(project, 1, ?) = ?`, len(prefix)+1, len(prefix), prefix)
-		if err != nil {
-			return err
-		}
-		if n, _ := res.RowsAffected(); n > 0 {
-			slog.Info("store: stripped root from project names", "table", table, "rows", n)
+	if _, err := tx.Exec(`CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`); err != nil {
+		return err
+	}
+	var done int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM meta WHERE key = ?`, logicalNamesMarker).Scan(&done); err != nil {
+		return err
+	}
+	if done > 0 {
+		return nil
+	}
+
+	if legacyRoot != "" {
+		prefix := legacyRoot + ":"
+		for _, table := range []string{"packages", "events", "target_state_durations", "cve_scans", "cve_periods"} {
+			res, err := tx.Exec(`UPDATE `+table+` SET project = substr(project, ?)
+				WHERE substr(project, 1, ?) = ?`, len(prefix)+1, len(prefix), prefix)
+			if err != nil {
+				return err
+			}
+			if n, _ := res.RowsAffected(); n > 0 {
+				slog.Info("store: stripped root from project names", "table", table, "rows", n)
+			}
 		}
 	}
 
@@ -65,6 +84,10 @@ func MigrateLogicalNames(db *sql.DB, legacyRoot, slug string) error {
 
 	if _, err := tx.Exec(`UPDATE events SET instance = ?
 		WHERE instance IS NULL AND repo IS NOT NULL AND repo != ''`, slug); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`INSERT INTO meta (key, value) VALUES (?, ?)`,
+		logicalNamesMarker, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
 		return err
 	}
 	return tx.Commit()
