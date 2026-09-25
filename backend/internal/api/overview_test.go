@@ -123,7 +123,7 @@ func TestOverviewHandlerWindowValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	h := overviewHandler(db, "isv:percona", newOverviewCache(time.Minute))
+	h := overviewHandler(db, "isv:percona", "opensuse", newOverviewCache(time.Minute))
 
 	for _, tc := range []struct {
 		q    string
@@ -143,7 +143,7 @@ func TestOverviewHandlerCaches(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	h := overviewHandler(db, "isv:percona", newOverviewCache(time.Minute))
+	h := overviewHandler(db, "isv:percona", "opensuse", newOverviewCache(time.Minute))
 
 	w := httptest.NewRecorder()
 	h(w, httptest.NewRequest(http.MethodGet, "/api/overview", nil))

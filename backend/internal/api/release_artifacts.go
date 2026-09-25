@@ -35,6 +35,7 @@ type ReleasePackageArtifact struct {
 	Arch     string           `json:"arch"`
 	Binaries []ArtifactBinary `json:"binaries"`
 	BuiltAt  string           `json:"built_at"`
+	Instance string           `json:"instance,omitempty"`
 }
 
 type ReleaseContainerArtifact struct {
@@ -48,15 +49,17 @@ type ReleaseContainerArtifact struct {
 	MTime     int64           `json:"mtime"`
 	BuiltAt   string          `json:"built_at"`
 	CveScans  []model.CveScan `json:"cve_scans,omitempty"`
+	Instance  string          `json:"instance,omitempty"`
 }
 
 type ReleaseTarballArtifact struct {
-	Project string `json:"project"`
-	Name    string `json:"name"`
-	Version string `json:"version"`
-	Repo    string `json:"repo"`
-	Arch    string `json:"arch"`
-	BuiltAt string `json:"built_at"`
+	Project  string `json:"project"`
+	Name     string `json:"name"`
+	Version  string `json:"version"`
+	Repo     string `json:"repo"`
+	Arch     string `json:"arch"`
+	BuiltAt  string `json:"built_at"`
+	Instance string `json:"instance,omitempty"`
 }
 
 type ReleaseArtifactsResponse struct {
@@ -128,9 +131,9 @@ func (c *releaseArtifactsCache) Get(ctx context.Context, key string, fetch func(
 	return response, err
 }
 
-func releaseArtifactsHandler(db *sql.DB, obsClient *obs.Client, root string, cache *releaseArtifactsCache) http.HandlerFunc {
+func releaseArtifactsHandler(db *sql.DB, fleet *obs.Fleet, root string, cache *releaseArtifactsCache) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if obsClient == nil {
+		if fleet == nil {
 			http.Error(w, "OBS client not configured", http.StatusServiceUnavailable)
 			return
 		}
@@ -141,7 +144,7 @@ func releaseArtifactsHandler(db *sql.DB, obsClient *obs.Client, root string, cac
 		}
 
 		response, err := cache.Get(r.Context(), version, func(ctx context.Context) (ReleaseArtifactsResponse, error) {
-			return buildReleaseArtifacts(ctx, obsClient, root, version)
+			return buildReleaseArtifacts(ctx, fleet, root, version)
 		})
 		if err != nil {
 			http.Error(w, "failed to fetch release artifacts: "+err.Error(), http.StatusBadGateway)
@@ -176,7 +179,7 @@ func attachReleaseCveScans(db *sql.DB, images []ReleaseContainerArtifact) {
 	}
 }
 
-func buildReleaseArtifacts(ctx context.Context, client *obs.Client, root, version string) (ReleaseArtifactsResponse, error) {
+func buildReleaseArtifacts(ctx context.Context, client *obs.Fleet, root, version string) (ReleaseArtifactsResponse, error) {
 	project := fmt.Sprintf("%s:ppg:releases:%s", root, version)
 	binaries, err := client.ProjectBinaryList(ctx, project)
 	if err != nil {
@@ -230,9 +233,10 @@ func buildReleaseArtifacts(ctx context.Context, client *obs.Client, root, versio
 // subprojectCandidates lists the projects that may hold a release subproject's
 // artifacts, covering BOTH layouts:
 //   - flat/new:   <base>:<sub>        (artifacts built against per-flavor repos,
-//                                       e.g. …:releases:18:containers on ubi8/ubi9,
-//                                       …:releases:18:tarballs on ssl1.1/ssl3/…)
+//     e.g. …:releases:18:containers on ubi8/ubi9,
+//     …:releases:18:tarballs on ssl1.1/ssl3/…)
 //   - nested/old: <base>:<sub>:<x>    (flavor baked into the project name)
+//
 // SearchProjects only returns nested sub-namespaces — its XPath appends ':' — so
 // the flat project is added explicitly here (deduped), which is what the flat
 // layout needs. Order: flat first, then any nested projects from the search.
@@ -253,7 +257,7 @@ func subprojectCandidates(base, sub string, searched []string) []string {
 // project for a release subproject. Per-project list errors are logged and
 // skipped — an absent subproject (e.g. a version with no tarballs, or no flat
 // project in the old layout) means "no such artifacts", not a failed response.
-func collectSubprojectBinaries(ctx context.Context, client *obs.Client, base, sub string) []obs.BinaryArtifact {
+func collectSubprojectBinaries(ctx context.Context, client *obs.Fleet, base, sub string) []obs.BinaryArtifact {
 	prefix := base + ":" + sub
 	searched, err := client.SearchProjects(ctx, prefix)
 	if err != nil {
@@ -291,6 +295,7 @@ func buildReleasePackageArtifacts(binaries []obs.BinaryArtifact, versions map[st
 				RepoName: repoDisplayName(binary.Repo),
 				RepoType: repoType(binary.Repo),
 				Arch:     binary.Arch,
+				Instance: binary.Instance,
 			}
 			byKey[key] = artifact
 		}
@@ -325,7 +330,7 @@ func buildReleasePackageArtifacts(binaries []obs.BinaryArtifact, versions map[st
 	return out
 }
 
-func buildReleaseContainerArtifacts(ctx context.Context, client *obs.Client, binaries []obs.BinaryArtifact) []ReleaseContainerArtifact {
+func buildReleaseContainerArtifacts(ctx context.Context, client *obs.Fleet, binaries []obs.BinaryArtifact) []ReleaseContainerArtifact {
 	byKey := map[string]*ReleaseContainerArtifact{}
 	seenTags := map[string]map[string]bool{}
 	for _, binary := range binaries {
@@ -340,7 +345,8 @@ func buildReleaseContainerArtifacts(ctx context.Context, client *obs.Client, bin
 				ImageName: binary.Package,
 				Repo:      binary.Repo,
 				BaseOS:    deriveBaseOS(binary.Project, binary.Repo),
-				Registry:  containerRegistryPath(binary.Project, binary.Repo, binary.Package),
+				Registry:  client.InstanceOrDefault(binary.Instance).ImageBase(binary.Project, binary.Repo, binary.Package),
+				Instance:  binary.Instance,
 			}
 			byKey[key] = artifact
 			seenTags[key] = map[string]bool{}
@@ -399,10 +405,11 @@ func buildReleaseTarballArtifacts(binaries []obs.BinaryArtifact) []ReleaseTarbal
 		artifact := byKey[key]
 		if artifact == nil {
 			artifact = &ReleaseTarballArtifact{
-				Project: binary.Project,
-				Name:    binary.Package,
-				Repo:    binary.Repo,
-				Arch:    binary.Arch,
+				Project:  binary.Project,
+				Name:     binary.Package,
+				Repo:     binary.Repo,
+				Arch:     binary.Arch,
+				Instance: binary.Instance,
 			}
 			byKey[key] = artifact
 		}
@@ -505,15 +512,6 @@ func baseOSFromRepo(repo string) string {
 	default:
 		return ""
 	}
-}
-
-// containerRegistryPath builds the OBS registry pull path for a container
-// package built in a given repo. The base-image repo (ubi8/ubi9/…) is a path
-// segment; legacy release containers use the repo literally named "images",
-// reproducing the pre-restructure path. (Same formula as cve.ImageBase; kept
-// local to avoid an api→cve import for a one-liner.)
-func containerRegistryPath(project, repo, name string) string {
-	return "registry.opensuse.org/" + strings.ReplaceAll(project, ":", "/") + "/" + repo + "/" + name
 }
 
 // deriveBaseOS returns the base-OS display label for a container build,

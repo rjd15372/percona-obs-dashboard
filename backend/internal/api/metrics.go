@@ -26,12 +26,13 @@ type ClientCounter interface{ Clients() int }
 type PollState interface{ State() string }
 
 type metricsResponse struct {
-	OBS           obsSection     `json:"obs"`
-	Limiter       limiterSection `json:"limiter"`
-	WorkingSet    wsSection      `json:"working_set"`
-	UptimeSeconds int64          `json:"uptime_seconds"`
-	SSEClients    int            `json:"sse_clients"`
-	Polling       string         `json:"polling"`
+	OBS           obsSection           `json:"obs"`
+	Limiter       limiterSection       `json:"limiter"`
+	WorkingSet    wsSection            `json:"working_set"`
+	UptimeSeconds int64                `json:"uptime_seconds"`
+	SSEClients    int                  `json:"sse_clients"`
+	Polling       string               `json:"polling"`
+	ByInstance    []obs.InstanceStatus `json:"by_instance"`
 }
 
 type obsSection struct {
@@ -63,14 +64,14 @@ type wsSection struct {
 // series, and the oldest persisted sample timestamp, limiter gauges,
 // working-set stats, process uptime, connected SSE clients, and the
 // current polling state (active/idle).
-func metricsHandler(obsClient *obs.Client, ws Statter, clients ClientCounter, db *sql.DB, gate PollState) http.HandlerFunc {
+func metricsHandler(fleet *obs.Fleet, ws Statter, clients ClientCounter, db *sql.DB, gate PollState) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		byEndpoint := obsClient.MetricsSnapshot()
+		byEndpoint := fleet.MetricsSnapshot()
 		var total int64
 		for _, v := range byEndpoint {
 			total += v
 		}
-		ls := obsClient.LimiterStats()
+		ls := fleet.LimiterStats()
 		s := ws.Stats()
 
 		now := time.Now().UTC()
@@ -104,7 +105,7 @@ func metricsHandler(obsClient *obs.Client, ws Statter, clients ClientCounter, db
 			OBS: obsSection{
 				Total:        total,
 				ByEndpoint:   byEndpoint,
-				ReqPerS:      obsClient.RatePerSecond(),
+				ReqPerS:      fleet.RatePerSecond(),
 				Windows:      windows,
 				WindowsPrev:  prev,
 				Series:       series,
@@ -124,6 +125,7 @@ func metricsHandler(obsClient *obs.Client, ws Statter, clients ClientCounter, db
 			UptimeSeconds: int64(time.Since(processStart).Seconds()),
 			SSEClients:    clients.Clients(),
 			Polling:       gate.State(),
+			ByInstance:    fleet.Statuses(),
 		})
 	}
 }

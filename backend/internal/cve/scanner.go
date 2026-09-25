@@ -15,10 +15,9 @@ import (
 	"github.com/oklog/ulid/v2"
 	hubpkg "github.com/percona/obs-dashboard/internal/hub"
 	"github.com/percona/obs-dashboard/internal/model"
+	"github.com/percona/obs-dashboard/internal/obs"
 	"github.com/percona/obs-dashboard/internal/store"
 )
-
-const obsBase = "https://build.opensuse.org"
 
 var obsToDockerPlatform = map[string]string{
 	"x86_64":  "amd64",
@@ -41,6 +40,15 @@ type ScanRequest struct {
 // ExecFn is the signature for running an external command and capturing output.
 type ExecFn func(ctx context.Context, name string, args ...string) ([]byte, error)
 
+// URLResolver builds registry and OBS URLs for a target's instance.
+type URLResolver interface {
+	ImageBase(instance, project, repo, name string) string
+	PackageURL(instance, project, pkg string) string
+}
+
+// WithURLs sets the URL resolver (the Fleet in production).
+func WithURLs(r URLResolver) Option { return func(s *Scanner) { s.urls = r } }
+
 // Scanner queues and executes CVE scans via trivy.
 type Scanner struct {
 	queue     chan ScanRequest
@@ -49,6 +57,7 @@ type Scanner struct {
 	workers   int
 	execFn    ExecFn
 	enqueueFn func(ScanRequest)
+	urls      URLResolver
 	// trivyMu serializes trivy invocations: trivy uses a shared FS cache that
 	// cannot be accessed by more than one process at a time.
 	trivyMu sync.Mutex
@@ -71,6 +80,7 @@ func NewScanner(db *sql.DB, h *hubpkg.Hub, workers int, opts ...Option) *Scanner
 		hub:     h,
 		workers: workers,
 		execFn:  defaultExec,
+		urls:    obs.SingleFleet(nil, ""),
 	}
 	for _, o := range opts {
 		o(s)
@@ -135,22 +145,22 @@ func (s *Scanner) scanPackage(ctx context.Context, req ScanRequest) {
 			continue
 		}
 
-		imageRef := ImageBase(req.Project, target.Repo, req.Package) + ":" + req.PrimaryTag
-
-		obsURL := fmt.Sprintf("%s/package/show/%s/%s", obsBase, req.Project, req.Package)
+		imageRef := s.urls.ImageBase(target.Instance, req.Project, target.Repo, req.Package) + ":" + req.PrimaryTag
+		obsURL := s.urls.PackageURL(target.Instance, req.Project, req.Package)
 		s.appendEvent(&model.Event{
-			ID:      "evt_" + ulid.Make().String(),
-			Type:    model.EventCVEScanStarted,
-			Tags:    req.Tags,
-			Project: req.Project,
-			Package: req.Package,
-			Repo:    target.Repo,
-			Arch:    target.Arch,
-			What:    "CVE scan started",
-			Why:     "",
-			Version: req.PrimaryTag,
-			URL:     obsURL,
-			At:      time.Now().UTC(),
+			ID:       "evt_" + ulid.Make().String(),
+			Type:     model.EventCVEScanStarted,
+			Tags:     req.Tags,
+			Project:  req.Project,
+			Package:  req.Package,
+			Repo:     target.Repo,
+			Arch:     target.Arch,
+			What:     "CVE scan started",
+			Why:      "",
+			Version:  req.PrimaryTag,
+			URL:      obsURL,
+			At:       time.Now().UTC(),
+			Instance: target.Instance,
 		})
 
 		slog.Info("cve: scanning", "pkg", req.Package, "arch", target.Arch, "image", imageRef)
@@ -158,18 +168,19 @@ func (s *Scanner) scanPackage(ctx context.Context, req ScanRequest) {
 		if err != nil {
 			slog.Warn("cve: trivy failed", "pkg", req.Package, "arch", target.Arch, "err", err)
 			s.appendEvent(&model.Event{
-				ID:      "evt_" + ulid.Make().String(),
-				Type:    model.EventCVEScanFailed,
-				Tags:    req.Tags,
-				Project: req.Project,
-				Package: req.Package,
-				Repo:    target.Repo,
-				Arch:    target.Arch,
-				What:    "CVE scan failed",
-				Why:     err.Error(),
-				Version: req.PrimaryTag,
-				URL:     obsURL,
-				At:      time.Now().UTC(),
+				ID:       "evt_" + ulid.Make().String(),
+				Type:     model.EventCVEScanFailed,
+				Tags:     req.Tags,
+				Project:  req.Project,
+				Package:  req.Package,
+				Repo:     target.Repo,
+				Arch:     target.Arch,
+				What:     "CVE scan failed",
+				Why:      err.Error(),
+				Version:  req.PrimaryTag,
+				URL:      obsURL,
+				At:       time.Now().UTC(),
+				Instance: target.Instance,
 			})
 			continue
 		}
@@ -185,18 +196,19 @@ func (s *Scanner) scanPackage(ctx context.Context, req ScanRequest) {
 		}
 		slog.Info("cve: scan complete", "pkg", req.Package, "arch", target.Arch, "critical", scan.CriticalCount, "high", scan.HighCount)
 		s.appendEvent(&model.Event{
-			ID:      "evt_" + ulid.Make().String(),
-			Type:    model.EventCVEScanFinished,
-			Tags:    req.Tags,
-			Project: req.Project,
-			Package: req.Package,
-			Repo:    target.Repo,
-			Arch:    target.Arch,
-			What:    "CVE scan finished",
-			Why:     why,
-			Version: req.PrimaryTag,
-			URL:     obsURL,
-			At:      time.Now().UTC(),
+			ID:       "evt_" + ulid.Make().String(),
+			Type:     model.EventCVEScanFinished,
+			Tags:     req.Tags,
+			Project:  req.Project,
+			Package:  req.Package,
+			Repo:     target.Repo,
+			Arch:     target.Arch,
+			What:     "CVE scan finished",
+			Why:      why,
+			Version:  req.PrimaryTag,
+			URL:      obsURL,
+			At:       time.Now().UTC(),
+			Instance: target.Instance,
 		})
 	}
 
@@ -291,16 +303,8 @@ func (s *Scanner) appendEvent(evt *model.Event) {
 	s.hub.Notify(hubpkg.NewEvent(evt))
 }
 
-// ImageBase constructs the OBS container registry path for a package's build
-// in a given repo (the base-image distro, e.g. "ubi9"; older containers built
-// against a repo literally named "images"). Example:
-// ("isv:percona:ppg:staging:17:containers", "ubi9", "pg") →
-// "registry.opensuse.org/isv/percona/ppg/staging/17/containers/ubi9/pg"
-func ImageBase(project, repo, name string) string {
-	return "registry.opensuse.org/" +
-		strings.ToLower(strings.ReplaceAll(project, ":", "/")) +
-		"/" + repo + "/" + name
-}
+// ScanNow runs one request synchronously (tests).
+func (s *Scanner) ScanNow(ctx context.Context, req ScanRequest) { s.scanPackage(ctx, req) }
 
 // SucceededTargets returns targets with state "succeeded". For release containers
 // whose builds are intentionally disabled, all targets have state "disabled" —

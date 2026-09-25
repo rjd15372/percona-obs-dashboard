@@ -29,8 +29,9 @@ func (f fakePollState) State() string { return f.s }
 func (f fakePollState) Heartbeat() {}
 
 func TestMetricsHandler(t *testing.T) {
-	c := obs.NewClient("https://obs.example", "u", "p")
-	c.SetMinuteBudget(60)
+	oc := obs.NewClient("https://obs.example", "u", "p")
+	oc.SetMinuteBudget(60)
+	c := obs.SingleFleet(oc, "isv:percona")
 	ws := fakeStatter{s: workingset.Stats{
 		Total:    214,
 		Inflight: 3,

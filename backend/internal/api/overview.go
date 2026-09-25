@@ -96,11 +96,21 @@ type OverviewProject struct {
 }
 
 type OverviewSnapshot struct {
-	Window                     string            `json:"window"`
-	GeneratedAt                string            `json:"generated_at"`
-	PreviousWindowRebuildTotal int               `json:"previous_window_rebuild_total"`
-	TopRepo                    *OverviewCount    `json:"top_repo,omitempty"`
-	Projects                   []OverviewProject `json:"projects"`
+	Window                     string             `json:"window"`
+	GeneratedAt                string             `json:"generated_at"`
+	PreviousWindowRebuildTotal int                `json:"previous_window_rebuild_total"`
+	TopRepo                    *OverviewCount     `json:"top_repo,omitempty"`
+	Projects                   []OverviewProject  `json:"projects"`
+	ByInstance                 []OverviewInstance `json:"by_instance"`
+}
+
+// OverviewInstance is one instance's live target tally.
+type OverviewInstance struct {
+	Instance string `json:"instance"`
+	OK       int    `json:"ok"`
+	Failing  int    `json:"failing"`
+	Building int    `json:"building"`
+	Blocked  int    `json:"blocked"`
 }
 
 var overviewWindows = map[string]time.Duration{
@@ -311,8 +321,35 @@ func (c *overviewCache) Get(ctx context.Context, key string, fetch func(context.
 
 // ── handler ──
 
+// mergeInstanceCounts folds unstamped (pre-migration) targets into the
+// default instance and returns rows sorted by slug.
+func mergeInstanceCounts(counts []store.InstanceTargetCounts, defaultSlug string) []OverviewInstance {
+	by := map[string]*OverviewInstance{}
+	for _, c := range counts {
+		slug := c.Instance
+		if slug == "" {
+			slug = defaultSlug
+		}
+		o := by[slug]
+		if o == nil {
+			o = &OverviewInstance{Instance: slug}
+			by[slug] = o
+		}
+		o.OK += c.OK
+		o.Failing += c.Failing
+		o.Building += c.Building
+		o.Blocked += c.Blocked
+	}
+	out := make([]OverviewInstance, 0, len(by))
+	for _, o := range by {
+		out = append(out, *o)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Instance < out[j].Instance })
+	return out
+}
+
 // overviewHandler serves GET /api/overview?window=24h|48h|7d.
-func overviewHandler(db *sql.DB, root string, cache *overviewCache) http.HandlerFunc {
+func overviewHandler(db *sql.DB, root, defaultSlug string, cache *overviewCache) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		window := r.URL.Query().Get("window")
 		if window == "" {
@@ -341,7 +378,13 @@ func overviewHandler(db *sql.DB, root string, cache *overviewCache) http.Handler
 			if err != nil {
 				return OverviewSnapshot{}, err
 			}
-			return buildOverviewSnapshot(root, window, now, cur, prev, scans, periods), nil
+			snap := buildOverviewSnapshot(root, window, now, cur, prev, scans, periods)
+			counts, err := store.QueryTargetCountsByInstance(db)
+			if err != nil {
+				return OverviewSnapshot{}, err
+			}
+			snap.ByInstance = mergeInstanceCounts(counts, defaultSlug)
+			return snap, nil
 		})
 		if err != nil {
 			http.Error(w, "internal server error", http.StatusInternalServerError)

@@ -56,7 +56,7 @@ func run() error {
 	h := hub.New()
 	gate := presence.New(cfg.Idle.Enabled, cfg.Idle.Linger)
 
-	scanner := cve.NewScanner(db, h, 2)
+	scanner := cve.NewScanner(db, h, 2, cve.WithURLs(fleet))
 	scanner.Start(ctx)
 
 	nightlySched := cve.NewNightlyScheduler(db, scanner)
@@ -98,7 +98,7 @@ func run() error {
 	}
 	go runPruner(ctx, db, cfg.Poller.Interval, cfg.Store.EventRetention, cfg.Store.MetricsRetention)
 
-	sampler := &metricsampler.Sampler{DB: db, Snap: obsClient}
+	sampler := &metricsampler.Sampler{DB: db, Snap: fleet}
 	go sampler.Run(ctx)
 
 	if cfg.Unblocker.Enabled {
@@ -112,12 +112,16 @@ func run() error {
 		Interval: cfg.Telemetry.Interval,
 		Enabled:  telemetryEnabled,
 		Stats:    ws,
-		Snap:     obsClient,
-		Limiter:  obsClient,
+		Snap:     fleet,
+		Limiter:  fleet,
 	}
 	go reporter.Run(ctx)
 
-	router := api.NewRouter(db, h, obsClient, cfg.OBSRoot, ws, telemetryEnabled, cfg.Telemetry.Interval, gate)
+	router := api.NewRouter(db, h, fleet, cfg.OBSRoot, ws, telemetryEnabled, cfg.Telemetry.Interval, gate)
+
+	go fleet.RunHealthWatch(ctx, 15*time.Second, func(slug string, health obs.Health) {
+		h.Notify(hub.InstanceHealth(map[string]any{"slug": slug, "health": health}))
+	})
 
 	var handler http.Handler = router
 	if cfg.Server.FrontendDir != "" {

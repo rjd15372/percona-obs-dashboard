@@ -39,7 +39,7 @@ func setupTestServer(t *testing.T) http.Handler {
 	}
 	t.Cleanup(func() { db.Close() })
 	obsSrv := stubOBSServer(t)
-	obsClient := obs.NewClient(obsSrv.URL, "user", "pass")
+	obsClient := obs.SingleFleet(obs.NewClient(obsSrv.URL, "user", "pass"), "isv:percona")
 	return NewRouter(db, hub.New(), obsClient, "isv:percona", fakeStatter{}, new(atomic.Bool), time.Duration(0), fakePollState{s: "active"})
 }
 
@@ -272,7 +272,7 @@ func TestReposSubprojectParam(t *testing.T) {
 	}
 	t.Cleanup(func() { db.Close() })
 	obsSrv := stubOBSServer(t)
-	obsClient := obs.NewClient(obsSrv.URL, "user", "pass")
+	obsClient := obs.SingleFleet(obs.NewClient(obsSrv.URL, "user", "pass"), "isv:percona")
 	router := NewRouter(db, hub.New(), obsClient, "isv:percona", fakeStatter{}, new(atomic.Bool), time.Duration(0), fakePollState{s: "active"})
 
 	falseVal := false
@@ -363,7 +363,7 @@ func TestRebuildHandler_Success(t *testing.T) {
 	}))
 	defer obsSrv.Close()
 
-	obsClient := obs.NewClient(obsSrv.URL, "user", "pass")
+	obsClient := obs.SingleFleet(obs.NewClient(obsSrv.URL, "user", "pass"), "isv:percona")
 	handler := rebuildHandler(obsClient)
 
 	var logBuf bytes.Buffer
@@ -394,7 +394,7 @@ func TestRebuildHandler_Success(t *testing.T) {
 }
 
 func TestRebuildHandler_MissingField(t *testing.T) {
-	obsClient := obs.NewClient("http://example.com", "user", "pass")
+	obsClient := obs.SingleFleet(obs.NewClient("http://example.com", "user", "pass"), "isv:percona")
 	handler := rebuildHandler(obsClient)
 
 	// missing arch and package
@@ -415,7 +415,7 @@ func TestRebuildHandler_OBSError(t *testing.T) {
 	}))
 	defer obsSrv.Close()
 
-	obsClient := obs.NewClient(obsSrv.URL, "user", "pass")
+	obsClient := obs.SingleFleet(obs.NewClient(obsSrv.URL, "user", "pass"), "isv:percona")
 	handler := rebuildHandler(obsClient)
 
 	body := `{"project":"isv:percona:ppg:17","repo":"RockyLinux_9","arch":"x86_64","package":"percona-pg_tde"}`
@@ -430,7 +430,7 @@ func TestRebuildHandler_OBSError(t *testing.T) {
 }
 
 func TestRebuildHandler_InvalidJSON(t *testing.T) {
-	obsClient := obs.NewClient("http://example.com", "user", "pass")
+	obsClient := obs.SingleFleet(obs.NewClient("http://example.com", "user", "pass"), "isv:percona")
 	handler := rebuildHandler(obsClient)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/rebuild", strings.NewReader("not-json"))
@@ -613,7 +613,7 @@ func TestEventsHandlerIncludesCommonTrees(t *testing.T) {
 	}
 	t.Cleanup(func() { db.Close() })
 	obsSrv := stubOBSServer(t)
-	obsClient := obs.NewClient(obsSrv.URL, "user", "pass")
+	obsClient := obs.SingleFleet(obs.NewClient(obsSrv.URL, "user", "pass"), "isv:percona")
 	router := NewRouter(db, hub.New(), obsClient, "isv:percona", fakeStatter{}, new(atomic.Bool), time.Duration(0), fakePollState{s: "active"})
 
 	now := time.Now().UTC()

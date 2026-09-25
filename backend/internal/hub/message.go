@@ -27,3 +27,10 @@ func NewEvent(evt *model.Event) []byte {
 	out, _ := json.Marshal(Msg{Type: "new_event", Data: d})
 	return out
 }
+
+// InstanceHealth serialises an OBS instance health change for the SSE stream.
+func InstanceHealth(payload any) []byte {
+	d, _ := json.Marshal(payload)
+	out, _ := json.Marshal(Msg{Type: "instance_health", Data: d})
+	return out
+}

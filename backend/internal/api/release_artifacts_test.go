@@ -155,16 +155,6 @@ func TestDeriveBaseOS(t *testing.T) {
 	}
 }
 
-func TestContainerRegistryPath(t *testing.T) {
-	if got := containerRegistryPath("isv:percona:ppg:staging:17:containers", "ubi9", "pg"); got != "registry.opensuse.org/isv/percona/ppg/staging/17/containers/ubi9/pg" {
-		t.Errorf("new layout: got %q", got)
-	}
-	// Old layout (repo=images) reproduces the pre-change path exactly.
-	if got := containerRegistryPath("isv:percona:ppg:17:containers:ubi9", "images", "pg"); got != "registry.opensuse.org/isv/percona/ppg/17/containers/ubi9/images/pg" {
-		t.Errorf("old layout: got %q", got)
-	}
-}
-
 func TestBuildReleaseContainerArtifactsPerRepo(t *testing.T) {
 	// Tags endpoint 404s → tags stay empty (tolerated); we assert keying,
 	// base OS, registry, and repo per artifact.
@@ -172,7 +162,7 @@ func TestBuildReleaseContainerArtifactsPerRepo(t *testing.T) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer srv.Close()
-	client := obs.NewClient(srv.URL, "u", "p")
+	client := obs.SingleFleet(obs.NewClient(srv.URL, "u", "p"), "isv:percona")
 
 	binaries := []obs.BinaryArtifact{
 		{Project: "isv:percona:ppg:staging:17:containers", Package: "pg", Repo: "ubi8", Arch: "x86_64", Filename: "pg.containerinfo"},

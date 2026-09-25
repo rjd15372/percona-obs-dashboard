@@ -18,14 +18,6 @@ const trivyVulnJSON = `{"SchemaVersion":2,"Results":[{"Vulnerabilities":[
 	{"VulnerabilityID":"CVE-2024-2","PkgName":"libz","InstalledVersion":"1.2.11","FixedVersion":"1.2.12","Severity":"HIGH","Title":"zlib bug"}
 ]}]}`
 
-func TestImageBase(t *testing.T) {
-	got := cve.ImageBase("isv:percona:ppg:staging:17:containers", "ubi9", "percona-distribution-postgresql")
-	want := "registry.opensuse.org/isv/percona/ppg/staging/17/containers/ubi9/percona-distribution-postgresql"
-	if got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
-}
-
 func TestSucceededTargets(t *testing.T) {
 	targets := []model.Target{
 		{Arch: "x86_64", State: "succeeded"},
@@ -189,5 +181,35 @@ func TestWithEnqueueFn(t *testing.T) {
 		}
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("enqueueFn was not called")
+	}
+}
+
+type stubURLs struct{}
+
+func (stubURLs) ImageBase(slug, project, repo, name string) string {
+	return "reg." + slug + "/" + project + "/" + repo + "/" + name
+}
+func (stubURLs) PackageURL(slug, project, pkg string) string {
+	return "https://" + slug + "/" + project + "/" + pkg
+}
+
+func TestScannerUsesTargetInstanceURLs(t *testing.T) {
+	db, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var gotRef string
+	exec := func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		gotRef = args[len(args)-1]
+		return []byte(`{"Results":[]}`), nil
+	}
+	s := cve.NewScanner(db, hub.New(), 1, cve.WithExecFn(exec), cve.WithURLs(stubURLs{}))
+	s.ScanNow(context.Background(), cve.ScanRequest{
+		Project: "ppg:17:containers", Package: "pg", PrimaryTag: "17.5",
+		Targets: []model.Target{{Repo: "ubi9", Arch: "x86_64", State: "succeeded", Instance: "percona"}},
+	})
+	if gotRef != "reg.percona/ppg:17:containers/ubi9/pg:17.5" {
+		t.Errorf("image ref = %q", gotRef)
 	}
 }

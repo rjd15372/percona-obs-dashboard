@@ -97,9 +97,9 @@ func (c *binaryListCache) Get(ctx context.Context, key string, fetch func(contex
 	return binaries, err
 }
 
-func artifactMetadataHandler(obsClient *obs.Client, cache *binaryListCache) http.HandlerFunc {
+func artifactMetadataHandler(fleet *obs.Fleet, cache *binaryListCache) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if obsClient == nil {
+		if fleet == nil {
 			http.Error(w, "OBS client not configured", http.StatusServiceUnavailable)
 			return
 		}
@@ -119,7 +119,7 @@ func artifactMetadataHandler(obsClient *obs.Client, cache *binaryListCache) http
 		projectBinaries := make(map[string][]obs.BinaryArtifact, len(projects))
 		for project := range projects {
 			bins, err := cache.Get(r.Context(), project, func(ctx context.Context) ([]obs.BinaryArtifact, error) {
-				return obsClient.ProjectBinaryList(ctx, project)
+				return fleet.ProjectBinaryList(ctx, project)
 			})
 			if err != nil {
 				// Metadata is best-effort: log and return empty results for this project

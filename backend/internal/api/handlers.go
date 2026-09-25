@@ -398,7 +398,7 @@ func prReposHandler(db *sql.DB, root string) http.HandlerFunc {
 // binariesHandler returns a handler for GET /api/binaries.
 // Query params: project, repo, arch, package.
 // It proxies the OBS binary listing API and returns distributable filenames as JSON.
-func binariesHandler(obsClient *obs.Client) http.HandlerFunc {
+func binariesHandler(fleet *obs.Fleet) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		project := r.URL.Query().Get("project")
 		repo := r.URL.Query().Get("repo")
@@ -408,12 +408,12 @@ func binariesHandler(obsClient *obs.Client) http.HandlerFunc {
 			http.Error(w, "project, repo, arch, package are required", http.StatusBadRequest)
 			return
 		}
-		if obsClient == nil {
+		if fleet == nil {
 			http.Error(w, "OBS client not configured", http.StatusServiceUnavailable)
 			return
 		}
 
-		filenames, err := obsClient.PackageBinaries(r.Context(), project, repo, arch, pkg)
+		filenames, err := fleet.PackageBinaries(r.Context(), project, repo, arch, pkg)
 		if err != nil {
 			http.Error(w, "failed to fetch binaries: "+err.Error(), http.StatusBadGateway)
 			return
@@ -468,9 +468,9 @@ func worstRollup(pkgs []*model.Package) model.RollupState {
 
 // rebuildHandler returns a handler for POST /api/rebuild.
 // Decodes {"project","repo","arch","package"} JSON body and triggers an OBS rebuild.
-func rebuildHandler(obsClient *obs.Client) http.HandlerFunc {
+func rebuildHandler(fleet *obs.Fleet) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if obsClient == nil {
+		if fleet == nil {
 			http.Error(w, "OBS client not configured", http.StatusServiceUnavailable)
 			return
 		}
@@ -488,7 +488,7 @@ func rebuildHandler(obsClient *obs.Client) http.HandlerFunc {
 			http.Error(w, "project, repo, arch, package are required", http.StatusBadRequest)
 			return
 		}
-		if err := obsClient.Rebuild(r.Context(), body.Project, body.Repo, body.Arch, body.Package); err != nil {
+		if err := fleet.Rebuild(r.Context(), body.Project, body.Repo, body.Arch, body.Package); err != nil {
 			slog.Warn("api: rebuild trigger failed",
 				"project", body.Project, "package", body.Package, "repo", body.Repo, "arch", body.Arch, "err", err)
 			http.Error(w, err.Error(), http.StatusBadGateway)
