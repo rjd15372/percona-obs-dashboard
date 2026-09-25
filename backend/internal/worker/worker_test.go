@@ -26,7 +26,7 @@ type captureTask struct {
 	seen []*model.Package
 }
 
-func (t *captureTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package, _ *obs.Env) error {
+func (t *captureTask) Run(_ context.Context, _ *obs.Fleet, pkg *model.Package, _ *obs.Env) error {
 	t.mu.Lock()
 	t.seen = append(t.seen, pkg)
 	t.mu.Unlock()
@@ -35,20 +35,20 @@ func (t *captureTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package, 
 
 type errorTask struct{}
 
-func (t errorTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package, _ *obs.Env) error {
+func (t errorTask) Run(_ context.Context, _ *obs.Fleet, pkg *model.Package, _ *obs.Env) error {
 	return errors.New("task error")
 }
 
 type succeedingTask struct{}
 
-func (t succeedingTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package, _ *obs.Env) error {
+func (t succeedingTask) Run(_ context.Context, _ *obs.Fleet, pkg *model.Package, _ *obs.Env) error {
 	pkg.RollupState = model.RollupSucceeded
 	return nil
 }
 
 type publishedTask struct{}
 
-func (t publishedTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package, _ *obs.Env) error {
+func (t publishedTask) Run(_ context.Context, _ *obs.Fleet, pkg *model.Package, _ *obs.Env) error {
 	pkg.RollupState = model.RollupPublished
 	return nil
 }
@@ -192,7 +192,7 @@ func TestPoolRemovesSucceededNonPublishing(t *testing.T) {
 	db := openDB(t)
 	h := hubpkg.New()
 	ws := workingset.New(10, 30*time.Second, 5*time.Minute, 4)
-	client := obs.NewClient(srv.URL, "u", "p")
+	client := obs.SingleFleet(obs.NewClient(srv.URL, "u", "p"), "isv:percona")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	// No tasks: pkg keeps its succeeded state; the settled decision drives removal.
@@ -263,7 +263,7 @@ func TestPoolContinuesAfterTaskError(t *testing.T) {
 // setReasonTask sets BuildReason on building targets.
 type setReasonTask struct{ reason string }
 
-func (t setReasonTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package, _ *obs.Env) error {
+func (t setReasonTask) Run(_ context.Context, _ *obs.Fleet, pkg *model.Package, _ *obs.Env) error {
 	for i, target := range pkg.Targets {
 		if target.State == "building" {
 			pkg.Targets[i].BuildReason = t.reason
@@ -275,7 +275,7 @@ func (t setReasonTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package,
 // setTargetReasonTask sets BuildReason on a specific target unconditionally.
 type setTargetReasonTask struct{ repo, arch, reason string }
 
-func (t setTargetReasonTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package, _ *obs.Env) error {
+func (t setTargetReasonTask) Run(_ context.Context, _ *obs.Fleet, pkg *model.Package, _ *obs.Env) error {
 	for i, target := range pkg.Targets {
 		if target.Repo == t.repo && target.Arch == t.arch {
 			pkg.Targets[i].BuildReason = t.reason
@@ -287,7 +287,7 @@ func (t setTargetReasonTask) Run(_ context.Context, _ *obs.Client, pkg *model.Pa
 // setStateTask transitions a specific target to a new state.
 type setStateTask struct{ repo, arch, state, details string }
 
-func (t setStateTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package, _ *obs.Env) error {
+func (t setStateTask) Run(_ context.Context, _ *obs.Fleet, pkg *model.Package, _ *obs.Env) error {
 	for i, target := range pkg.Targets {
 		if target.Repo == t.repo && target.Arch == t.arch {
 			pkg.Targets[i].State = t.state
@@ -300,7 +300,7 @@ func (t setStateTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package, 
 // setPublishedTask marks a target as published.
 type setPublishedTask struct{ repo, arch string }
 
-func (t setPublishedTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package, _ *obs.Env) error {
+func (t setPublishedTask) Run(_ context.Context, _ *obs.Fleet, pkg *model.Package, _ *obs.Env) error {
 	for i, target := range pkg.Targets {
 		if target.Repo == t.repo && target.Arch == t.arch {
 			pkg.Targets[i].Published = true
@@ -314,7 +314,7 @@ func (t setPublishedTask) Run(_ context.Context, _ *obs.Client, pkg *model.Packa
 // what must drive ProcessOnce's changed detection in this scenario.
 type flipTargetStateTask struct{ repo, arch, state string }
 
-func (t flipTargetStateTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package, _ *obs.Env) error {
+func (t flipTargetStateTask) Run(_ context.Context, _ *obs.Fleet, pkg *model.Package, _ *obs.Env) error {
 	for i, target := range pkg.Targets {
 		if target.Repo == t.repo && target.Arch == t.arch {
 			pkg.Targets[i].State = t.state
@@ -728,7 +728,7 @@ func TestProcessOnceEmitsSucceededForNonPublishingRepoOnStateTransition(t *testi
 	db := setupDB(t)
 	h := hubpkg.New()
 	ws := workingset.New(10, 30*time.Second, 5*time.Minute, 4)
-	client := obs.NewClient(srv.URL, "u", "p")
+	client := obs.SingleFleet(obs.NewClient(srv.URL, "u", "p"), "isv:percona")
 
 	pkg := &model.Package{
 		Project:     "isv:percona:common:containers:ubi8",
@@ -791,7 +791,7 @@ func TestProcessOnceNoSucceededForPublishingRepoOnStateTransitionOnly(t *testing
 
 type versionTask struct{ v string }
 
-func (t versionTask) Run(_ context.Context, _ *obs.Client, pkg *model.Package, _ *obs.Env) error {
+func (t versionTask) Run(_ context.Context, _ *obs.Fleet, pkg *model.Package, _ *obs.Env) error {
 	pkg.Version = t.v
 	return nil
 }
@@ -898,7 +898,7 @@ func TestPoolDoesNotParkWhenPublishFlagsUnknown(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	p := worker.NewPool(1, nil, nil, obs.NewClient(srv.URL, "u", "p"), db, h, ws, nil)
+	p := worker.NewPool(1, nil, nil, obs.SingleFleet(obs.NewClient(srv.URL, "u", "p"), "isv:percona"), db, h, ws, nil)
 	p.Start(ctx)
 
 	isContainer := false
@@ -1087,7 +1087,7 @@ func TestProcessJobBatchFetchesProjectOnce(t *testing.T) {
 	db := openDB(t)
 	h := hubpkg.New()
 	ws := workingset.New(10, 30*time.Second, 5*time.Minute, 2)
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 
 	pkgA := &model.Package{Project: "proj", Name: "pkg-a", RollupState: model.RollupBuilding,
 		Targets: []model.Target{{Repo: "repo", Arch: "x86_64", State: "building"}}}
@@ -1132,7 +1132,7 @@ func TestProcessJobBatchFallsBackPerPackageOnFetchError(t *testing.T) {
 	db := openDB(t)
 	h := hubpkg.New()
 	ws := workingset.New(10, 30*time.Second, 5*time.Minute, 2)
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 
 	pkgA := &model.Package{Project: "proj", Name: "pkg-a", RollupState: model.RollupBuilding,
 		Targets: []model.Target{{Repo: "repo", Arch: "x86_64", State: "building"}}}

@@ -12,7 +12,7 @@ import (
 // InferTrigger attempts to determine why a package build state changed.
 // It tries several OBS endpoints in order and returns the best explanation found.
 // Always returns a non-nil Trigger (falls back to kind:"unknown").
-func InferTrigger(ctx context.Context, c *Client, pkg *model.Package) *model.Trigger {
+func InferTrigger(ctx context.Context, c *Fleet, pkg *model.Package) *model.Trigger {
 	// Pick the first failing target for per-target endpoint calls
 	var failRepo, failArch string
 	for _, t := range pkg.Targets {

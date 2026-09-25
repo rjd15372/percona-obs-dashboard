@@ -24,7 +24,7 @@ func TestBuildStateTask(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 	pkg := &model.Package{
 		Project:     "isv:percona",
 		Name:        "mypkg",
@@ -57,7 +57,7 @@ func TestBlockedReasonTask(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 	pkg := &model.Package{
 		Project:     "isv:percona",
 		Name:        "mypkg",
@@ -83,7 +83,7 @@ func TestBlockedReasonTaskSkipsWhenNoBlocked(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := obs.NewClient(srv.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(srv.URL, "u", "p"), "isv:percona")
 	pkg := &model.Package{
 		Project: "p", Name: "pkg",
 		Targets: []model.Target{{Repo: "images", Arch: "x86_64", State: "succeeded"}},
@@ -104,7 +104,7 @@ func TestBlockedReasonTaskSkipsWhenFresh(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 	pkg := &model.Package{
 		Project: "isv:percona", Name: "mypkg",
 		Targets: []model.Target{{
@@ -137,7 +137,7 @@ func TestBlockedReasonTaskRefetchesWhenStale(t *testing.T) {
 	defer ts.Close()
 
 	stale := time.Now().UTC().Add(-6 * time.Minute)
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 	pkg := &model.Package{
 		Project: "isv:percona", Name: "mypkg",
 		Targets: []model.Target{{
@@ -170,7 +170,7 @@ func TestPublishStateTask(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 	pkg := &model.Package{
 		Project: "isv:percona",
 		Name:    "mypkg",
@@ -212,7 +212,7 @@ func TestPublishStateTaskSkipsNonPublishingRepos(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 	pkg := &model.Package{
 		Project: "isv:percona:PR:pr-1:ppg:17", Name: "mypkg",
 		Targets: []model.Target{{Repo: "Ubuntu_24.04", Arch: "x86_64", State: "succeeded"}},
@@ -237,7 +237,7 @@ func TestBuildReasonTask(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 	pkg := &model.Package{
 		Project:     "isv:percona",
 		Name:        "mypkg",
@@ -277,7 +277,7 @@ func TestBuildReasonTaskRetriesOnTransientError(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 	pkg := &model.Package{
 		Project:     "isv:percona",
 		Name:        "mypkg",
@@ -308,7 +308,7 @@ func TestBuildReasonTaskSkipsCachedTargets(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 	pkg := &model.Package{
 		Project: "isv:percona", Name: "mypkg",
 		Targets: []model.Target{
@@ -339,7 +339,7 @@ func TestPackageTypeTask(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 	pkg := &model.Package{
 		Project:     "isv:percona:ppg:17:containers",
 		Name:        "percona-distribution-postgresql",
@@ -362,7 +362,7 @@ func TestPackageTypeTaskRPM(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 	pkg := &model.Package{
 		Project:     "isv:percona:ppg:17",
 		Name:        "percona-pg_tde",
@@ -387,7 +387,7 @@ func TestPackageTypeTaskSkipsWhenAlreadySet(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 	pkg := &model.Package{
 		Project:     "isv:percona:ppg:17",
 		Name:        "percona-pg_tde",
@@ -417,7 +417,7 @@ func TestVersionTask(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 	pkg := &model.Package{
 		Project:     "isv:percona:ppg:17",
 		Name:        "percona-pg_tde",
@@ -443,7 +443,7 @@ func TestVersionTaskSkipsContainers(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 	pkg := &model.Package{
 		Project:     "isv:percona",
 		Name:        "mycontainer",
@@ -472,7 +472,7 @@ func TestContainerTagsTask(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 	pkg := &model.Package{
 		Project:     "isv:percona:ppg:17:containers",
 		Name:        "percona-distribution-postgresql",
@@ -504,7 +504,7 @@ func TestContainerTagsTaskSkipsNonContainers(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 	pkg := &model.Package{
 		Project:     "isv:percona",
 		Name:        "mypkg",
@@ -599,7 +599,7 @@ func TestBuildStateTaskPreservationMatrix(t *testing.T) {
 			}))
 			defer ts.Close()
 
-			c := obs.NewClient(ts.URL, "u", "p")
+			c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 			pkg := &model.Package{
 				Project: "isv:percona", Name: "mypkg",
 				Targets: tc.prevTargets, UpdatedAt: time.Now().UTC(),
@@ -645,7 +645,7 @@ func TestBuildStateTaskColdPointerIsNeverStable(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 	pkg := &model.Package{
 		Project: "isv:percona", Name: "mypkg",
 		// Same state as the server reports, but CacheWarm is false (cold start).
@@ -670,7 +670,7 @@ func TestBuildStateTaskSecondPassIsStable(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 	pkg := &model.Package{
 		Project: "isv:percona", Name: "mypkg",
 		Targets:   []model.Target{{Repo: "repo", Arch: "x86_64", State: "blocked"}},
@@ -703,7 +703,7 @@ func TestContainerTagsTaskReleaseAlwaysFetches(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 	pkg := &model.Package{
 		Project: "isv:percona:ppg:releases:17", Name: "percona-distribution-postgresql",
 		IsRelease:     true,
@@ -729,7 +729,7 @@ func TestVersionTaskSkipsWhenStable(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 	pkg := &model.Package{
 		Project: "isv:percona:ppg:17", Name: "percona-pg_tde",
 		IsContainer:   boolPtr(false),
@@ -760,7 +760,7 @@ func TestVersionTaskFetchesWhenUnstable(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 	pkg := &model.Package{
 		Project: "isv:percona:ppg:17", Name: "percona-pg_tde",
 		IsContainer:   boolPtr(false),
@@ -786,7 +786,7 @@ func TestContainerTagsTaskSkipsWhenStable(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 	pkg := &model.Package{
 		Project: "isv:percona:ppg:17:containers", Name: "percona-distribution-postgresql",
 		IsContainer:   boolPtr(true),
@@ -815,7 +815,7 @@ func TestContainerTagsTaskFetchesWhenUnstable(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 	pkg := &model.Package{
 		Project: "isv:percona:ppg:17:containers", Name: "percona-distribution-postgresql",
 		IsContainer:   boolPtr(true),
@@ -846,7 +846,7 @@ func TestBuildReasonTaskSkipsWhenStable(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 	pkg := &model.Package{
 		Project: "isv:percona", Name: "mypkg",
 		TargetsStable: true,
@@ -875,7 +875,7 @@ func TestVersionTaskSkipsEmptyVersionWhenStable(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 	pkg := &model.Package{
 		Project: "isv:percona:ppg:17", Name: "percona-pg_tde",
 		IsContainer:   boolPtr(false),
@@ -899,7 +899,7 @@ func TestBuildStateTaskUsesPrefetchedEnv(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 	pkg := &model.Package{
 		Project:     "isv:percona",
 		Name:        "mypkg",
@@ -932,7 +932,7 @@ func TestPublishStateTaskUsesPrefetchedEnv(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 	pkg := &model.Package{
 		Project:     "isv:percona",
 		Name:        "mypkg",
@@ -958,7 +958,7 @@ func TestBinariesCheckTaskUsesPrefetchedEnv(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := obs.NewClient(ts.URL, "u", "p")
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
 	pkg := &model.Package{
 		Project:     "isv:percona:ppg:releases:17",
 		Name:        "mypkg",
@@ -973,5 +973,51 @@ func TestBinariesCheckTaskUsesPrefetchedEnv(t *testing.T) {
 	}
 	if pkg.RollupState != model.RollupPublished {
 		t.Errorf("expected published rollup, got %s", pkg.RollupState)
+	}
+}
+
+func TestBuildStateTaskCarriesForwardFailedInstance(t *testing.T) {
+	pkg := &model.Package{
+		Project: "isv:percona:ppg:17", Name: "pg", CacheWarm: true,
+		Targets: []model.Target{
+			{Repo: "RHEL_9", Arch: "x86_64", State: "succeeded", Instance: "opensuse", Published: true},
+			{Repo: "Debian_12", Arch: "aarch64", State: "failed", Instance: "percona", Details: "boom", BuildReason: "source change"},
+		},
+	}
+	env := &obs.Env{
+		BuildStates:     []obs.PackageBuildState{{Project: pkg.Project, Package: "pg", Repo: "RHEL_9", Arch: "x86_64", State: "building", Instance: "opensuse"}},
+		FailedInstances: []string{"percona"},
+	}
+	if err := (obs.BuildStateTask{}).Run(context.Background(), nil, pkg, env); err != nil {
+		t.Fatal(err)
+	}
+	if len(pkg.Targets) != 2 {
+		t.Fatalf("carried target dropped: %+v", pkg.Targets)
+	}
+	var deb model.Target
+	for _, tg := range pkg.Targets {
+		if tg.Repo == "Debian_12" {
+			deb = tg
+		}
+	}
+	if deb.State != "failed" || deb.Instance != "percona" || deb.BuildReason != "source change" {
+		t.Errorf("carried target lost state/enrichment: %+v", deb)
+	}
+	if pkg.RollupState != model.RollupFailed {
+		t.Errorf("rollup must include carried targets, got %s", pkg.RollupState)
+	}
+}
+
+func TestBuildStateTaskKeepsPublishedOnCarriedTarget(t *testing.T) {
+	pkg := &model.Package{
+		Project: "isv:percona:ppg:17", Name: "pg",
+		Targets: []model.Target{{Repo: "Debian_12", Arch: "aarch64", State: "succeeded", Instance: "percona", Published: true}},
+	}
+	env := &obs.Env{BuildStates: []obs.PackageBuildState{}, FailedInstances: []string{"percona"}}
+	if err := (obs.BuildStateTask{}).Run(context.Background(), nil, pkg, env); err != nil {
+		t.Fatal(err)
+	}
+	if len(pkg.Targets) != 1 || !pkg.Targets[0].Published {
+		t.Fatalf("carried target must keep Published: %+v", pkg.Targets)
 	}
 }

@@ -12,4 +12,7 @@ type Env struct {
 	// "publishing", …) from the same _result response. Nil means
 	// PublishStateTask/BinariesCheckTask must fetch per-package.
 	RepoStates map[string]string
+	// FailedInstances lists instances whose project-level fetch failed; their
+	// previous targets are carried forward by BuildStateTask.
+	FailedInstances []string
 }

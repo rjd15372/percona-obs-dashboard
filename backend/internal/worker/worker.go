@@ -20,21 +20,21 @@ import (
 // Task is implemented by types that enrich a package's state from OBS.
 // Implementations live in obs/tasks.go to avoid circular imports.
 type Task interface {
-	Run(ctx context.Context, client *obs.Client, pkg *model.Package, env *obs.Env) error
+	Run(ctx context.Context, client *obs.Fleet, pkg *model.Package, env *obs.Env) error
 }
 
 type Pool struct {
 	size         int
 	devTasks     []Task
 	releaseTasks []Task
-	client       *obs.Client
+	client       *obs.Fleet
 	db           *sql.DB
 	hub          *hubpkg.Hub
 	ws           *workingset.WorkingSet
 	scanner      *cve.Scanner
 }
 
-func NewPool(size int, devTasks, releaseTasks []Task, client *obs.Client, db *sql.DB, hub *hubpkg.Hub, ws *workingset.WorkingSet, scanner *cve.Scanner) *Pool {
+func NewPool(size int, devTasks, releaseTasks []Task, client *obs.Fleet, db *sql.DB, hub *hubpkg.Hub, ws *workingset.WorkingSet, scanner *cve.Scanner) *Pool {
 	return &Pool{size: size, devTasks: devTasks, releaseTasks: releaseTasks,
 		client: client, db: db, hub: hub, ws: ws, scanner: scanner}
 }
@@ -66,7 +66,7 @@ func (p *Pool) run(ctx context.Context) {
 func (p *Pool) ProcessJob(ctx context.Context, job workingset.Job) {
 	var envs map[string]*obs.Env
 	if job.ProjectFetch && p.client != nil {
-		results, repoStates, err := p.client.BuildResults(ctx, job.Project)
+		results, repoStates, failed, err := p.client.BuildResults(ctx, job.Project)
 		if err != nil {
 			slog.Warn("worker: project batch fetch, falling back to per-package",
 				"project", job.Project, "err", err)
@@ -78,7 +78,14 @@ func (p *Pool) ProcessJob(ctx context.Context, job workingset.Job) {
 			envs = make(map[string]*obs.Env, len(job.Pkgs))
 			for _, pkg := range job.Pkgs {
 				if states, ok := byPkg[pkg.Name]; ok {
-					envs[pkg.Name] = &obs.Env{BuildStates: states, RepoStates: repoStates}
+					envs[pkg.Name] = &obs.Env{BuildStates: states, RepoStates: repoStates, FailedInstances: failed}
+				}
+			}
+			// A package absent from byPkg but with targets on a failed instance
+			// must still get an env so its carry-forward happens.
+			for _, pkg := range job.Pkgs {
+				if _, ok := envs[pkg.Name]; !ok && len(failed) > 0 {
+					envs[pkg.Name] = &obs.Env{BuildStates: []obs.PackageBuildState{}, RepoStates: repoStates, FailedInstances: failed}
 				}
 			}
 		}
@@ -214,8 +221,6 @@ func targetStatesChanged(old, new []model.Target) bool {
 	return false
 }
 
-const obsBase = "https://build.opensuse.org"
-
 // emitBuildEvents compares oldTargets with pkg.Targets and appends one event
 // per target for each meaningful state transition, implementing a per-target
 // build event state machine.
@@ -228,6 +233,7 @@ func (p *Pool) emitBuildEvents(pkg *model.Package, oldTargets []model.Target, no
 	for _, t := range pkg.Targets {
 		key := t.Repo + "/" + t.Arch
 		old := oldByKey[key]
+		inst := p.client.InstanceOrDefault(t.Instance)
 
 		// build_started: BuildReason newly appeared, or target re-builds after failure.
 		// The second condition handles rebuilds where OBS reuses the same BuildReason,
@@ -240,17 +246,18 @@ func (p *Pool) emitBuildEvents(pkg *model.Package, oldTargets []model.Target, no
 				why += ": " + strings.Join(t.BuildReasonPackages, ", ")
 			}
 			p.appendEvent(&model.Event{
-				ID:      "evt_" + ulid.Make().String(),
-				Type:    model.EventBuildStarted,
-				Tags:    pkg.Tags,
-				Project: pkg.Project,
-				Package: pkg.Name,
-				Repo:    t.Repo,
-				Arch:    t.Arch,
-				What:    fmt.Sprintf("%s build started", pkg.Name),
-				Why:     why,
-				URL:     fmt.Sprintf("%s/package/live_build_log/%s/%s/%s/%s", obsBase, pkg.Project, pkg.Name, t.Repo, t.Arch),
-				At:      now,
+				ID:       "evt_" + ulid.Make().String(),
+				Type:     model.EventBuildStarted,
+				Tags:     pkg.Tags,
+				Project:  pkg.Project,
+				Package:  pkg.Name,
+				Repo:     t.Repo,
+				Arch:     t.Arch,
+				Instance: t.Instance,
+				What:     fmt.Sprintf("%s build started", pkg.Name),
+				Why:      why,
+				URL:      inst.LiveLogURL(pkg.Project, pkg.Name, t.Repo, t.Arch),
+				At:       now,
 			})
 		}
 
@@ -258,47 +265,50 @@ func (p *Pool) emitBuildEvents(pkg *model.Package, oldTargets []model.Target, no
 		if t.BuildReason != "" {
 			if old.State != "blocked" && t.State == "blocked" {
 				p.appendEvent(&model.Event{
-					ID:      "evt_" + ulid.Make().String(),
-					Type:    model.EventBlocked,
-					Tags:    pkg.Tags,
-					Project: pkg.Project,
-					Package: pkg.Name,
-					Repo:    t.Repo,
-					Arch:    t.Arch,
-					What:    fmt.Sprintf("%s blocked", pkg.Name),
-					Why:     t.BlockedBy,
-					URL:     fmt.Sprintf("%s/package/show/%s/%s", obsBase, pkg.Project, pkg.Name),
-					At:      now,
+					ID:       "evt_" + ulid.Make().String(),
+					Type:     model.EventBlocked,
+					Tags:     pkg.Tags,
+					Project:  pkg.Project,
+					Package:  pkg.Name,
+					Repo:     t.Repo,
+					Arch:     t.Arch,
+					Instance: t.Instance,
+					What:     fmt.Sprintf("%s blocked", pkg.Name),
+					Why:      t.BlockedBy,
+					URL:      inst.PackageURL(pkg.Project, pkg.Name),
+					At:       now,
 				})
 			}
 			if old.State != "unresolvable" && t.State == "unresolvable" {
 				p.appendEvent(&model.Event{
-					ID:      "evt_" + ulid.Make().String(),
-					Type:    model.EventUnresolvable,
-					Tags:    pkg.Tags,
-					Project: pkg.Project,
-					Package: pkg.Name,
-					Repo:    t.Repo,
-					Arch:    t.Arch,
-					What:    fmt.Sprintf("%s unresolvable", pkg.Name),
-					Why:     t.Details,
-					URL:     fmt.Sprintf("%s/package/show/%s/%s", obsBase, pkg.Project, pkg.Name),
-					At:      now,
+					ID:       "evt_" + ulid.Make().String(),
+					Type:     model.EventUnresolvable,
+					Tags:     pkg.Tags,
+					Project:  pkg.Project,
+					Package:  pkg.Name,
+					Repo:     t.Repo,
+					Arch:     t.Arch,
+					Instance: t.Instance,
+					What:     fmt.Sprintf("%s unresolvable", pkg.Name),
+					Why:      t.Details,
+					URL:      inst.PackageURL(pkg.Project, pkg.Name),
+					At:       now,
 				})
 			}
 			if old.State != "broken" && t.State == "broken" {
 				p.appendEvent(&model.Event{
-					ID:      "evt_" + ulid.Make().String(),
-					Type:    model.EventBroken,
-					Tags:    pkg.Tags,
-					Project: pkg.Project,
-					Package: pkg.Name,
-					Repo:    t.Repo,
-					Arch:    t.Arch,
-					What:    fmt.Sprintf("%s broken", pkg.Name),
-					Why:     t.Details,
-					URL:     fmt.Sprintf("%s/package/show/%s/%s", obsBase, pkg.Project, pkg.Name),
-					At:      now,
+					ID:       "evt_" + ulid.Make().String(),
+					Type:     model.EventBroken,
+					Tags:     pkg.Tags,
+					Project:  pkg.Project,
+					Package:  pkg.Name,
+					Repo:     t.Repo,
+					Arch:     t.Arch,
+					Instance: t.Instance,
+					What:     fmt.Sprintf("%s broken", pkg.Name),
+					Why:      t.Details,
+					URL:      inst.PackageURL(pkg.Project, pkg.Name),
+					At:       now,
 				})
 			}
 		}
@@ -311,35 +321,37 @@ func (p *Pool) emitBuildEvents(pkg *model.Package, oldTargets []model.Target, no
 			!flags.Publishes(t.Repo)
 		if publishedNow || completedNonPublishing {
 			p.appendEvent(&model.Event{
-				ID:      "evt_" + ulid.Make().String(),
-				Type:    model.EventSucceeded,
-				Tags:    pkg.Tags,
-				Project: pkg.Project,
-				Package: pkg.Name,
-				Repo:    t.Repo,
-				Arch:    t.Arch,
-				What:    fmt.Sprintf("%s succeeded", pkg.Name),
-				Why:     "",
-				Version: pkg.Version,
-				URL:     fmt.Sprintf("%s/package/show/%s/%s", obsBase, pkg.Project, pkg.Name),
-				At:      now,
+				ID:       "evt_" + ulid.Make().String(),
+				Type:     model.EventSucceeded,
+				Tags:     pkg.Tags,
+				Project:  pkg.Project,
+				Package:  pkg.Name,
+				Repo:     t.Repo,
+				Arch:     t.Arch,
+				Instance: t.Instance,
+				What:     fmt.Sprintf("%s succeeded", pkg.Name),
+				Why:      "",
+				Version:  pkg.Version,
+				URL:      inst.PackageURL(pkg.Project, pkg.Name),
+				At:       now,
 			})
 		}
 
 		// failed: terminal state — OBS's unambiguous build failure, no BuildReason required.
 		if old.State != "failed" && t.State == "failed" {
 			p.appendEvent(&model.Event{
-				ID:      "evt_" + ulid.Make().String(),
-				Type:    model.EventFailed,
-				Tags:    pkg.Tags,
-				Project: pkg.Project,
-				Package: pkg.Name,
-				Repo:    t.Repo,
-				Arch:    t.Arch,
-				What:    fmt.Sprintf("%s failed", pkg.Name),
-				Why:     "",
-				URL:     fmt.Sprintf("%s/package/show/%s/%s", obsBase, pkg.Project, pkg.Name),
-				At:      now,
+				ID:       "evt_" + ulid.Make().String(),
+				Type:     model.EventFailed,
+				Tags:     pkg.Tags,
+				Project:  pkg.Project,
+				Package:  pkg.Name,
+				Repo:     t.Repo,
+				Arch:     t.Arch,
+				Instance: t.Instance,
+				What:     fmt.Sprintf("%s failed", pkg.Name),
+				Why:      "",
+				URL:      inst.PackageURL(pkg.Project, pkg.Name),
+				At:       now,
 			})
 		}
 	}

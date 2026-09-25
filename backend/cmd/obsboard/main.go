@@ -51,6 +51,7 @@ func run() error {
 
 	obsClient := obs.NewClient(cfg.OBS.BaseURL, cfg.OBS.Username, cfg.OBS.Password)
 	obsClient.SetMinuteBudget(cfg.OBS.MinuteRequestBudget)
+	fleet := obs.SingleFleet(obsClient, cfg.OBSRoot)
 	h := hub.New()
 	gate := presence.New(cfg.Idle.Enabled, cfg.Idle.Linger)
 
@@ -67,6 +68,7 @@ func run() error {
 	ws := workingset.New(cfg.WorkerPool.QueueSize, cfg.WorkerPool.PollInterval,
 		cfg.WorkerPool.BackoffMax, cfg.WorkerPool.BatchThreshold)
 	ws.Seed(activePkgs)
+	fleet.SeedOwners(activePkgs)
 
 	devTasks := []worker.Task{
 		obs.PackageTypeTask{},
@@ -82,7 +84,7 @@ func run() error {
 		obs.ContainerTagsTask{},
 		obs.BinariesCheckTask{},
 	}
-	pool := worker.NewPool(cfg.WorkerPool.Size, devTasks, releaseTasks, obsClient, db, h, ws, scanner)
+	pool := worker.NewPool(cfg.WorkerPool.Size, devTasks, releaseTasks, fleet, db, h, ws, scanner)
 	ws.SetGate(gate)
 	pool.Start(ctx)
 	ws.StartScheduler(ctx)
@@ -98,7 +100,7 @@ func run() error {
 	go sampler.Run(ctx)
 
 	if cfg.Unblocker.Enabled {
-		sweeper := &unblocker.Sweeper{DB: db, Rebuilder: obsClient, Threshold: cfg.Unblocker.Threshold}
+		sweeper := &unblocker.Sweeper{DB: db, Rebuilder: fleet, Threshold: cfg.Unblocker.Threshold}
 		go sweeper.Run(ctx)
 	}
 
