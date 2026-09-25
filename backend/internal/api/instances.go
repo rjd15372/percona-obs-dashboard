@@ -22,6 +22,10 @@ type instanceView struct {
 // to a logical project name to reach the instance project.
 func instancesHandler(fleet *obs.Fleet) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if fleet == nil {
+			http.Error(w, "OBS client not configured", http.StatusServiceUnavailable)
+			return
+		}
 		out := make([]instanceView, 0, len(fleet.Instances()))
 		for _, in := range fleet.Instances() {
 			out = append(out, instanceView{

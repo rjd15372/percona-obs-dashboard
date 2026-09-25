@@ -294,7 +294,8 @@ func (c *Consumer) mergePackageTarget(m mqMessage, newState model.RollupState) *
 		slog.Warn("mq: could not read existing package, creating fresh", "err", err)
 	} else {
 		for _, p := range existing {
-			if p.Name == m.Package {
+			// QueryPackages matches by prefix: ppg:17 also returns ppg:17:containers.
+			if p.Project == m.Project && p.Name == m.Package {
 				existingPkg = p
 				// Found existing package — merge the updated target.
 				merged := make([]model.Target, 0, len(p.Targets))

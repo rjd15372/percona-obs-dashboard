@@ -342,3 +342,37 @@ func TestFleetHealthFlipNotifiesOnce(t *testing.T) {
 		t.Errorf("notifications = %v", got)
 	}
 }
+
+// A real failure on one host must win over a 404 on another.
+func TestFleetFirstHostPrefersRealError(t *testing.T) {
+	x := newFakeOBS(t, nil) // 404 everywhere
+	y := newFakeOBS(t, nil)
+	y.fail.Store(true) // 502
+	f := fleetOf(t, y, x)
+	ctx := context.Background()
+	if _, err := f.PackageIsContainer(ctx, "ppg:17", "pg"); err == nil || IsNotFound(err) {
+		t.Errorf("PackageIsContainer err = %v, want the non-404 error", err)
+	}
+	if _, err := f.SourceHistory(ctx, "ppg:17", "pg"); err == nil || IsNotFound(err) {
+		t.Errorf("SourceHistory err = %v, want the non-404 error", err)
+	}
+	// Every host 404s: NotFound is preserved.
+	z := newFakeOBS(t, nil)
+	f = fleetOf(t, x, z)
+	if _, err := f.SourceHistory(ctx, "ppg:17", "pg"); !IsNotFound(err) {
+		t.Errorf("all-404 SourceHistory err = %v, want NotFound", err)
+	}
+}
+
+// The client maps 404 to (false, nil): a host that does not have the
+// package must not short-circuit a later host that says "container".
+func TestFleetPackageIsContainerAsksEveryHost(t *testing.T) {
+	x := newFakeOBS(t, nil)
+	y := newFakeOBS(t, map[string]string{
+		"/source/percona:ppg:17/pg?view=info": `<sourceinfo><filename>Dockerfile</filename></sourceinfo>`,
+	})
+	f := fleetOf(t, x, y)
+	if v, err := f.PackageIsContainer(context.Background(), "ppg:17", "pg"); err != nil || !v {
+		t.Errorf("PackageIsContainer = %v, %v; want true", v, err)
+	}
+}

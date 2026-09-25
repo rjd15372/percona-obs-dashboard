@@ -5,7 +5,7 @@ import { packageUrl, projectUrl } from '../lib/instances'
 
 defineProps<{ groups: PRGroup[] }>()
 
-const { instanceFor, packageInstances } = useInstances()
+const { instances, instanceFor, packageInstances } = useInstances()
 
 const STATE_COLOR: Record<string, string> = {
   succeeded: 'var(--ok)',
@@ -67,8 +67,12 @@ function obsUrl(pkg: Package): string {
   return packageUrl(packageInstances(pkg)[0], pkg.project, pkg.name)
 }
 
-function prProjectUrl(pr: string): string {
-  return projectUrl(instanceFor(), `PR:pr-${pr}`)
+// The PR project page lives on the instance(s) building the group's
+// packages: take the first, in config order, that any package builds on.
+function prProjectUrl(group: PRGroup): string {
+  const slugs = new Set(group.packages.flatMap(p => packageInstances(p).map(i => i.slug)))
+  const inst = instances.value.find(i => slugs.has(i.slug)) ?? instanceFor()
+  return projectUrl(inst, `PR:pr-${group.pr}`)
 }
 </script>
 
@@ -109,7 +113,7 @@ function prProjectUrl(pr: string): string {
           </span>
 
           <a
-            :href="prProjectUrl(group.pr) || undefined"
+            :href="prProjectUrl(group) || undefined"
             target="_blank"
             rel="noopener"
             class="ml-auto text-[11.5px] font-bold text-brand-purple no-underline whitespace-nowrap flex-shrink-0"

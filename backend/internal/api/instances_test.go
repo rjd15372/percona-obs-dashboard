@@ -31,3 +31,16 @@ func TestInstancesHandler(t *testing.T) {
 		t.Errorf("instance 2: %+v", got[1])
 	}
 }
+
+func TestInstancesAndMetricsNilFleet(t *testing.T) {
+	rec := httptest.NewRecorder()
+	instancesHandler(nil)(rec, httptest.NewRequest(http.MethodGet, "/api/instances", nil))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("instances with nil fleet: status %d, want 503", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	metricsHandler(nil, nil, nil, nil, nil)(rec, httptest.NewRequest(http.MethodGet, "/api/metrics", nil))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("metrics with nil fleet: status %d, want 503", rec.Code)
+	}
+}

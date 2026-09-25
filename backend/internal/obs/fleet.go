@@ -571,17 +571,43 @@ func (f *Fleet) ProjectRepoPackages(ctx context.Context, project, repo, arch str
 
 // ── first hosting instance wins ──
 
+// PackageIsContainer reports true as soon as any host says so. The client
+// maps 404 to (false, nil), so a false answer may only mean "not hosted
+// there": it cannot outrank a real failure on another host, which is
+// returned so callers retry rather than settle on "not a container".
 func (f *Fleet) PackageIsContainer(ctx context.Context, project, pkg string) (bool, error) {
-	var lastErr error
+	var errs firstHostErrors
 	for _, in := range f.hosts(project) {
 		v, err := in.Client.PackageIsContainer(ctx, in.ToInstance(project), pkg)
 		in.observe(err)
-		if err == nil {
-			return v, nil
+		if err == nil && v {
+			return true, nil
 		}
-		lastErr = err
+		errs.add(err)
 	}
-	return false, lastErr
+	return false, errs.real
+}
+
+// firstHostErrors keeps the first real (non-404) failure and the last 404
+// across a first-host-wins loop, so a real failure on one host is never
+// masked by another host answering 404.
+type firstHostErrors struct{ real, notFound error }
+
+func (e *firstHostErrors) add(err error) {
+	switch {
+	case err == nil:
+	case IsNotFound(err):
+		e.notFound = err
+	case e.real == nil:
+		e.real = err
+	}
+}
+
+func (e *firstHostErrors) err() error {
+	if e.real != nil {
+		return e.real
+	}
+	return e.notFound
 }
 
 // PackageVersionResult returns the first non-empty versrel in config order.
@@ -607,16 +633,16 @@ func (f *Fleet) PackageVersionResult(ctx context.Context, project, pkg string) (
 }
 
 func (f *Fleet) SourceHistory(ctx context.Context, project, pkg string) ([]SourceCommit, error) {
-	var lastErr error
+	var errs firstHostErrors
 	for _, in := range f.hosts(project) {
 		v, err := in.Client.SourceHistory(ctx, in.ToInstance(project), pkg)
 		in.observe(err)
 		if err == nil {
 			return v, nil
 		}
-		lastErr = err
+		errs.add(err)
 	}
-	return nil, lastErr
+	return nil, errs.err()
 }
 
 // ── publish flags ──

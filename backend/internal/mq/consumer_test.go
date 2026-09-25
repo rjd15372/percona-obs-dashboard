@@ -238,3 +238,25 @@ func TestConsumerProjectDeleteIsInstanceScoped(t *testing.T) {
 		t.Fatalf("only percona's targets should go: %+v", got)
 	}
 }
+
+// With root-free names QueryPackages("ppg:17") also returns ppg:17:containers
+// packages; the merge must match the exact project.
+func TestMergePackageTargetExactProject(t *testing.T) {
+	db, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	now := time.Now().UTC()
+	other := &model.Package{Project: "ppg:17:containers", Name: "pg", RollupState: model.RollupSucceeded, UpdatedAt: now,
+		Targets: []model.Target{{Repo: "images", Arch: "x86_64", State: "succeeded", Instance: "opensuse"}}}
+	if err := store.UpsertPackageState(db, other, now); err != nil {
+		t.Fatal(err)
+	}
+	fleet := obs.SingleFleet(nil, "isv:percona")
+	consumer := &Consumer{db: db, inst: fleet.Default(), fleet: fleet, prefix: "opensuse.obs"}
+	merged := consumer.mergePackageTarget(mqMessage{Project: "ppg:17", Package: "pg", Repo: "RHEL_9", Arch: "x86_64"}, model.RollupBuilding)
+	if len(merged.Targets) != 1 || merged.Targets[0].Repo != "RHEL_9" {
+		t.Errorf("merged targets from a different project: %+v", merged.Targets)
+	}
+}

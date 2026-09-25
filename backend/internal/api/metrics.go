@@ -66,6 +66,10 @@ type wsSection struct {
 // current polling state (active/idle).
 func metricsHandler(fleet *obs.Fleet, ws Statter, clients ClientCounter, db *sql.DB, gate PollState) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if fleet == nil {
+			http.Error(w, "OBS client not configured", http.StatusServiceUnavailable)
+			return
+		}
 		byEndpoint := fleet.MetricsSnapshot()
 		var total int64
 		for _, v := range byEndpoint {
