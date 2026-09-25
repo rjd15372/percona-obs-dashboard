@@ -52,6 +52,7 @@ func run() error {
 	obsClient := obs.NewClient(cfg.OBS.BaseURL, cfg.OBS.Username, cfg.OBS.Password)
 	obsClient.SetMinuteBudget(cfg.OBS.MinuteRequestBudget)
 	fleet := obs.SingleFleet(obsClient, cfg.OBSRoot)
+	fleet.Default().MQURL = cfg.MQ.URL
 	h := hub.New()
 	gate := presence.New(cfg.Idle.Enabled, cfg.Idle.Linger)
 
@@ -90,10 +91,11 @@ func run() error {
 	ws.StartScheduler(ctx)
 
 	poller := obs.NewPoller(fleet, db, cfg.Poller.Interval, h, ws, cfg.OBSRoot, gate)
-	consumer := mq.NewConsumer(cfg.MQ.URL, db, h, obsClient, ws, cfg.OBSRoot)
 
 	go poller.Run(ctx)
-	go consumer.Run(ctx)
+	for _, inst := range fleet.Instances() {
+		go mq.NewConsumer(inst, fleet, db, h, ws, cfg.OBSRoot).Run(ctx)
+	}
 	go runPruner(ctx, db, cfg.Poller.Interval, cfg.Store.EventRetention, cfg.Store.MetricsRetention)
 
 	sampler := &metricsampler.Sampler{DB: db, Snap: obsClient}

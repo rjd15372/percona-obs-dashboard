@@ -8,6 +8,7 @@ import (
 
 	hubpkg "github.com/percona/obs-dashboard/internal/hub"
 	"github.com/percona/obs-dashboard/internal/model"
+	"github.com/percona/obs-dashboard/internal/obs"
 	"github.com/percona/obs-dashboard/internal/store"
 	"github.com/percona/obs-dashboard/internal/workingset"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -36,7 +37,8 @@ func TestMergePackageTargetPreservesDetailsForRepeatedState(t *testing.T) {
 		t.Fatalf("upsert existing package: %v", err)
 	}
 
-	consumer := &Consumer{db: db, root: "isv:percona"}
+	fleet := obs.SingleFleet(nil, "isv:percona")
+	consumer := &Consumer{db: db, root: "isv:percona", inst: fleet.Default(), fleet: fleet, prefix: "opensuse.obs"}
 	merged := consumer.mergePackageTarget(mqMessage{
 		Project: "isv:percona:PR:pr-33:ppg:17",
 		Package: "pg_tde",
@@ -53,7 +55,7 @@ func TestMergePackageTargetPreservesDetailsForRepeatedState(t *testing.T) {
 }
 
 func TestMQStateToRollupUnchangedIsFinished(t *testing.T) {
-	if got := mqStateToRollup("opensuse.obs.package.build_unchanged"); got != model.RollupFinished {
+	if got := mqStateToRollup("package.build_unchanged"); got != model.RollupFinished {
 		t.Fatalf("build_unchanged → %s, want finished", got)
 	}
 }
@@ -68,7 +70,8 @@ func TestBuildUnchangedWakesWorkingSet(t *testing.T) {
 	defer db.Close()
 	ws := workingset.New(4, 30*time.Second, 5*time.Minute, 4)
 	h := hubpkg.New()
-	c := NewConsumer("", db, h, nil, ws, "isv:percona")
+	fleet := obs.SingleFleet(nil, "isv:percona")
+	c := NewConsumer(fleet.Default(), fleet, db, h, ws, "isv:percona")
 
 	// Seed a stored package with a building target (as if parked).
 	pkg := &model.Package{
@@ -116,7 +119,8 @@ func TestRepoPublishedWakesOnlyMatchingRepo(t *testing.T) {
 	}
 	defer db.Close()
 	ws := workingset.New(4, 30*time.Second, 5*time.Minute, 4)
-	c := NewConsumer("", db, hubpkg.New(), nil, ws, "isv:percona")
+	fleet := obs.SingleFleet(nil, "isv:percona")
+	c := NewConsumer(fleet.Default(), fleet, db, hubpkg.New(), ws, "isv:percona")
 
 	seed := func(name, repo string, published bool) {
 		pkg := &model.Package{
@@ -153,5 +157,82 @@ func TestRepoPublishedWakesOnlyMatchingRepo(t *testing.T) {
 	case job := <-ws.Dispatch():
 		t.Fatalf("unexpected extra dispatch: %s", job.Pkgs[0].Name)
 	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func twoInstanceFleet() (*obs.Fleet, *obs.Instance, *obs.Instance) {
+	x := obs.NewInstance(obs.InstanceInfo{Name: "openSUSE", Slug: "opensuse", Root: "isv:percona", WebURL: "https://build.opensuse.org", MQRoutingPrefix: "opensuse.obs"}, nil)
+	y := obs.NewInstance(obs.InstanceInfo{Name: "Percona", Slug: "percona", Root: "percona", WebURL: "https://obs.example.com", MQRoutingPrefix: "percona.obs"}, nil)
+	return obs.NewFleet(x, y), x, y
+}
+
+func TestConsumerCustomPrefixStampsInstance(t *testing.T) {
+	db, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	fleet, _, y := twoInstanceFleet()
+	ws := workingset.New(64, time.Minute, time.Minute, 4)
+	c := NewConsumer(y, fleet, db, hubpkg.New(), ws, "percona")
+
+	body, _ := json.Marshal(map[string]string{"project": "percona:ppg:17", "package": "pg", "repository": "Debian_12", "arch": "aarch64"})
+	c.handle(context.Background(), amqp.Delivery{RoutingKey: "percona.obs.package.build_fail", Body: body})
+
+	// y is a non-identity instance: "percona:ppg:17" is stored as "ppg:17".
+	got, err := store.GetPackage(db, "ppg:17", "pg")
+	if err != nil || got == nil {
+		t.Fatalf("package not stored under its logical name (err=%v)", err)
+	}
+	if got.Targets[0].Instance != "percona" {
+		t.Errorf("target instance = %q", got.Targets[0].Instance)
+	}
+	if fleet.Owner("ppg:17", "Debian_12") == nil {
+		t.Error("repo owner not recorded")
+	}
+}
+
+func TestConsumerDropsOutOfRootProjects(t *testing.T) {
+	db, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	fleet, _, y := twoInstanceFleet()
+	c := NewConsumer(y, fleet, db, hubpkg.New(), workingset.New(64, time.Minute, time.Minute, 4), "percona")
+	body, _ := json.Marshal(map[string]string{"project": "home:someone:ppg", "package": "pg", "repository": "R", "arch": "a"})
+	c.handle(context.Background(), amqp.Delivery{RoutingKey: "percona.obs.package.build_fail", Body: body})
+	pkgs, _ := store.QueryPackages(db, "")
+	if len(pkgs) != 0 {
+		t.Fatalf("out-of-root project stored: %+v", pkgs)
+	}
+}
+
+func TestConsumerProjectDeleteIsInstanceScoped(t *testing.T) {
+	db, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	fleet, x, y := twoInstanceFleet()
+	logical, _ := y.ToLogical("percona:ppg:17") // "ppg:17", hosted by both instances
+	fleet.AddMember(x.Slug, logical)
+	fleet.AddMember(y.Slug, logical)
+	now := time.Now().UTC()
+	pkg := &model.Package{Project: logical, Name: "pg", RollupState: model.RollupFailed, UpdatedAt: now,
+		Targets: []model.Target{
+			{Repo: "RHEL_9", Arch: "x86_64", State: "succeeded", Instance: "opensuse"},
+			{Repo: "Debian_12", Arch: "aarch64", State: "failed", Instance: "percona"},
+		}}
+	if err := store.UpsertPackageState(db, pkg, now); err != nil {
+		t.Fatal(err)
+	}
+	c := NewConsumer(y, fleet, db, hubpkg.New(), workingset.New(64, time.Minute, time.Minute, 4), "percona")
+	body, _ := json.Marshal(map[string]string{"project": "percona:ppg:17"})
+	c.handle(context.Background(), amqp.Delivery{RoutingKey: "percona.obs.project.delete", Body: body})
+
+	got, _ := store.GetPackage(db, logical, "pg")
+	if got == nil || len(got.Targets) != 1 || got.Targets[0].Instance != "opensuse" {
+		t.Fatalf("only percona's targets should go: %+v", got)
 	}
 }

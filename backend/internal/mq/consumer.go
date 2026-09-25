@@ -18,13 +18,6 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-const (
-	exchange        = "pubsub"
-	packageRouteKey = "opensuse.obs.package.#"
-	repoRouteKey    = "opensuse.obs.repo.published"
-	projectRouteKey = "opensuse.obs.project.#"
-)
-
 // mqMessage is the JSON structure of OBS MQ events.
 // Fields are a union of all event payloads; unused fields are zero for any given event type.
 type mqMessage struct {
@@ -39,18 +32,20 @@ type mqMessage struct {
 	Comment  string `json:"comment"`
 }
 
-// Consumer subscribes to the OBS AMQP bus and updates the store on build events.
+// Consumer subscribes to one OBS instance's AMQP bus and updates the store
+// on build events.
 type Consumer struct {
-	url       string
-	db        *sql.DB
-	hub       *hubpkg.Hub
-	obsClient *obs.Client
-	ws        *workingset.WorkingSet
-	root      string
+	inst   *obs.Instance
+	fleet  *obs.Fleet
+	prefix string
+	db     *sql.DB
+	hub    *hubpkg.Hub
+	ws     *workingset.WorkingSet
+	root   string
 }
 
-func NewConsumer(url string, db *sql.DB, h *hubpkg.Hub, obsClient *obs.Client, ws *workingset.WorkingSet, root string) *Consumer {
-	return &Consumer{url: url, db: db, hub: h, obsClient: obsClient, ws: ws, root: root}
+func NewConsumer(inst *obs.Instance, fleet *obs.Fleet, db *sql.DB, h *hubpkg.Hub, ws *workingset.WorkingSet, root string) *Consumer {
+	return &Consumer{inst: inst, fleet: fleet, prefix: inst.MQRoutingPrefix, db: db, hub: h, ws: ws, root: root}
 }
 
 // appendEvent writes evt to the store and notifies SSE clients.
@@ -99,7 +94,7 @@ func (c *Consumer) Run(ctx context.Context) {
 }
 
 func (c *Consumer) run(ctx context.Context) error {
-	conn, err := amqp.Dial(c.url)
+	conn, err := amqp.Dial(c.inst.MQURL)
 	if err != nil {
 		return fmt.Errorf("dial: %w", err)
 	}
@@ -111,8 +106,8 @@ func (c *Consumer) run(ctx context.Context) error {
 	}
 	defer ch.Close()
 
-	// Passive declare — exchange already exists on rabbit.opensuse.org
-	if err := ch.ExchangeDeclarePassive(exchange, "topic", true, false, false, false, nil); err != nil {
+	// Passive declare — exchange already exists on the broker.
+	if err := ch.ExchangeDeclarePassive(c.inst.MQExchange, "topic", true, false, false, false, nil); err != nil {
 		return fmt.Errorf("exchange declare: %w", err)
 	}
 
@@ -122,11 +117,11 @@ func (c *Consumer) run(ctx context.Context) error {
 	}
 
 	for _, key := range []string{
-		packageRouteKey,
-		repoRouteKey,
-		projectRouteKey,
+		c.prefix + ".package.#",
+		c.prefix + ".repo.published",
+		c.prefix + ".project.#",
 	} {
-		if err := ch.QueueBind(q.Name, key, exchange, false, nil); err != nil {
+		if err := ch.QueueBind(q.Name, key, c.inst.MQExchange, false, nil); err != nil {
 			return fmt.Errorf("queue bind %s: %w", key, err)
 		}
 	}
@@ -137,7 +132,9 @@ func (c *Consumer) run(ctx context.Context) error {
 	}
 
 	connClose := conn.NotifyClose(make(chan *amqp.Error, 1))
-	slog.Info("mq: connected", "exchange", exchange)
+	slog.Info("mq: connected", "exchange", c.inst.MQExchange, "instance", c.inst.Slug)
+	c.inst.SetMQConnected(true)
+	defer c.inst.SetMQConnected(false)
 
 	for {
 		select {
@@ -164,10 +161,11 @@ func (c *Consumer) handle(ctx context.Context, msg amqp.Delivery) {
 		return
 	}
 
-	// Filter: only process projects under our configured root.
-	if !strings.HasPrefix(m.Project, c.root+":") {
+	logical, ok := c.inst.ToLogical(m.Project)
+	if !ok {
 		return
 	}
+	m.Project = logical
 
 	var payload any
 	if err := json.Unmarshal(msg.Body, &payload); err != nil {
@@ -178,9 +176,9 @@ func (c *Consumer) handle(ctx context.Context, msg amqp.Delivery) {
 
 	kind := obs.Classify(c.root, m.Project)
 
-	key := msg.RoutingKey
+	key := strings.TrimPrefix(msg.RoutingKey, c.prefix+".")
 	switch {
-	case key == repoRouteKey:
+	case key == "repo.published":
 		// Release projects: BinariesCheckTask handles publish detection; ignore MQ repo events.
 		if kind == obs.KindRelease {
 			return
@@ -196,51 +194,56 @@ func (c *Consumer) handle(ctx context.Context, msg amqp.Delivery) {
 			}
 		}
 
-	case key == "opensuse.obs.project.create":
+	case key == "project.create":
 		if kind == obs.KindRelease {
 			return // release project creation is handled by the poller
 		}
+		c.fleet.AddMember(c.inst.Slug, m.Project)
 		c.appendEvent(&model.Event{
-			ID:      "evt_" + ulid.Make().String(),
-			Type:    model.EventCreated,
-			Tags:    obs.ProjectTags(c.root, m.Project),
-			Project: m.Project,
-			What:    fmt.Sprintf("project %s created", m.Project),
-			Why:     m.Sender,
-			URL:     fmt.Sprintf("https://build.opensuse.org/project/show/%s", m.Project),
-			At:      time.Now().UTC(),
+			ID:       "evt_" + ulid.Make().String(),
+			Type:     model.EventCreated,
+			Tags:     obs.ProjectTags(c.root, m.Project),
+			Project:  m.Project,
+			What:     fmt.Sprintf("project %s created", m.Project),
+			Why:      m.Sender,
+			URL:      c.inst.ProjectURL(m.Project),
+			At:       time.Now().UTC(),
+			Instance: c.inst.Slug,
 		})
 
-	case key == "opensuse.obs.project.delete":
-		if err := store.DeletePackagesByProject(c.db, m.Project); err != nil {
-			slog.Error("mq: delete packages for project", "project", m.Project, "err", err)
+	case key == "project.delete":
+		c.fleet.RemoveMember(c.inst.Slug, m.Project)
+		if c.inst.Client != nil {
+			c.inst.Client.EvictPublishFlags(c.inst.ToInstance(m.Project))
 		}
-		c.obsClient.EvictPublishFlags(m.Project)
+		c.deleteProjectShare(m.Project)
 		c.appendEvent(&model.Event{
-			ID:      "evt_" + ulid.Make().String(),
-			Type:    model.EventDeleted,
-			Tags:    obs.ProjectTags(c.root, m.Project),
-			Project: m.Project,
-			What:    fmt.Sprintf("project %s deleted", m.Project),
-			Why:     m.Comment,
-			URL:     fmt.Sprintf("https://build.opensuse.org/project/show/%s", m.Project),
-			At:      time.Now().UTC(),
+			ID:       "evt_" + ulid.Make().String(),
+			Type:     model.EventDeleted,
+			Tags:     obs.ProjectTags(c.root, m.Project),
+			Project:  m.Project,
+			What:     fmt.Sprintf("project %s deleted", m.Project),
+			Why:      m.Comment,
+			URL:      c.inst.ProjectURL(m.Project),
+			At:       time.Now().UTC(),
+			Instance: c.inst.Slug,
 		})
 
-	case key == "opensuse.obs.package.create":
+	case key == "package.create":
 		if kind == obs.KindRelease {
 			return // release packages are discovered by the poller
 		}
 		c.appendEvent(&model.Event{
-			ID:      "evt_" + ulid.Make().String(),
-			Type:    model.EventCreated,
-			Tags:    obs.ProjectTags(c.root, m.Project),
-			Project: m.Project,
-			Package: m.Package,
-			What:    fmt.Sprintf("package %s created", m.Package),
-			Why:     m.Sender,
-			URL:     fmt.Sprintf("https://build.opensuse.org/package/show/%s/%s", m.Project, m.Package),
-			At:      time.Now().UTC(),
+			ID:       "evt_" + ulid.Make().String(),
+			Type:     model.EventCreated,
+			Tags:     obs.ProjectTags(c.root, m.Project),
+			Project:  m.Project,
+			Package:  m.Package,
+			What:     fmt.Sprintf("package %s created", m.Package),
+			Why:      m.Sender,
+			URL:      c.inst.PackageURL(m.Project, m.Package),
+			At:       time.Now().UTC(),
+			Instance: c.inst.Slug,
 		})
 		stub := &model.Package{
 			Project: m.Project,
@@ -249,20 +252,19 @@ func (c *Consumer) handle(ctx context.Context, msg amqp.Delivery) {
 		}
 		c.ws.Signal(stub)
 
-	case key == "opensuse.obs.package.delete":
-		if err := store.DeletePackage(c.db, m.Project, m.Package); err != nil {
-			slog.Error("mq: delete package", "project", m.Project, "package", m.Package, "err", err)
-		}
+	case key == "package.delete":
+		c.deletePackageShare(m.Project, m.Package)
 		c.appendEvent(&model.Event{
-			ID:      "evt_" + ulid.Make().String(),
-			Type:    model.EventDeleted,
-			Tags:    obs.ProjectTags(c.root, m.Project),
-			Project: m.Project,
-			Package: m.Package,
-			What:    fmt.Sprintf("package %s deleted", m.Package),
-			Why:     m.Sender,
-			URL:     fmt.Sprintf("https://build.opensuse.org/package/show/%s/%s", m.Project, m.Package),
-			At:      time.Now().UTC(),
+			ID:       "evt_" + ulid.Make().String(),
+			Type:     model.EventDeleted,
+			Tags:     obs.ProjectTags(c.root, m.Project),
+			Project:  m.Project,
+			Package:  m.Package,
+			What:     fmt.Sprintf("package %s deleted", m.Package),
+			Why:      m.Sender,
+			URL:      c.inst.PackageURL(m.Project, m.Package),
+			At:       time.Now().UTC(),
+			Instance: c.inst.Slug,
 		})
 
 	case isPackageBuildEvent(key):
@@ -285,7 +287,7 @@ func (c *Consumer) handle(ctx context.Context, msg amqp.Delivery) {
 // the (repo, arch) target with the new state, then recalculates OKTargets,
 // TotalTargets, and RollupState from the full merged target list.
 func (c *Consumer) mergePackageTarget(m mqMessage, newState model.RollupState) *model.Package {
-	targets := []model.Target{{Repo: m.Repo, Arch: m.Arch, State: string(newState)}}
+	targets := []model.Target{{Repo: m.Repo, Arch: m.Arch, State: string(newState), Instance: c.inst.Slug}}
 	var existingPkg *model.Package
 
 	existing, err := store.QueryPackages(c.db, m.Project)
@@ -300,7 +302,7 @@ func (c *Consumer) mergePackageTarget(m mqMessage, newState model.RollupState) *
 				found := false
 				for _, t := range p.Targets {
 					if t.Repo == m.Repo && t.Arch == m.Arch {
-						next := model.Target{Repo: m.Repo, Arch: m.Arch, State: string(newState)}
+						next := model.Target{Repo: m.Repo, Arch: m.Arch, State: string(newState), Instance: c.inst.Slug}
 						if t.State == string(newState) {
 							next.Details = t.Details
 							next.BlockedBy = t.BlockedBy
@@ -315,12 +317,16 @@ func (c *Consumer) mergePackageTarget(m mqMessage, newState model.RollupState) *
 					}
 				}
 				if !found {
-					merged = append(merged, model.Target{Repo: m.Repo, Arch: m.Arch, State: string(newState)})
+					merged = append(merged, model.Target{Repo: m.Repo, Arch: m.Arch, State: string(newState), Instance: c.inst.Slug})
 				}
 				targets = merged
 				break
 			}
 		}
+	}
+
+	if c.fleet != nil {
+		c.fleet.SetOwner(m.Project, m.Repo, c.inst.Slug)
 	}
 
 	// Recalculate rollup and counts from the full target list.
@@ -395,17 +401,61 @@ func existingContainerTags(existing *model.Package) []string {
 	return existing.ContainerTags
 }
 
+// deleteProjectShare removes this instance's share of project. When no
+// instance hosts the project any more, every row goes (events, durations,
+// CVE rows included); otherwise only this instance's targets are dropped.
+func (c *Consumer) deleteProjectShare(project string) {
+	if !c.fleet.IsHosted(project) {
+		if err := store.DeletePackagesByProject(c.db, project); err != nil {
+			slog.Error("mq: delete packages for project", "project", project, "err", err)
+		}
+		return
+	}
+	pkgs, err := store.QueryProjectPackages(c.db, project)
+	if err != nil {
+		slog.Error("mq: query project packages", "project", project, "err", err)
+		return
+	}
+	for _, pkg := range pkgs {
+		c.dropShare(pkg)
+	}
+}
+
+func (c *Consumer) deletePackageShare(project, name string) {
+	pkg, err := store.GetPackage(c.db, project, name)
+	if err != nil || pkg == nil {
+		return
+	}
+	c.dropShare(pkg)
+}
+
+func (c *Consumer) dropShare(pkg *model.Package) {
+	rest := obs.WithoutInstance(pkg, c.inst.Slug)
+	if len(rest.Targets) == 0 {
+		if err := store.DeletePackage(c.db, pkg.Project, pkg.Name); err != nil {
+			slog.Error("mq: delete package", "project", pkg.Project, "package", pkg.Name, "err", err)
+		}
+		c.ws.Remove(pkg.Project + "/" + pkg.Name)
+		return
+	}
+	if err := c.upsertPackage(rest); err != nil {
+		slog.Error("mq: upsert package share", "err", err)
+		return
+	}
+	c.ws.Signal(rest)
+}
+
 func isPackageBuildEvent(key string) bool {
-	return key == "opensuse.obs.package.build_success" ||
-		key == "opensuse.obs.package.build_fail" ||
-		key == "opensuse.obs.package.build_unchanged"
+	return key == "package.build_success" ||
+		key == "package.build_fail" ||
+		key == "package.build_unchanged"
 }
 
 func mqStateToRollup(key string) model.RollupState {
 	switch key {
-	case "opensuse.obs.package.build_success":
+	case "package.build_success":
 		return model.RollupFinished
-	case "opensuse.obs.package.build_fail":
+	case "package.build_fail":
 		return model.RollupFailed
 	default:
 		// build_unchanged: the build completed with an identical result. Treat

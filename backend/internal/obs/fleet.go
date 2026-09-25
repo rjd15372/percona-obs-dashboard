@@ -46,6 +46,9 @@ var fallbackInstance = LegacyInstance(nil, "")
 
 func (f *Fleet) Instances() []*Instance { return f.instances }
 
+// Default returns the first configured instance.
+func (f *Fleet) Default() *Instance { return f.InstanceOrDefault("") }
+
 // Instance returns the instance with slug, or nil.
 func (f *Fleet) Instance(slug string) *Instance { return f.bySlug[slug] }
 
