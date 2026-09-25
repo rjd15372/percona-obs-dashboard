@@ -32,7 +32,7 @@ func productTier(w http.ResponseWriter, r *http.Request) (string, bool) {
 }
 
 // packagesHandler returns a handler for GET /api/products/{product}/{tier}/{version}/packages.
-func packagesHandler(db *sql.DB, root string) http.HandlerFunc {
+func packagesHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		product := chi.URLParam(r, "product")
 		tier, ok := productTier(w, r)
@@ -41,7 +41,7 @@ func packagesHandler(db *sql.DB, root string) http.HandlerFunc {
 		}
 		version := chi.URLParam(r, "version")
 
-		pkgs, err := store.QueryBuildPackages(db, root, product, tier, version)
+		pkgs, err := store.QueryBuildPackages(db, product, tier, version)
 		if err != nil {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
@@ -105,9 +105,9 @@ func eventsHandler(db *sql.DB) http.HandlerFunc {
 		// The tier subtree plus the shared common trees: common packages appear
 		// in both tier views, so their events do too.
 		prefixes := []string{
-			"isv:percona:" + product + ":" + tier,
-			"isv:percona:" + product + ":common",
-			"isv:percona:common",
+			product + ":" + tier,
+			product + ":common",
+			"common",
 		}
 
 		from, to, err := parseTimeWindow(r)
@@ -130,14 +130,14 @@ func eventsHandler(db *sql.DB) http.HandlerFunc {
 }
 
 // prContextPackagesHandler returns a handler for GET /api/pr/{pr}/{version}/packages.
-// Builds the OBS prefix as isv:percona:PR:{pr} (covers all subprojects).
+// Builds the OBS prefix as PR:{pr} (covers all subprojects).
 // {version} is accepted for URL symmetry with /api/products routes but ignored server-side;
 // the prefix covers all versions and version filtering is done client-side.
-func prContextPackagesHandler(db *sql.DB, root string) http.HandlerFunc {
+func prContextPackagesHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		pr := chi.URLParam(r, "pr")
 
-		pkgs, err := store.QueryPRBuildPackages(db, root, pr)
+		pkgs, err := store.QueryPRBuildPackages(db, pr)
 		if err != nil {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
@@ -155,9 +155,9 @@ func prContextPackagesHandler(db *sql.DB, root string) http.HandlerFunc {
 }
 
 // prContextEventsHandler returns a handler for GET /api/pr/{pr}/{version}/events.
-// Builds the OBS prefix as isv:percona:PR:{pr} (covers all subprojects).
+// Builds the OBS prefix as PR:{pr} (covers all subprojects).
 // {version} is accepted for URL symmetry but ignored server-side (filtering is client-side).
-func prContextEventsHandler(db *sql.DB, root string) http.HandlerFunc {
+func prContextEventsHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		pr := chi.URLParam(r, "pr")
 
@@ -167,7 +167,7 @@ func prContextEventsHandler(db *sql.DB, root string) http.HandlerFunc {
 			return
 		}
 
-		events, err := store.QueryPRBuildEvents(db, root, pr, from, to)
+		events, err := store.QueryPRBuildEvents(db, pr, from, to)
 		if err != nil {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
@@ -188,11 +188,11 @@ type PRGroup struct {
 }
 
 // prPackagesHandler returns a handler for GET /api/pr/packages.
-// It returns all PR packages (isv:percona:PR:*) grouped by PR number,
+// It returns all PR packages (PR:*) grouped by PR number,
 // sorted by PR number descending (newest first).
 func prPackagesHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		pkgs, err := store.QueryPackages(db, "isv:percona:PR")
+		pkgs, err := store.QueryPackages(db, "PR:")
 		if err != nil {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
@@ -295,10 +295,10 @@ var subprojectRe = regexp.MustCompile(`^[a-z0-9_-]+$`)
 // It queries the DB for distinct OBS repository names found in non-container
 // packages' targets, and returns them grouped into rpm and deb categories.
 // An optional ?subproject=<segment> narrows the query to that subproject
-// (e.g. isv:percona:ppg:staging:18:extras); invalid segments are rejected with 400.
+// (e.g. ppg:staging:18:extras); invalid segments are rejected with 400.
 func reposHandler(db *sql.DB) http.HandlerFunc {
 	inner := reposHandlerWithPrefix(db, func(r *http.Request) string {
-		prefix := "isv:percona:" + chi.URLParam(r, "product") + ":" + chi.URLParam(r, "tier") + ":" + chi.URLParam(r, "version")
+		prefix := chi.URLParam(r, "product") + ":" + chi.URLParam(r, "tier") + ":" + chi.URLParam(r, "version")
 		if sub := r.URL.Query().Get("subproject"); sub != "" {
 			prefix += ":" + sub
 		}
@@ -318,10 +318,9 @@ func reposHandler(db *sql.DB) http.HandlerFunc {
 
 // releasesPackagesHandler returns a handler for GET /api/releases/ppg/{version}/packages.
 // Serves release packages from the DB instead of hitting OBS live.
-func releasesPackagesHandler(db *sql.DB, root string) http.HandlerFunc {
+func releasesPackagesHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		prefix := root + ":ppg:releases"
-		pkgs, err := store.QueryReleasePackages(db, prefix)
+		pkgs, err := store.QueryReleasePackages(db, "ppg:releases")
 		if err != nil {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
@@ -340,10 +339,10 @@ func releasesPackagesHandler(db *sql.DB, root string) http.HandlerFunc {
 
 // releasesReposHandler returns a handler for GET /api/releases/ppg/{version}/repos.
 // Serves repos from the DB instead of hitting OBS live.
-func releasesReposHandler(db *sql.DB, root string) http.HandlerFunc {
+func releasesReposHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		version := chi.URLParam(r, "version")
-		prefix := root + ":ppg:releases:" + version
+		prefix := "ppg:releases:" + version
 		repos, err := store.QueryDistinctRepos(db, prefix)
 		if err != nil {
 			http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -366,13 +365,12 @@ func releasesReposHandler(db *sql.DB, root string) http.HandlerFunc {
 }
 
 // prReposHandler returns a handler for GET /api/pr/{pr}/{version}/repos.
-// Builds the OBS prefix as isv:percona:PR:{pr} (covers all subprojects).
+// Builds the OBS prefix as PR:{pr} (covers all subprojects).
 // {version} is accepted for URL symmetry but ignored server-side; the prefix covers all versions.
-func prReposHandler(db *sql.DB, root string) http.HandlerFunc {
+func prReposHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		repos, err := store.QueryPRDistinctRepos(
 			db,
-			root,
 			chi.URLParam(r, "pr"),
 		)
 		if err != nil {

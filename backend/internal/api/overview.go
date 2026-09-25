@@ -13,8 +13,8 @@ import (
 	"github.com/percona/obs-dashboard/internal/store"
 )
 
-// logicalProject maps a raw OBS project to the Overview row it belongs to:
-// tier version roots (ppg:devel:<V>, ppg:staging:<V>) absorb their
+// logicalProject maps a raw logical project to the Overview row it belongs
+// to: tier version roots (ppg:devel:<V>, ppg:staging:<V>) absorb their
 // :containers:* subprojects; any other direct subproject (extras, tde, …)
 // is its own row (absorbing its subtree) — matching the version selector's
 // <V>:<sub> granularity. The common trees, the releases tree, and each PR
@@ -23,37 +23,33 @@ import (
 // pre-migration duration/event rows still inside the stats windows merge
 // into the staging rows instead of rendering ghost sections. Unknown shapes
 // return "" (excluded).
-func logicalProject(root, project string) string {
-	prefix := root + ":"
-	if !strings.HasPrefix(project, prefix) {
-		return ""
-	}
-	rel := strings.Split(project[len(prefix):], ":")
+func logicalProject(project string) string {
+	rel := strings.Split(project, ":")
 	switch rel[0] {
 	case "PR":
 		if len(rel) >= 2 {
-			return root + ":PR:" + rel[1]
+			return "PR:" + rel[1]
 		}
 		return ""
 	case "common":
-		return root + ":common"
+		return "common"
 	case "ppg":
 		if len(rel) < 2 {
 			return ""
 		}
 		switch rel[1] {
 		case "common":
-			return root + ":ppg:common"
+			return "ppg:common"
 		case "releases":
-			return root + ":ppg:releases"
+			return "ppg:releases"
 		case "devel", "staging":
 			if len(rel) < 3 {
 				return ""
 			}
-			return tierRow(root, rel[1], rel[2], rel[3:])
+			return tierRow(rel[1], rel[2], rel[3:])
 		default:
 			// Legacy two-tier shape: ppg:<V>[:<sub>…] → the staging row.
-			return tierRow(root, "staging", rel[1], rel[2:])
+			return tierRow("staging", rel[1], rel[2:])
 		}
 	}
 	return ""
@@ -62,8 +58,8 @@ func logicalProject(root, project string) string {
 // tierRow builds the Overview row name for a tier version root and its
 // subproject tail: containers are absorbed into the version row; any other
 // direct subproject gets its own row.
-func tierRow(root, tier, version string, sub []string) string {
-	row := root + ":ppg:" + tier + ":" + version
+func tierRow(tier, version string, sub []string) string {
+	row := "ppg:" + tier + ":" + version
 	if len(sub) > 0 && sub[0] != "containers" {
 		row += ":" + sub[0]
 	}
@@ -124,7 +120,7 @@ var overviewWindows = map[string]time.Duration{
 // per-image CVE counts as max across archs, oldest_open_days from the oldest
 // non-nil CveSince among vulnerable archs, avg_fix_days as the rounded mean of
 // the image's closed episodes.
-func buildOverviewSnapshot(root, window string, now time.Time,
+func buildOverviewSnapshot(window string, now time.Time,
 	cur, prev []store.BuildCompletion, scans []store.OverviewCveScan, periods []store.OverviewCvePeriod,
 ) OverviewSnapshot {
 	type projAgg struct {
@@ -144,7 +140,7 @@ func buildOverviewSnapshot(root, window string, now time.Time,
 
 	repoCount := map[string]int{}
 	for _, e := range cur {
-		logical := logicalProject(root, e.Project)
+		logical := logicalProject(e.Project)
 		if logical == "" {
 			continue
 		}
@@ -156,7 +152,7 @@ func buildOverviewSnapshot(root, window string, now time.Time,
 
 	prevTotal := 0
 	for _, e := range prev {
-		if logicalProject(root, e.Project) != "" {
+		if logicalProject(e.Project) != "" {
 			prevTotal++
 		}
 	}
@@ -166,7 +162,7 @@ func buildOverviewSnapshot(root, window string, now time.Time,
 	imgAt := map[imgKey]*OverviewImage{}
 	imgLogical := map[imgKey]string{}
 	for _, s := range scans {
-		logical := logicalProject(root, s.Project)
+		logical := logicalProject(s.Project)
 		if logical == "" {
 			continue
 		}
@@ -349,7 +345,7 @@ func mergeInstanceCounts(counts []store.InstanceTargetCounts, defaultSlug string
 }
 
 // overviewHandler serves GET /api/overview?window=24h|48h|7d.
-func overviewHandler(db *sql.DB, root, defaultSlug string, cache *overviewCache) http.HandlerFunc {
+func overviewHandler(db *sql.DB, defaultSlug string, cache *overviewCache) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		window := r.URL.Query().Get("window")
 		if window == "" {
@@ -378,7 +374,7 @@ func overviewHandler(db *sql.DB, root, defaultSlug string, cache *overviewCache)
 			if err != nil {
 				return OverviewSnapshot{}, err
 			}
-			snap := buildOverviewSnapshot(root, window, now, cur, prev, scans, periods)
+			snap := buildOverviewSnapshot(window, now, cur, prev, scans, periods)
 			counts, err := store.QueryTargetCountsByInstance(db)
 			if err != nil {
 				return OverviewSnapshot{}, err

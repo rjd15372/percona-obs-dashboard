@@ -41,11 +41,10 @@ type Consumer struct {
 	db     *sql.DB
 	hub    *hubpkg.Hub
 	ws     *workingset.WorkingSet
-	root   string
 }
 
-func NewConsumer(inst *obs.Instance, fleet *obs.Fleet, db *sql.DB, h *hubpkg.Hub, ws *workingset.WorkingSet, root string) *Consumer {
-	return &Consumer{inst: inst, fleet: fleet, prefix: inst.MQRoutingPrefix, db: db, hub: h, ws: ws, root: root}
+func NewConsumer(inst *obs.Instance, fleet *obs.Fleet, db *sql.DB, h *hubpkg.Hub, ws *workingset.WorkingSet) *Consumer {
+	return &Consumer{inst: inst, fleet: fleet, prefix: inst.MQRoutingPrefix, db: db, hub: h, ws: ws}
 }
 
 // appendEvent writes evt to the store and notifies SSE clients.
@@ -174,7 +173,7 @@ func (c *Consumer) handle(ctx context.Context, msg amqp.Delivery) {
 		slog.Debug("mq: received raw message", "key", msg.RoutingKey, "payload", payload)
 	}
 
-	kind := obs.Classify(c.root, m.Project)
+	kind := obs.Classify(m.Project)
 
 	key := strings.TrimPrefix(msg.RoutingKey, c.prefix+".")
 	switch {
@@ -202,7 +201,7 @@ func (c *Consumer) handle(ctx context.Context, msg amqp.Delivery) {
 		c.appendEvent(&model.Event{
 			ID:       "evt_" + ulid.Make().String(),
 			Type:     model.EventCreated,
-			Tags:     obs.ProjectTags(c.root, m.Project),
+			Tags:     obs.ProjectTags(m.Project),
 			Project:  m.Project,
 			What:     fmt.Sprintf("project %s created", m.Project),
 			Why:      m.Sender,
@@ -220,7 +219,7 @@ func (c *Consumer) handle(ctx context.Context, msg amqp.Delivery) {
 		c.appendEvent(&model.Event{
 			ID:       "evt_" + ulid.Make().String(),
 			Type:     model.EventDeleted,
-			Tags:     obs.ProjectTags(c.root, m.Project),
+			Tags:     obs.ProjectTags(m.Project),
 			Project:  m.Project,
 			What:     fmt.Sprintf("project %s deleted", m.Project),
 			Why:      m.Comment,
@@ -236,7 +235,7 @@ func (c *Consumer) handle(ctx context.Context, msg amqp.Delivery) {
 		c.appendEvent(&model.Event{
 			ID:       "evt_" + ulid.Make().String(),
 			Type:     model.EventCreated,
-			Tags:     obs.ProjectTags(c.root, m.Project),
+			Tags:     obs.ProjectTags(m.Project),
 			Project:  m.Project,
 			Package:  m.Package,
 			What:     fmt.Sprintf("package %s created", m.Package),
@@ -248,7 +247,7 @@ func (c *Consumer) handle(ctx context.Context, msg amqp.Delivery) {
 		stub := &model.Package{
 			Project: m.Project,
 			Name:    m.Package,
-			Tags:    obs.ProjectTags(c.root, m.Project),
+			Tags:    obs.ProjectTags(m.Project),
 		}
 		c.ws.Signal(stub)
 
@@ -257,7 +256,7 @@ func (c *Consumer) handle(ctx context.Context, msg amqp.Delivery) {
 		c.appendEvent(&model.Event{
 			ID:       "evt_" + ulid.Make().String(),
 			Type:     model.EventDeleted,
-			Tags:     obs.ProjectTags(c.root, m.Project),
+			Tags:     obs.ProjectTags(m.Project),
 			Project:  m.Project,
 			Package:  m.Package,
 			What:     fmt.Sprintf("package %s deleted", m.Package),
@@ -350,7 +349,7 @@ func (c *Consumer) mergePackageTarget(m mqMessage, newState model.RollupState) *
 	return &model.Package{
 		Project:       m.Project,
 		Name:          m.Package,
-		Tags:          packageTags(c.root, m.Project, existingPkg),
+		Tags:          packageTags(m.Project, existingPkg),
 		RollupState:   worst,
 		OKTargets:     okCount,
 		TotalTargets:  len(targets),
@@ -363,8 +362,8 @@ func (c *Consumer) mergePackageTarget(m mqMessage, newState model.RollupState) *
 	}
 }
 
-func packageTags(root, project string, existing *model.Package) []string {
-	tags := obs.ProjectTags(root, project)
+func packageTags(project string, existing *model.Package) []string {
+	tags := obs.ProjectTags(project)
 	if existing == nil {
 		return tags
 	}

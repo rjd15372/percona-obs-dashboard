@@ -175,7 +175,7 @@ func TestPollerFetchProjectResultsBypassesLimiter(t *testing.T) {
 		t.Fatalf("drain budget: %v", err)
 	}
 
-	p := &Poller{client: SingleFleet(c, "isv:percona")}
+	p := &Poller{client: NewFleet(NewInstance(InstanceInfo{Slug: "opensuse", Root: "isv:percona"}, c))}
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 
@@ -213,10 +213,9 @@ func TestPollerRunGatedByPresence(t *testing.T) {
 
 	g := &stubGate{wake: make(chan struct{}, 1)}
 	p := &Poller{
-		client:   SingleFleet(NewClient(srv.URL, "u", "p"), "isv:percona"),
+		client:   NewFleet(NewInstance(InstanceInfo{Slug: "opensuse", Root: "isv:percona"}, NewClient(srv.URL, "u", "p"))),
 		db:       db,
 		interval: 25 * time.Millisecond,
-		root:     "isv:percona",
 		gate:     g,
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -292,7 +291,7 @@ func TestPollerCarriesForwardFailedInstance(t *testing.T) {
 		t.Fatal(err)
 	}
 	ws := workingset.New(64, time.Minute, time.Minute, 4)
-	p := NewPoller(fleet, db, time.Minute, hubpkg.New(), ws, "", nil)
+	p := NewPoller(fleet, db, time.Minute, hubpkg.New(), ws, nil)
 	p.tick(context.Background())
 
 	got, err := store.GetPackage(db, "ppg:17", "deb-only")

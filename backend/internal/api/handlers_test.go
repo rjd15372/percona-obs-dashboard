@@ -40,7 +40,7 @@ func setupTestServer(t *testing.T) http.Handler {
 	t.Cleanup(func() { db.Close() })
 	obsSrv := stubOBSServer(t)
 	obsClient := obs.SingleFleet(obs.NewClient(obsSrv.URL, "user", "pass"), "isv:percona")
-	return NewRouter(db, hub.New(), obsClient, "isv:percona", fakeStatter{}, new(atomic.Bool), time.Duration(0), fakePollState{s: "active"})
+	return NewRouter(db, hub.New(), obsClient, fakeStatter{}, new(atomic.Bool), time.Duration(0), fakePollState{s: "active"})
 }
 
 func TestPackagesHandler_EmptyDB(t *testing.T) {
@@ -273,12 +273,12 @@ func TestReposSubprojectParam(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 	obsSrv := stubOBSServer(t)
 	obsClient := obs.SingleFleet(obs.NewClient(obsSrv.URL, "user", "pass"), "isv:percona")
-	router := NewRouter(db, hub.New(), obsClient, "isv:percona", fakeStatter{}, new(atomic.Bool), time.Duration(0), fakePollState{s: "active"})
+	router := NewRouter(db, hub.New(), obsClient, fakeStatter{}, new(atomic.Bool), time.Duration(0), fakePollState{s: "active"})
 
 	falseVal := false
 	now := time.Now()
 	mainPkg := &model.Package{
-		Project: "isv:percona:ppg:staging:18", Name: "percona-postgresql18",
+		Project: "ppg:staging:18", Name: "percona-postgresql18",
 		RollupState: model.RollupSucceeded, OKTargets: 1, TotalTargets: 1,
 		IsContainer: &falseVal,
 		Targets:     []model.Target{{Repo: "Debian_13", Arch: "x86_64", State: "succeeded"}},
@@ -288,7 +288,7 @@ func TestReposSubprojectParam(t *testing.T) {
 		t.Fatalf("seed main pkg: %v", err)
 	}
 	extrasPkg := &model.Package{
-		Project: "isv:percona:ppg:staging:18:extras", Name: "percona-postgresql18-extras",
+		Project: "ppg:staging:18:extras", Name: "percona-postgresql18-extras",
 		RollupState: model.RollupSucceeded, OKTargets: 1, TotalTargets: 1,
 		IsContainer: &falseVal,
 		Targets:     []model.Target{{Repo: "UBI_9", Arch: "x86_64", State: "succeeded"}},
@@ -371,7 +371,7 @@ func TestRebuildHandler_Success(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, nil)))
 	defer slog.SetDefault(oldLogger)
 
-	body := `{"project":"isv:percona:ppg:17","repo":"RockyLinux_9","arch":"x86_64","package":"percona-pg_tde"}`
+	body := `{"project":"ppg:17","repo":"RockyLinux_9","arch":"x86_64","package":"percona-pg_tde"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/rebuild", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -398,7 +398,7 @@ func TestRebuildHandler_MissingField(t *testing.T) {
 	handler := rebuildHandler(obsClient)
 
 	// missing arch and package
-	body := `{"project":"isv:percona:ppg:17","repo":"RockyLinux_9"}`
+	body := `{"project":"ppg:17","repo":"RockyLinux_9"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/rebuild", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -418,7 +418,7 @@ func TestRebuildHandler_OBSError(t *testing.T) {
 	obsClient := obs.SingleFleet(obs.NewClient(obsSrv.URL, "user", "pass"), "isv:percona")
 	handler := rebuildHandler(obsClient)
 
-	body := `{"project":"isv:percona:ppg:17","repo":"RockyLinux_9","arch":"x86_64","package":"percona-pg_tde"}`
+	body := `{"project":"ppg:17","repo":"RockyLinux_9","arch":"x86_64","package":"percona-pg_tde"}`
 	req := httptest.NewRequest(http.MethodPost, "/api/rebuild", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -501,7 +501,7 @@ func TestCveScansHandler(t *testing.T) {
 			Title:            "test vulnerability",
 		}},
 	}
-	if err := store.UpsertCveScan(db, "isv:percona:ppg:17:containers", "percona-postgresql17", scan); err != nil {
+	if err := store.UpsertCveScan(db, "ppg:17:containers", "percona-postgresql17", scan); err != nil {
 		t.Fatalf("UpsertCveScan: %v", err)
 	}
 
@@ -510,7 +510,7 @@ func TestCveScansHandler(t *testing.T) {
 	t.Run("seeded rows returned with findings", func(t *testing.T) {
 		rec := httptest.NewRecorder()
 		h(rec, httptest.NewRequest(http.MethodGet,
-			"/api/cve/scans?project=isv:percona:ppg:17:containers&package=percona-postgresql17", nil))
+			"/api/cve/scans?project=ppg:17:containers&package=percona-postgresql17", nil))
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d", rec.Code)
 		}
@@ -536,10 +536,10 @@ func TestCveScansHandler(t *testing.T) {
 	t.Run("missing params rejected", func(t *testing.T) {
 		for _, url := range []string{
 			"/api/cve/scans",
-			"/api/cve/scans?project=isv:percona:ppg:17:containers",
+			"/api/cve/scans?project=ppg:17:containers",
 			"/api/cve/scans?package=percona-postgresql17",
 			"/api/cve/scans?project=&package=percona-postgresql17",
-			"/api/cve/scans?project=isv:percona:ppg:17:containers&package=",
+			"/api/cve/scans?project=ppg:17:containers&package=",
 		} {
 			rec := httptest.NewRecorder()
 			h(rec, httptest.NewRequest(http.MethodGet, url, nil))
@@ -552,7 +552,7 @@ func TestCveScansHandler(t *testing.T) {
 	t.Run("unknown pair returns empty array", func(t *testing.T) {
 		rec := httptest.NewRecorder()
 		h(rec, httptest.NewRequest(http.MethodGet,
-			"/api/cve/scans?project=isv:percona:nope&package=missing", nil))
+			"/api/cve/scans?project=nope&package=missing", nil))
 		if rec.Code != http.StatusOK {
 			t.Fatalf("expected 200, got %d", rec.Code)
 		}
@@ -614,7 +614,7 @@ func TestEventsHandlerIncludesCommonTrees(t *testing.T) {
 	t.Cleanup(func() { db.Close() })
 	obsSrv := stubOBSServer(t)
 	obsClient := obs.SingleFleet(obs.NewClient(obsSrv.URL, "user", "pass"), "isv:percona")
-	router := NewRouter(db, hub.New(), obsClient, "isv:percona", fakeStatter{}, new(atomic.Bool), time.Duration(0), fakePollState{s: "active"})
+	router := NewRouter(db, hub.New(), obsClient, fakeStatter{}, new(atomic.Bool), time.Duration(0), fakePollState{s: "active"})
 
 	now := time.Now().UTC()
 	seed := func(id, project string) {
@@ -625,10 +625,10 @@ func TestEventsHandlerIncludesCommonTrees(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	seed("evt_staging", "isv:percona:ppg:staging:17")
-	seed("evt_ppg_common", "isv:percona:ppg:common")
-	seed("evt_global_common", "isv:percona:common")
-	seed("evt_devel", "isv:percona:ppg:devel:17")
+	seed("evt_staging", "ppg:staging:17")
+	seed("evt_ppg_common", "ppg:common")
+	seed("evt_global_common", "common")
+	seed("evt_devel", "ppg:devel:17")
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/products/ppg/staging/17/events?window=60", nil)

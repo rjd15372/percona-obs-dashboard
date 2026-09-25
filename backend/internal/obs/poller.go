@@ -25,14 +25,13 @@ type Poller struct {
 	client   *Fleet
 	db       *sql.DB
 	interval time.Duration
-	root     string
 	hub      *hubpkg.Hub
 	ws       *workingset.WorkingSet
 	gate     PollGate
 }
 
-func NewPoller(client *Fleet, db *sql.DB, interval time.Duration, h *hubpkg.Hub, ws *workingset.WorkingSet, root string, gate PollGate) *Poller {
-	return &Poller{client: client, db: db, interval: interval, root: root, hub: h, ws: ws, gate: gate}
+func NewPoller(client *Fleet, db *sql.DB, interval time.Duration, h *hubpkg.Hub, ws *workingset.WorkingSet, gate PollGate) *Poller {
+	return &Poller{client: client, db: db, interval: interval, hub: h, ws: ws, gate: gate}
 }
 
 // Run blocks until ctx is cancelled. It ticks immediately on first call
@@ -80,9 +79,9 @@ func (p *Poller) tick(ctx context.Context) {
 		liveProjects[proj] = true
 	}
 
-	existing, err := store.QueryPackages(p.db, p.root)
+	existing, err := store.QueryPackages(p.db, "")
 	if err != nil {
-		slog.Error("poller: query packages", "root", p.root, "err", err)
+		slog.Error("poller: query packages", "err", err)
 		return
 	}
 	byKey := make(map[string]*model.Package, len(existing))
@@ -94,7 +93,7 @@ func (p *Poller) tick(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		kind := Classify(p.root, project)
+		kind := Classify(project)
 		if kind == KindUnknown {
 			continue
 		}
@@ -130,7 +129,7 @@ func (p *Poller) tick(ctx context.Context) {
 			}
 		}
 
-		tags := ProjectTags(p.root, project)
+		tags := ProjectTags(project)
 		for pkgName, targets := range byPkg {
 			key := project + "/" + pkgName
 			prev := byKey[key]
@@ -356,7 +355,7 @@ func targetsChanged(prev *model.Package, next *model.Package) bool {
 
 // PRNumber extracts the PR number from a PR project path.
 // Returns "" if the project is not a PR project.
-// Example: "isv:percona:PR:pr-42:ppg17" → "42"
+// Example: "PR:pr-42:ppg17" → "42"
 func PRNumber(project string) string {
 	parts := strings.Split(project, ":")
 	for i, p := range parts {

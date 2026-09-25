@@ -21,11 +21,11 @@ func TestOverviewBuildCompletions(t *testing.T) {
 	}
 	now := time.Now().UTC()
 	fmtT := func(d time.Duration) string { return now.Add(d).Format(time.RFC3339Nano) }
-	ins("isv:percona:ppg:17", "pkg-a", "UBI_9", "finished", fmtT(-1*time.Hour))  // in window: counted
-	ins("isv:percona:ppg:17", "pkg-b", "UBI_9", "failed", fmtT(-2*time.Hour))    // in window: counted
-	ins("isv:percona:ppg:17", "pkg-c", "UBI_9", "building", fmtT(-1*time.Hour))  // build start: must NOT count
-	ins("isv:percona:ppg:17", "pkg-a", "UBI_9", "finished", fmtT(-30*time.Hour)) // before window
-	ins("isv:percona:ppg:17", "pkg-a", "UBI_9", "scheduled", fmtT(-1*time.Hour)) // wrong state
+	ins("ppg:17", "pkg-a", "UBI_9", "finished", fmtT(-1*time.Hour))  // in window: counted
+	ins("ppg:17", "pkg-b", "UBI_9", "failed", fmtT(-2*time.Hour))    // in window: counted
+	ins("ppg:17", "pkg-c", "UBI_9", "building", fmtT(-1*time.Hour))  // build start: must NOT count
+	ins("ppg:17", "pkg-a", "UBI_9", "finished", fmtT(-30*time.Hour)) // before window
+	ins("ppg:17", "pkg-a", "UBI_9", "scheduled", fmtT(-1*time.Hour)) // wrong state
 
 	got, err := QueryBuildCompletions(db, now.Add(-24*time.Hour), now)
 	if err != nil {
@@ -61,14 +61,14 @@ func TestOverviewCveQueries(t *testing.T) {
 	if _, err := db.Exec(`INSERT INTO cve_scans
 		(project, package, arch, image_ref, scanned_at, critical_count, high_count, findings_json, cve_since)
 		VALUES (?,?,?,?,?,?,?,?,?)`,
-		"isv:percona:ppg:17:containers:ubi9", "pdp", "x86_64", "ref", now.Format(time.RFC3339),
+		"ppg:17:containers:ubi9", "pdp", "x86_64", "ref", now.Format(time.RFC3339),
 		2, 6, "[]", now.Add(-34*24*time.Hour).Format(time.RFC3339Nano)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec(`INSERT INTO cve_scans
 		(project, package, arch, image_ref, scanned_at, critical_count, high_count, findings_json)
 		VALUES (?,?,?,?,?,?,?,?)`,
-		"isv:percona:ppg:17:containers:ubi9", "pdp", "aarch64", "ref", now.Format(time.RFC3339),
+		"ppg:17:containers:ubi9", "pdp", "aarch64", "ref", now.Format(time.RFC3339),
 		1, 6, "[]"); err != nil { // NULL cve_since (pre-age-tracking row)
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestOverviewCveQueries(t *testing.T) {
 
 	if _, err := db.Exec(`INSERT INTO cve_periods (project, package, arch, cve_since, clean_since)
 		VALUES (?,?,?,?,?)`,
-		"isv:percona:ppg:17:containers:ubi9", "pdp", "x86_64",
+		"ppg:17:containers:ubi9", "pdp", "x86_64",
 		now.Add(-20*24*time.Hour).Format(time.RFC3339Nano), now.Add(-11*24*time.Hour).Format(time.RFC3339Nano)); err != nil {
 		t.Fatal(err)
 	}

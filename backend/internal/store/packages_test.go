@@ -18,7 +18,7 @@ func TestUpsertQueryPackage(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 	p := &model.Package{
-		Project:      "isv:percona:ppg:17",
+		Project:      "ppg:17",
 		Name:         "pg_tde",
 		RollupState:  model.RollupFailed,
 		OKTargets:    4,
@@ -39,7 +39,7 @@ func TestUpsertQueryPackage(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pkgs, err := QueryPackages(db, "isv:percona")
+	pkgs, err := QueryPackages(db, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestUpsertUpdatesExisting(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 	p := &model.Package{
-		Project: "isv:percona:ppg:17", Name: "pg_tde",
+		Project: "ppg:17", Name: "pg_tde",
 		RollupState: model.RollupFailed,
 		Targets:     []model.Target{}, UpdatedAt: now,
 	}
@@ -79,7 +79,7 @@ func TestUpsertUpdatesExisting(t *testing.T) {
 	p.RollupState = model.RollupSucceeded
 	UpsertPackageState(db, p, p.UpdatedAt)
 
-	pkgs, _ := QueryPackages(db, "isv:percona")
+	pkgs, _ := QueryPackages(db, "")
 	if len(pkgs) != 1 {
 		t.Fatalf("expected 1 after update, got %d", len(pkgs))
 	}
@@ -104,8 +104,8 @@ func TestGetActivePackages(t *testing.T) {
 		Project: "isv:percona", Name: "pkg-container-done",
 		RollupState: model.RollupPublished, OKTargets: 1, TotalTargets: 1,
 		IsContainer: &trueVal, Settled: true,
-		Targets:     []model.Target{{Repo: "repo", Arch: "x86_64", State: "succeeded"}},
-		UpdatedAt:   now,
+		Targets:   []model.Target{{Repo: "repo", Arch: "x86_64", State: "succeeded"}},
+		UpdatedAt: now,
 	}
 	if err := UpsertPackageState(db, publishedContainer, publishedContainer.UpdatedAt); err != nil {
 		t.Fatal(err)
@@ -116,8 +116,8 @@ func TestGetActivePackages(t *testing.T) {
 		Project: "isv:percona", Name: "pkg-dep-done",
 		RollupState: model.RollupPublished, OKTargets: 1, TotalTargets: 1,
 		IsContainer: &falseVal, Settled: true,
-		Targets:     []model.Target{{Repo: "repo", Arch: "x86_64", State: "succeeded"}},
-		UpdatedAt:   now,
+		Targets:   []model.Target{{Repo: "repo", Arch: "x86_64", State: "succeeded"}},
+		UpdatedAt: now,
 	}
 	if err := UpsertPackageState(db, publishedNonContainer, publishedNonContainer.UpdatedAt); err != nil {
 		t.Fatal(err)
@@ -182,25 +182,25 @@ func TestGetFinishedPackagesByProject(t *testing.T) {
 
 	// GetFinishedPackagesByProject returns succeeded packages (for publish re-check).
 	pkgSucceeded1 := &model.Package{
-		Project: "isv:percona:ppg:17", Name: "postgres17",
+		Project: "ppg:17", Name: "postgres17",
 		RollupState: model.RollupSucceeded, OKTargets: 1, TotalTargets: 1,
 		Targets:   []model.Target{{Repo: "Percona-PPG-17", Arch: "x86_64", State: "succeeded"}},
 		UpdatedAt: now,
 	}
 	pkgSucceeded2 := &model.Package{
-		Project: "isv:percona:ppg:17", Name: "pgaudit17",
+		Project: "ppg:17", Name: "pgaudit17",
 		RollupState: model.RollupSucceeded, OKTargets: 1, TotalTargets: 1,
 		Targets:   []model.Target{{Repo: "Percona-PPG-17", Arch: "aarch64", State: "succeeded"}},
 		UpdatedAt: now,
 	}
 	pkgBuilding := &model.Package{
-		Project: "isv:percona:ppg:17", Name: "pg_stat_monitor",
+		Project: "ppg:17", Name: "pg_stat_monitor",
 		RollupState: model.RollupBuilding, OKTargets: 0, TotalTargets: 1,
 		Targets:   []model.Target{{Repo: "Percona-PPG-17", Arch: "x86_64", State: "building"}},
 		UpdatedAt: now,
 	}
 	pkgOtherProject := &model.Package{
-		Project: "isv:percona:ppg:16", Name: "postgres16",
+		Project: "ppg:16", Name: "postgres16",
 		RollupState: model.RollupSucceeded, OKTargets: 1, TotalTargets: 1,
 		Targets:   []model.Target{{Repo: "Percona-PPG-16", Arch: "x86_64", State: "succeeded"}},
 		UpdatedAt: now,
@@ -211,7 +211,7 @@ func TestGetFinishedPackagesByProject(t *testing.T) {
 		}
 	}
 
-	got, err := GetFinishedPackagesByProject(db, "isv:percona:ppg:17")
+	got, err := GetFinishedPackagesByProject(db, "ppg:17")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -224,7 +224,7 @@ func TestGetFinishedPackagesByProject(t *testing.T) {
 		if p.RollupState != model.RollupSucceeded {
 			t.Errorf("package %s: want RollupSucceeded, got %s", p.Name, p.RollupState)
 		}
-		if p.Project != "isv:percona:ppg:17" {
+		if p.Project != "ppg:17" {
 			t.Errorf("package %s: wrong project %s", p.Name, p.Project)
 		}
 	}
@@ -233,7 +233,7 @@ func TestGetFinishedPackagesByProject(t *testing.T) {
 	}
 
 	// Empty result case
-	got2, err := GetFinishedPackagesByProject(db, "isv:percona:ppg:99")
+	got2, err := GetFinishedPackagesByProject(db, "ppg:99")
 	if err != nil {
 		t.Fatalf("unexpected error on empty: %v", err)
 	}
@@ -256,16 +256,16 @@ func TestQueryBuildPackages(t *testing.T) {
 		db.Exec(`INSERT INTO packages (project, name, rollup_state, ok_targets, total_targets, targets_json, updated_at)
             VALUES (?, ?, 'building', 0, 0, '[]', ?)`, project, name, now)
 	}
-	insert("isv:percona:ppg:staging:17", "pg_tde")
-	insert("isv:percona:ppg:staging:17:containers:ubi9", "pg_container")
-	insert("isv:percona:ppg:staging:17:extras", "extras_pkg")
-	insert("isv:percona:ppg:devel:17", "devel_pkg")
-	insert("isv:percona:ppg:common", "common_pkg")
-	insert("isv:percona:ppg:common:deps", "common_deps_pkg")
-	insert("isv:percona:common", "global_common")
-	insert("isv:percona:ppg:releases:17", "release_pkg")
+	insert("ppg:staging:17", "pg_tde")
+	insert("ppg:staging:17:containers:ubi9", "pg_container")
+	insert("ppg:staging:17:extras", "extras_pkg")
+	insert("ppg:devel:17", "devel_pkg")
+	insert("ppg:common", "common_pkg")
+	insert("ppg:common:deps", "common_deps_pkg")
+	insert("common", "global_common")
+	insert("ppg:releases:17", "release_pkg")
 
-	pkgs, err := QueryBuildPackages(db, "isv:percona", "ppg", "staging", "17")
+	pkgs, err := QueryBuildPackages(db, "ppg", "staging", "17")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,8 +289,8 @@ func TestQueryBuildPackages(t *testing.T) {
 
 	// Version-less fetch scopes to the whole tier plus BOTH shared common
 	// subtrees. Regression guard: the board only ever issues the "_" (All)
-	// query, so isv:percona:ppg:common[:deps...] must appear here too.
-	all, err := QueryBuildPackages(db, "isv:percona", "ppg", "devel", "_")
+	// query, so ppg:common[:deps...] must appear here too.
+	all, err := QueryBuildPackages(db, "ppg", "devel", "_")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -325,16 +325,16 @@ func TestQueryPRBuildPackagesCoversWholePR(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	insert("isv:percona:PR:pr-104:ppg:17", "pg_tde")
-	insert("isv:percona:PR:pr-104:ppg:17:containers:ubi9", "pg_container")
-	insert("isv:percona:PR:pr-104:common", "common_pkg")
-	insert("isv:percona:PR:pr-104:common:deps", "common_dep")
-	insert("isv:percona:PR:pr-104:other:17", "other_pkg")            // now part of the PR
-	insert("isv:percona:PR:pr-105:common", "other_pr_common")        // different PR
-	insert("isv:percona:PR:pr-200:common:deps:build", "common_only") // common-only PR
-	insert("isv:percona:PR:pr-10:common", "pr10_pkg")                // digit-prefix boundary
+	insert("PR:pr-104:ppg:17", "pg_tde")
+	insert("PR:pr-104:ppg:17:containers:ubi9", "pg_container")
+	insert("PR:pr-104:common", "common_pkg")
+	insert("PR:pr-104:common:deps", "common_dep")
+	insert("PR:pr-104:other:17", "other_pkg")            // now part of the PR
+	insert("PR:pr-105:common", "other_pr_common")        // different PR
+	insert("PR:pr-200:common:deps:build", "common_only") // common-only PR
+	insert("PR:pr-10:common", "pr10_pkg")                // digit-prefix boundary
 
-	pkgs, err := QueryPRBuildPackages(db, "isv:percona", "pr-104")
+	pkgs, err := QueryPRBuildPackages(db, "pr-104")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -354,7 +354,7 @@ func TestQueryPRBuildPackagesCoversWholePR(t *testing.T) {
 	}
 
 	// Common-only PR must be reachable.
-	onlyCommon, err := QueryPRBuildPackages(db, "isv:percona", "pr-200")
+	onlyCommon, err := QueryPRBuildPackages(db, "pr-200")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -378,12 +378,12 @@ func TestQueryPRDistinctReposCoversWholePR(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	insert("isv:percona:PR:pr-104:ppg:17", "pg_tde", `[{"repo":"EL_9"}]`)
-	insert("isv:percona:PR:pr-104:common", "common_pkg", `[{"repo":"Debian_12"}]`)
-	insert("isv:percona:PR:pr-104:ppg:18", "pg_tde18", `[{"repo":"EL_8"}]`) // now included
-	insert("isv:percona:PR:pr-105:ppg:17", "other", `[{"repo":"EL_7"}]`)    // different PR
+	insert("PR:pr-104:ppg:17", "pg_tde", `[{"repo":"EL_9"}]`)
+	insert("PR:pr-104:common", "common_pkg", `[{"repo":"Debian_12"}]`)
+	insert("PR:pr-104:ppg:18", "pg_tde18", `[{"repo":"EL_8"}]`) // now included
+	insert("PR:pr-105:ppg:17", "other", `[{"repo":"EL_7"}]`)    // different PR
 
-	repos, err := QueryPRDistinctRepos(db, "isv:percona", "pr-104")
+	repos, err := QueryPRDistinctRepos(db, "pr-104")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -410,11 +410,11 @@ func TestQueryReleasePackages(t *testing.T) {
 
 	now := time.Now().UTC()
 	db.Exec(`INSERT INTO packages (project, name, rollup_state, ok_targets, total_targets, targets_json, updated_at, is_release)
-        VALUES ('isv:percona:ppg:releases:17', 'pg_tde', 'building', 0, 0, '[]', ?, 1)`, now)
+        VALUES ('ppg:releases:17', 'pg_tde', 'building', 0, 0, '[]', ?, 1)`, now)
 	db.Exec(`INSERT INTO packages (project, name, rollup_state, ok_targets, total_targets, targets_json, updated_at)
-        VALUES ('isv:percona:ppg:17', 'pg_tde_dev', 'building', 0, 0, '[]', ?)`, now)
+        VALUES ('ppg:17', 'pg_tde_dev', 'building', 0, 0, '[]', ?)`, now)
 
-	pkgs, err := QueryReleasePackages(db, "isv:percona:ppg:releases")
+	pkgs, err := QueryReleasePackages(db, "ppg:releases")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -437,7 +437,7 @@ func TestStateTransitionsRecorded(t *testing.T) {
 	defer db.Close()
 
 	pkg := &model.Package{
-		Project:     "isv:percona:ppg:17",
+		Project:     "ppg:17",
 		Name:        "pg_tde",
 		RollupState: model.RollupBuilding,
 		Targets:     []model.Target{{Repo: "RockyLinux_9", Arch: "x86_64", State: "building"}},
@@ -477,7 +477,7 @@ func TestQueryPackagesIncludesTargetStartedAt(t *testing.T) {
 
 	startedAt := time.Now().UTC().Truncate(time.Second)
 	pkg := &model.Package{
-		Project:     "isv:percona:ppg:17",
+		Project:     "ppg:17",
 		Name:        "pg_tde",
 		RollupState: model.RollupBuilding,
 		Targets: []model.Target{
@@ -490,7 +490,7 @@ func TestQueryPackagesIncludesTargetStartedAt(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pkgs, err := QueryPackages(db, "isv:percona:ppg:17")
+	pkgs, err := QueryPackages(db, "ppg:17")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -517,7 +517,7 @@ func TestQueryPackagesIgnoresUnrelatedTargetDurations(t *testing.T) {
 
 	startedAt := time.Now().UTC().Truncate(time.Second)
 	pkg := &model.Package{
-		Project:     "isv:percona:ppg:17",
+		Project:     "ppg:17",
 		Name:        "pg_tde",
 		RollupState: model.RollupBuilding,
 		Targets:     []model.Target{{Repo: "RockyLinux_9", Arch: "x86_64", State: "building"}},
@@ -530,12 +530,12 @@ func TestQueryPackagesIgnoresUnrelatedTargetDurations(t *testing.T) {
 	if _, err := db.Exec(`
 		INSERT INTO target_state_durations (project, package, repo, arch, state, entered_at)
 		VALUES (?, ?, ?, ?, ?, ?)`,
-		"isv:percona:ppg:18", "unrelated", "Ubuntu_24.04", "aarch64", "building", "not-a-time",
+		"ppg:18", "unrelated", "Ubuntu_24.04", "aarch64", "building", "not-a-time",
 	); err != nil {
 		t.Fatal(err)
 	}
 
-	pkgs, err := QueryPackages(db, "isv:percona:ppg:17")
+	pkgs, err := QueryPackages(db, "ppg:17")
 	if err != nil {
 		t.Fatalf("query should ignore unrelated duration rows: %v", err)
 	}
@@ -553,7 +553,7 @@ func TestUpsertPreservesTagsAndIsRelease(t *testing.T) {
 
 	// Insert with tags and is_release set.
 	pkg := &model.Package{
-		Project:     "isv:percona:ppg:releases:17",
+		Project:     "ppg:releases:17",
 		Name:        "pg_tde",
 		Tags:        []string{"ppg", "release"},
 		IsRelease:   true,
@@ -568,7 +568,7 @@ func TestUpsertPreservesTagsAndIsRelease(t *testing.T) {
 
 	// Upsert again with empty Tags and IsRelease=false (simulating worker update).
 	stub := &model.Package{
-		Project:     "isv:percona:ppg:releases:17",
+		Project:     "ppg:releases:17",
 		Name:        "pg_tde",
 		Tags:        nil,
 		IsRelease:   false,
@@ -581,7 +581,7 @@ func TestUpsertPreservesTagsAndIsRelease(t *testing.T) {
 	}
 
 	// Tags and is_release should be preserved from the first insert.
-	pkgs, err := QueryPackages(db, "isv:percona:ppg:releases:17")
+	pkgs, err := QueryPackages(db, "ppg:releases:17")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -606,7 +606,7 @@ func TestContainerTagsRoundtrip(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 	p := &model.Package{
-		Project:       "isv:percona:ppg:17:containers:ubi9",
+		Project:       "ppg:17:containers:ubi9",
 		Name:          "percona-distribution-postgresql",
 		RollupState:   model.RollupSucceeded,
 		IsContainer:   boolPtr(true),
@@ -619,7 +619,7 @@ func TestContainerTagsRoundtrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pkgs, err := QueryPackages(db, "isv:percona")
+	pkgs, err := QueryPackages(db, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -639,14 +639,14 @@ func TestContainerTagsRoundtrip(t *testing.T) {
 
 	// Nil ContainerTags must round-trip as nil (not empty slice)
 	p2 := &model.Package{
-		Project: "isv:percona:ppg:17", Name: "pg_tde",
+		Project: "ppg:17", Name: "pg_tde",
 		RollupState: model.RollupSucceeded,
 		Targets:     []model.Target{}, UpdatedAt: now,
 	}
 	if err := UpsertPackageState(db, p2, now); err != nil {
 		t.Errorf("upsert nil ContainerTags: %v", err)
 	}
-	pkgs2, _ := QueryPackages(db, "isv:percona:ppg:17")
+	pkgs2, _ := QueryPackages(db, "ppg:17")
 	for _, pkg := range pkgs2 {
 		if pkg.Name == "pg_tde" && pkg.ContainerTags != nil {
 			t.Errorf("pg_tde: ContainerTags should be nil, got %v", pkg.ContainerTags)
@@ -663,7 +663,7 @@ func TestVersionRoundtrip(t *testing.T) {
 
 	now := time.Now().UTC().Truncate(time.Second)
 	p := &model.Package{
-		Project:     "isv:percona:ppg:17",
+		Project:     "ppg:17",
 		Name:        "percona-pg_tde",
 		RollupState: model.RollupSucceeded,
 		IsContainer: boolPtr(false),
@@ -674,7 +674,7 @@ func TestVersionRoundtrip(t *testing.T) {
 	if err := UpsertPackageState(db, p, now); err != nil {
 		t.Fatal(err)
 	}
-	pkgs, err := QueryPackages(db, "isv:percona")
+	pkgs, err := QueryPackages(db, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -690,7 +690,7 @@ func TestVersionRoundtrip(t *testing.T) {
 
 	// Container package
 	c := &model.Package{
-		Project:     "isv:percona:ppg:17:containers",
+		Project:     "ppg:17:containers",
 		Name:        "percona-distribution-postgresql",
 		RollupState: model.RollupSucceeded,
 		IsContainer: boolPtr(true),
@@ -701,7 +701,7 @@ func TestVersionRoundtrip(t *testing.T) {
 	if err := UpsertPackageState(db, c, now); err != nil {
 		t.Fatal(err)
 	}
-	pkgs2, err := QueryPackages(db, "isv:percona")
+	pkgs2, err := QueryPackages(db, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -855,7 +855,7 @@ func TestUpsertContainerTagInjection(t *testing.T) {
 	trueVal := true
 	now := time.Now().UTC().Truncate(time.Second)
 	p := &model.Package{
-		Project:     "isv:percona:ppg:17:containers:ubi9",
+		Project:     "ppg:17:containers:ubi9",
 		Name:        "percona-postgresql17",
 		Tags:        []string{"ppg"},
 		IsContainer: &trueVal,
@@ -867,7 +867,7 @@ func TestUpsertContainerTagInjection(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pkgs, err := QueryPackages(db, "isv:percona:ppg:17:containers:ubi9")
+	pkgs, err := QueryPackages(db, "ppg:17:containers:ubi9")
 	if err != nil || len(pkgs) != 1 {
 		t.Fatalf("expected 1 package, got %d (err: %v)", len(pkgs), err)
 	}
@@ -895,7 +895,7 @@ func TestStateChangedAt(t *testing.T) {
 	t2 := t0.Add(10 * time.Minute)
 
 	p := &model.Package{
-		Project: "isv:percona:ppg:17", Name: "pg_tde",
+		Project: "ppg:17", Name: "pg_tde",
 		RollupState: model.RollupBuilding,
 		Targets:     []model.Target{}, UpdatedAt: t0,
 	}
@@ -904,7 +904,7 @@ func TestStateChangedAt(t *testing.T) {
 	if err := UpsertPackageState(db, p, t0); err != nil {
 		t.Fatal(err)
 	}
-	pkgs, err := QueryPackages(db, "isv:percona:ppg:17")
+	pkgs, err := QueryPackages(db, "ppg:17")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -920,7 +920,7 @@ func TestStateChangedAt(t *testing.T) {
 	if err := UpsertPackageState(db, p, t1); err != nil {
 		t.Fatal(err)
 	}
-	pkgs, err = QueryPackages(db, "isv:percona:ppg:17")
+	pkgs, err = QueryPackages(db, "ppg:17")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -934,7 +934,7 @@ func TestStateChangedAt(t *testing.T) {
 	if err := UpsertPackageState(db, p, t2); err != nil {
 		t.Fatal(err)
 	}
-	pkgs, err = QueryPackages(db, "isv:percona:ppg:17")
+	pkgs, err = QueryPackages(db, "ppg:17")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -950,7 +950,7 @@ func TestSettledPersistedAndScanned(t *testing.T) {
 	}
 	defer db.Close()
 	p := &model.Package{
-		Project: "isv:percona:ppg:17", Name: "pkg-a",
+		Project: "ppg:17", Name: "pkg-a",
 		RollupState: model.RollupSucceeded, Settled: true,
 		Targets:   []model.Target{{Repo: "images", Arch: "x86_64", State: "succeeded"}},
 		UpdatedAt: time.Now().UTC(),
@@ -958,7 +958,7 @@ func TestSettledPersistedAndScanned(t *testing.T) {
 	if err := UpsertPackageState(db, p, time.Now().UTC()); err != nil {
 		t.Fatal(err)
 	}
-	got, err := QueryPackages(db, "isv:percona:ppg:17")
+	got, err := QueryPackages(db, "ppg:17")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1029,7 +1029,7 @@ func TestDeletePackageRemovesCveRows(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	proj := "isv:percona:PR:pr-9:ppg:18:containers:ubi9"
+	proj := "PR:pr-9:ppg:18:containers:ubi9"
 	seedCveRows(t, db, proj, "img-a")
 	seedCveRows(t, db, proj, "img-b")
 
@@ -1048,8 +1048,8 @@ func TestDeletePackagesByProjectRemovesCveRows(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	proj := "isv:percona:PR:pr-9:ppg:18:containers:ubi9"
-	other := "isv:percona:ppg:18:containers:ubi9"
+	proj := "PR:pr-9:ppg:18:containers:ubi9"
+	other := "ppg:18:containers:ubi9"
 	seedCveRows(t, db, proj, "img-a")
 	seedCveRows(t, db, other, "img-keep")
 
@@ -1097,20 +1097,20 @@ func TestQueryStaleBlockedTargets(t *testing.T) {
 		}
 	}
 
-	insertPkg("isv:percona:ppg:devel:17", "stuck_pkg", 0)
-	insertDur("isv:percona:ppg:devel:17", "stuck_pkg", "Fedora_42", "x86_64", "blocked", old, false)
+	insertPkg("ppg:devel:17", "stuck_pkg", 0)
+	insertDur("ppg:devel:17", "stuck_pkg", "Fedora_42", "x86_64", "blocked", old, false)
 
-	insertPkg("isv:percona:ppg:staging:17", "fresh_pkg", 0)
-	insertDur("isv:percona:ppg:staging:17", "fresh_pkg", "Fedora_42", "x86_64", "blocked", fresh, false)
+	insertPkg("ppg:staging:17", "fresh_pkg", 0)
+	insertDur("ppg:staging:17", "fresh_pkg", "Fedora_42", "x86_64", "blocked", fresh, false)
 
-	insertPkg("isv:percona:ppg:devel:16", "building_pkg", 0)
-	insertDur("isv:percona:ppg:devel:16", "building_pkg", "Fedora_42", "x86_64", "building", old, false)
+	insertPkg("ppg:devel:16", "building_pkg", 0)
+	insertDur("ppg:devel:16", "building_pkg", "Fedora_42", "x86_64", "building", old, false)
 
-	insertPkg("isv:percona:ppg:devel:15", "ended_pkg", 0)
-	insertDur("isv:percona:ppg:devel:15", "ended_pkg", "Fedora_42", "x86_64", "blocked", old, true)
+	insertPkg("ppg:devel:15", "ended_pkg", 0)
+	insertDur("ppg:devel:15", "ended_pkg", "Fedora_42", "x86_64", "blocked", old, true)
 
-	insertPkg("isv:percona:ppg:releases:17", "release_pkg", 1)
-	insertDur("isv:percona:ppg:releases:17", "release_pkg", "Fedora_42", "x86_64", "blocked", old, false)
+	insertPkg("ppg:releases:17", "release_pkg", 1)
+	insertDur("ppg:releases:17", "release_pkg", "Fedora_42", "x86_64", "blocked", old, false)
 
 	got, err := QueryStaleBlockedTargets(db, now.Add(-30*time.Minute))
 	if err != nil {
@@ -1120,7 +1120,7 @@ func TestQueryStaleBlockedTargets(t *testing.T) {
 		t.Fatalf("expected exactly [stuck_pkg], got %d rows: %+v", len(got), got)
 	}
 	bt := got[0]
-	if bt.Project != "isv:percona:ppg:devel:17" || bt.Package != "stuck_pkg" ||
+	if bt.Project != "ppg:devel:17" || bt.Package != "stuck_pkg" ||
 		bt.Repo != "Fedora_42" || bt.Arch != "x86_64" {
 		t.Fatalf("unexpected target: %+v", bt)
 	}
@@ -1139,19 +1139,19 @@ func TestCleanupOrphanedCveRows(t *testing.T) {
 	now := time.Now().UTC()
 
 	// Live package with CVE rows — must survive.
-	live := &model.Package{Project: "isv:percona:ppg:18:containers:ubi9", Name: "img-live",
+	live := &model.Package{Project: "ppg:18:containers:ubi9", Name: "img-live",
 		RollupState: model.RollupPublished, UpdatedAt: now}
 	if err := UpsertPackageState(db, live, now); err != nil {
 		t.Fatal(err)
 	}
 	seedCveRows(t, db, live.Project, live.Name)
 	// Orphan: no packages row.
-	seedCveRows(t, db, "isv:percona:PR:pr-999:ppg:17:containers:ubi9", "img-gone")
+	seedCveRows(t, db, "PR:pr-999:ppg:17:containers:ubi9", "img-gone")
 
 	if err := cleanupOrphanedCveRows(db); err != nil {
 		t.Fatal(err)
 	}
-	scans, periods := countCveRows(t, db, "isv:percona:PR:pr-999:ppg:17:containers:ubi9")
+	scans, periods := countCveRows(t, db, "PR:pr-999:ppg:17:containers:ubi9")
 	if scans != 0 || periods != 0 {
 		t.Fatalf("orphaned cve rows survived cleanup: scans=%d periods=%d", scans, periods)
 	}

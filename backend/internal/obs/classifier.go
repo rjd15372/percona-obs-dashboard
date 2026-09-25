@@ -4,21 +4,21 @@ import (
 	"strings"
 )
 
-// ProjectKind categorises an OBS project relative to the configured root.
+// ProjectKind categorises a logical (root-free) OBS project name.
 type ProjectKind int
 
 const (
-	KindUnknown   ProjectKind = iota
-	// KindDev covers <root>:ppg:<version>[:<subproject>]. Container subprojects
-	// (e.g. <root>:ppg:17:containers:ubi9) intentionally map here, not a separate
+	KindUnknown ProjectKind = iota
+	// KindDev covers ppg:<version>[:<subproject>]. Container subprojects
+	// (e.g. ppg:17:containers:ubi9) intentionally map here, not a separate
 	// KindContainer. Container detection is per-package via is_container, not at the
 	// project level — this was an explicit design decision. Events from container
 	// subprojects therefore use the ppg tag, not the container tag.
-	KindDev       // <root>:ppg:<version>[:<subproject>]
-	KindPR        // <root>:PR:pr-<n>:ppg:<version>[:<subproject>]
-	KindPPGCommon // <root>:ppg:common[:<subproject>]
-	KindCommon    // <root>:common[:<subproject>]
-	KindRelease   // <root>:ppg:releases:<version>[:<subproject>]
+	KindDev       // ppg:<version>[:<subproject>]
+	KindPR        // PR:pr-<n>:ppg:<version>[:<subproject>]
+	KindPPGCommon // ppg:common[:<subproject>]
+	KindCommon    // common[:<subproject>]
+	KindRelease   // ppg:releases:<version>[:<subproject>]
 )
 
 func (k ProjectKind) IsRealTime() bool {
@@ -29,15 +29,10 @@ func (k ProjectKind) IsRealTime() bool {
 	return false
 }
 
-// Classify returns the ProjectKind for project relative to root.
-// root is the top-level namespace, e.g. "isv:percona".
-func Classify(root, project string) ProjectKind {
-	prefix := root + ":"
-	if !strings.HasPrefix(project, prefix) {
-		return KindUnknown
-	}
-	rel := project[len(prefix):]
-	parts := strings.Split(rel, ":")
+// Classify returns the ProjectKind of a logical (root-free) project name,
+// e.g. "ppg:17", "PR:pr-42:ppg:17", "ppg:releases:17", "common".
+func Classify(project string) ProjectKind {
+	parts := strings.Split(project, ":")
 	switch parts[0] {
 	case "ppg":
 		if len(parts) < 2 {
@@ -66,8 +61,8 @@ func Classify(root, project string) ProjectKind {
 }
 
 // ProjectTags returns the tag slice to store on packages belonging to project.
-func ProjectTags(root, project string) []string {
-	switch Classify(root, project) {
+func ProjectTags(project string) []string {
+	switch Classify(project) {
 	case KindDev:
 		return []string{"ppg"}
 	case KindPR:

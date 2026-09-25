@@ -13,36 +13,35 @@ import (
 )
 
 func TestLogicalProject(t *testing.T) {
-	const root = "isv:percona"
 	cases := []struct{ project, want string }{
 		// three-tier shapes
-		{"isv:percona:ppg:staging:17", "isv:percona:ppg:staging:17"},
-		{"isv:percona:ppg:staging:17:containers:ubi9", "isv:percona:ppg:staging:17"},
-		{"isv:percona:ppg:staging:16:extras", "isv:percona:ppg:staging:16:extras"},
-		{"isv:percona:ppg:staging:16:extras:containers:ubi9", "isv:percona:ppg:staging:16:extras"},
-		{"isv:percona:ppg:staging:16:tde", "isv:percona:ppg:staging:16:tde"},
-		{"isv:percona:ppg:devel:18", "isv:percona:ppg:devel:18"},
-		{"isv:percona:ppg:devel:18:containers:ubi9", "isv:percona:ppg:devel:18"},
-		{"isv:percona:ppg:devel", ""},
-		{"isv:percona:ppg:staging", ""},
+		{"ppg:staging:17", "ppg:staging:17"},
+		{"ppg:staging:17:containers:ubi9", "ppg:staging:17"},
+		{"ppg:staging:16:extras", "ppg:staging:16:extras"},
+		{"ppg:staging:16:extras:containers:ubi9", "ppg:staging:16:extras"},
+		{"ppg:staging:16:tde", "ppg:staging:16:tde"},
+		{"ppg:devel:18", "ppg:devel:18"},
+		{"ppg:devel:18:containers:ubi9", "ppg:devel:18"},
+		{"ppg:devel", ""},
+		{"ppg:staging", ""},
 		// legacy two-tier shapes map onto staging (renamed continuation):
 		// pre-migration duration/event rows inside the stats windows merge
 		// into the staging rows instead of rendering ghost sections.
-		{"isv:percona:ppg:17", "isv:percona:ppg:staging:17"},
-		{"isv:percona:ppg:17:containers:ubi9", "isv:percona:ppg:staging:17"},
-		{"isv:percona:ppg:16:extras", "isv:percona:ppg:staging:16:extras"},
+		{"ppg:17", "ppg:staging:17"},
+		{"ppg:17:containers:ubi9", "ppg:staging:17"},
+		{"ppg:16:extras", "ppg:staging:16:extras"},
 		// unchanged shapes
-		{"isv:percona:ppg:common", "isv:percona:ppg:common"},
-		{"isv:percona:ppg:common:deps", "isv:percona:ppg:common"},
-		{"isv:percona:common:containers:ubi8", "isv:percona:common"},
-		{"isv:percona:ppg:releases:17:containers:ubi9", "isv:percona:ppg:releases"},
-		{"isv:percona:PR:pr-124:ppg:staging:16:extras", "isv:percona:PR:pr-124"},
-		{"isv:percona:PR:pr-33:ppg:18:containers:ubi9", "isv:percona:PR:pr-33"},
+		{"ppg:common", "ppg:common"},
+		{"ppg:common:deps", "ppg:common"},
+		{"common:containers:ubi8", "common"},
+		{"ppg:releases:17:containers:ubi9", "ppg:releases"},
+		{"PR:pr-124:ppg:staging:16:extras", "PR:pr-124"},
+		{"PR:pr-33:ppg:18:containers:ubi9", "PR:pr-33"},
 		{"isv:other:ppg:17", ""},
-		{"isv:percona:ppg", ""},
+		{"ppg", ""},
 	}
 	for _, c := range cases {
-		if got := logicalProject(root, c.project); got != c.want {
+		if got := logicalProject(c.project); got != c.want {
 			t.Errorf("logicalProject(%q) = %q, want %q", c.project, got, c.want)
 		}
 	}
@@ -53,24 +52,24 @@ func TestOverviewSnapshotBuilder(t *testing.T) {
 	day := func(n int) time.Time { return now.Add(time.Duration(-n) * 24 * time.Hour) }
 
 	cur := []store.BuildCompletion{
-		{Project: "isv:percona:ppg:17", Package: "pkg-a", Repo: "UBI_9"},
-		{Project: "isv:percona:ppg:17:containers:ubi9", Package: "img-x", Repo: "images"},
-		{Project: "isv:percona:ppg:17", Package: "pkg-a", Repo: "Debian_12"},
-		{Project: "isv:percona:PR:pr-9:ppg:18", Package: "pkg-b", Repo: "UBI_9"},
+		{Project: "ppg:17", Package: "pkg-a", Repo: "UBI_9"},
+		{Project: "ppg:17:containers:ubi9", Package: "img-x", Repo: "images"},
+		{Project: "ppg:17", Package: "pkg-a", Repo: "Debian_12"},
+		{Project: "PR:pr-9:ppg:18", Package: "pkg-b", Repo: "UBI_9"},
 	}
-	prev := []store.BuildCompletion{{Project: "isv:percona:ppg:17", Package: "pkg-a", Repo: "UBI_9"}}
+	prev := []store.BuildCompletion{{Project: "ppg:17", Package: "pkg-a", Repo: "UBI_9"}}
 	scans := []store.OverviewCveScan{
-		{Project: "isv:percona:ppg:17:containers:ubi9", Package: "img-x", Arch: "x86_64", Critical: 2, High: 6, CveSince: ptrTime(day(34))},
-		{Project: "isv:percona:ppg:17:containers:ubi9", Package: "img-x", Arch: "aarch64", Critical: 1, High: 7, CveSince: ptrTime(day(10))},
-		{Project: "isv:percona:ppg:releases:17:containers:ubi9", Package: "img-r", Arch: "x86_64", Critical: 0, High: 48, CveSince: nil},
-		{Project: "isv:percona:common:containers:ubi9", Package: "img-clean", Arch: "x86_64", Critical: 0, High: 0, CveSince: nil},
+		{Project: "ppg:17:containers:ubi9", Package: "img-x", Arch: "x86_64", Critical: 2, High: 6, CveSince: ptrTime(day(34))},
+		{Project: "ppg:17:containers:ubi9", Package: "img-x", Arch: "aarch64", Critical: 1, High: 7, CveSince: ptrTime(day(10))},
+		{Project: "ppg:releases:17:containers:ubi9", Package: "img-r", Arch: "x86_64", Critical: 0, High: 48, CveSince: nil},
+		{Project: "common:containers:ubi9", Package: "img-clean", Arch: "x86_64", Critical: 0, High: 0, CveSince: nil},
 	}
 	periods := []store.OverviewCvePeriod{
-		{Project: "isv:percona:ppg:17:containers:ubi9", Package: "img-x", CveSince: day(30), CleanSince: day(21)}, // 9d
-		{Project: "isv:percona:ppg:17:containers:ubi9", Package: "img-x", CveSince: day(60), CleanSince: day(49)}, // 11d
+		{Project: "ppg:17:containers:ubi9", Package: "img-x", CveSince: day(30), CleanSince: day(21)}, // 9d
+		{Project: "ppg:17:containers:ubi9", Package: "img-x", CveSince: day(60), CleanSince: day(49)}, // 11d
 	}
 
-	s := buildOverviewSnapshot("isv:percona", "24h", now, cur, prev, scans, periods)
+	s := buildOverviewSnapshot("24h", now, cur, prev, scans, periods)
 
 	if s.PreviousWindowRebuildTotal != 1 {
 		t.Fatalf("prev total = %d", s.PreviousWindowRebuildTotal)
@@ -78,29 +77,29 @@ func TestOverviewSnapshotBuilder(t *testing.T) {
 	if s.TopRepo == nil || s.TopRepo.Name != "UBI_9" || s.TopRepo.Count != 2 {
 		t.Fatalf("top_repo = %+v", s.TopRepo)
 	}
-	p17 := findProject(t, s, "isv:percona:ppg:staging:17")
+	p17 := findProject(t, s, "ppg:staging:17")
 	if p17.Rebuilds != 3 || p17.TopPackage.Name != "pkg-a" || p17.TopPackage.Count != 2 {
 		t.Fatalf("ppg:staging:17 = %+v", p17)
 	}
 	if len(p17.Images) != 1 || p17.Images[0].Critical != 2 || p17.Images[0].High != 7 {
 		t.Fatalf("img-x max-across-archs failed: %+v", p17.Images)
 	}
-	if p17.Images[0].Project != "isv:percona:ppg:17:containers:ubi9" {
+	if p17.Images[0].Project != "ppg:17:containers:ubi9" {
 		t.Fatalf("img-x project = %+v", p17.Images[0])
 	}
 	if p17.Images[0].OldestOpenDays != 34 || p17.Images[0].AvgFixDays != 10 { // mean(9,11)=10
 		t.Fatalf("img-x ages = %+v", p17.Images[0])
 	}
-	rel := findProject(t, s, "isv:percona:ppg:releases")
+	rel := findProject(t, s, "ppg:releases")
 	if rel.Rebuilds != 0 || rel.Images[0].OldestOpenDays != 0 || rel.Images[0].AvgFixDays != 0 {
 		t.Fatalf("releases = %+v", rel)
 	}
-	findProject(t, s, "isv:percona:common")
-	pr := findProject(t, s, "isv:percona:PR:pr-9")
+	findProject(t, s, "common")
+	pr := findProject(t, s, "PR:pr-9")
 	if pr.Rebuilds != 1 {
 		t.Fatalf("pr = %+v", pr)
 	}
-	if s.Projects[0].Project != "isv:percona:ppg:staging:17" {
+	if s.Projects[0].Project != "ppg:staging:17" {
 		t.Fatalf("sort order: %v", s.Projects[0].Project)
 	}
 }
@@ -184,7 +183,7 @@ func TestOverviewHandlerWindowValidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	h := overviewHandler(db, "isv:percona", "opensuse", newOverviewCache(time.Minute))
+	h := overviewHandler(db, "opensuse", newOverviewCache(time.Minute))
 
 	for _, tc := range []struct {
 		q    string
@@ -221,7 +220,7 @@ func TestOverviewHandlerByInstance(t *testing.T) {
 		}
 	}
 
-	h := overviewHandler(db, "isv:percona", "opensuse", newOverviewCache(time.Minute))
+	h := overviewHandler(db, "opensuse", newOverviewCache(time.Minute))
 	w := httptest.NewRecorder()
 	h(w, httptest.NewRequest(http.MethodGet, "/api/overview", nil))
 	if w.Code != http.StatusOK {
@@ -251,7 +250,7 @@ func TestOverviewHandlerCaches(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	h := overviewHandler(db, "isv:percona", "opensuse", newOverviewCache(time.Minute))
+	h := overviewHandler(db, "opensuse", newOverviewCache(time.Minute))
 
 	w := httptest.NewRecorder()
 	h(w, httptest.NewRequest(http.MethodGet, "/api/overview", nil))
@@ -260,7 +259,7 @@ func TestOverviewHandlerCaches(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec(`INSERT INTO target_state_durations (project, package, repo, arch, state, entered_at)
-		VALUES ('isv:percona:ppg:17','p','r','x86_64','finished',?)`,
+		VALUES ('ppg:17','p','r','x86_64','finished',?)`,
 		time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
 		t.Fatal(err)
 	}
@@ -280,16 +279,16 @@ func TestOverviewTopTieBreakDeterministic(t *testing.T) {
 	// Two packages and two repos, all at equal counts: the
 	// lexicographically-smaller name must win regardless of map order.
 	cur := []store.BuildCompletion{
-		{Project: "isv:percona:ppg:17", Package: "pkg-b", Repo: "UBI_9"},
-		{Project: "isv:percona:ppg:17", Package: "pkg-a", Repo: "Debian_12"},
+		{Project: "ppg:17", Package: "pkg-b", Repo: "UBI_9"},
+		{Project: "ppg:17", Package: "pkg-a", Repo: "Debian_12"},
 	}
 
 	for i := 0; i < 20; i++ {
-		s := buildOverviewSnapshot("isv:percona", "24h", now, cur, nil, nil, nil)
+		s := buildOverviewSnapshot("24h", now, cur, nil, nil, nil)
 		if s.TopRepo == nil || s.TopRepo.Name != "Debian_12" || s.TopRepo.Count != 1 {
 			t.Fatalf("top_repo tie-break = %+v, want Debian_12/1", s.TopRepo)
 		}
-		p := findProject(t, s, "isv:percona:ppg:staging:17")
+		p := findProject(t, s, "ppg:staging:17")
 		if p.TopPackage == nil || p.TopPackage.Name != "pkg-a" || p.TopPackage.Count != 1 {
 			t.Fatalf("top_package tie-break = %+v, want pkg-a/1", p.TopPackage)
 		}
@@ -298,7 +297,7 @@ func TestOverviewTopTieBreakDeterministic(t *testing.T) {
 
 func TestOverviewEmptySnapshotProjectsNotNull(t *testing.T) {
 	now := time.Date(2026, 7, 7, 12, 0, 0, 0, time.UTC)
-	s := buildOverviewSnapshot("isv:percona", "24h", now, nil, nil, nil, nil)
+	s := buildOverviewSnapshot("24h", now, nil, nil, nil, nil)
 	if s.Projects == nil {
 		t.Fatal("Projects is nil; must be an empty slice")
 	}
@@ -315,10 +314,10 @@ func TestOverviewSnapshotSplitsByRepo(t *testing.T) {
 	now := time.Now().UTC()
 	day := func(n int) time.Time { return now.Add(time.Duration(-n) * 24 * time.Hour) }
 	scans := []store.OverviewCveScan{
-		{Project: "isv:percona:ppg:staging:17:containers", Package: "pdp", Repo: "ubi8", Arch: "x86_64", Critical: 0, High: 1, CveSince: nil},
-		{Project: "isv:percona:ppg:staging:17:containers", Package: "pdp", Repo: "ubi9", Arch: "x86_64", Critical: 3, High: 2, CveSince: ptrTime(day(5))},
+		{Project: "ppg:staging:17:containers", Package: "pdp", Repo: "ubi8", Arch: "x86_64", Critical: 0, High: 1, CveSince: nil},
+		{Project: "ppg:staging:17:containers", Package: "pdp", Repo: "ubi9", Arch: "x86_64", Critical: 3, High: 2, CveSince: ptrTime(day(5))},
 	}
-	s := buildOverviewSnapshot("isv:percona", "24h", now, nil, nil, scans, nil)
+	s := buildOverviewSnapshot("24h", now, nil, nil, scans, nil)
 
 	var imgs []OverviewImage
 	for _, pr := range s.Projects {

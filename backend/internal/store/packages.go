@@ -539,9 +539,9 @@ func QueryPackages(db *sql.DB, projectPrefix string) ([]*model.Package, error) {
 }
 
 // QueryPRBuildPackages returns all packages under a PR (every subproject), matching
-// the whole-PR project prefix root:PR:<pr>.
-func QueryPRBuildPackages(db *sql.DB, root, pr string) ([]*model.Package, error) {
-	p := root + ":PR:" + pr
+// the whole-PR project prefix PR:<pr>.
+func QueryPRBuildPackages(db *sql.DB, pr string) ([]*model.Package, error) {
+	p := "PR:" + pr
 	rows, err := db.Query(`SELECT`+packageSelectCols+`
 		FROM packages
 		WHERE is_release = 0
@@ -557,20 +557,20 @@ func QueryPRBuildPackages(db *sql.DB, root, pr string) ([]*model.Package, error)
 }
 
 // QueryBuildPackages returns build packages for one product tier
-// (root:product:tier[:version] subtree, subprojects included — the client
+// (product:tier[:version] subtree, subprojects included — the client
 // splits them into version-extension entries) plus the shared common
-// projects: root:product:common and root:common appear in both devel and
+// projects: product:common and common appear in both devel and
 // staging views, in the versioned and version-less branches alike (the
 // board only ever issues the version-less "_" query and filters client-side).
-// root is e.g. "isv:percona", product is "ppg", tier is "devel"/"staging", version is "17".
+// product is e.g. "ppg", tier is "devel"/"staging", version is "17".
 // When version is "_" or "", all versions under the product:tier subtree are returned.
-func QueryBuildPackages(db *sql.DB, root, product, tier, version string) ([]*model.Package, error) {
-	gp := root + ":common"
-	cp := root + ":" + product + ":common"
+func QueryBuildPackages(db *sql.DB, product, tier, version string) ([]*model.Package, error) {
+	gp := "common"
+	cp := product + ":common"
 	var rows *sql.Rows
 	var err error
 	if version == "_" || version == "" {
-		pp := root + ":" + product + ":" + tier
+		pp := product + ":" + tier
 		rows, err = db.Query(`SELECT`+packageSelectCols+`
 			FROM packages
 			WHERE is_release = 0
@@ -581,7 +581,7 @@ func QueryBuildPackages(db *sql.DB, root, product, tier, version string) ([]*mod
 			pp, pp, cp, cp, gp, gp,
 		)
 	} else {
-		vp := root + ":" + product + ":" + tier + ":" + version
+		vp := product + ":" + tier + ":" + version
 		rows, err = db.Query(`SELECT`+packageSelectCols+`
 			FROM packages
 			WHERE is_release = 0
@@ -600,9 +600,9 @@ func QueryBuildPackages(db *sql.DB, root, product, tier, version string) ([]*mod
 }
 
 // QueryPRDistinctRepos returns the distinct build repos across all of a PR's
-// packages (every subproject), matching the whole-PR project prefix root:PR:<pr>.
-func QueryPRDistinctRepos(db *sql.DB, root, pr string) ([]string, error) {
-	p := root + ":PR:" + pr
+// packages (every subproject), matching the whole-PR project prefix PR:<pr>.
+func QueryPRDistinctRepos(db *sql.DB, pr string) ([]string, error) {
+	p := "PR:" + pr
 	rows, err := db.Query(
 		`SELECT targets_json FROM packages
 		 WHERE (is_container IS NULL OR is_container = 0)
@@ -616,7 +616,7 @@ func QueryPRDistinctRepos(db *sql.DB, root, pr string) ([]string, error) {
 }
 
 // QueryReleasePackages returns packages in the release subtree (is_release=1).
-// prefix is e.g. "isv:percona:ppg:releases".
+// prefix is e.g. "ppg:releases".
 func QueryReleasePackages(db *sql.DB, prefix string) ([]*model.Package, error) {
 	rows, err := db.Query(`SELECT`+packageSelectCols+`
 		FROM packages

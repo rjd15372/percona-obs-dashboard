@@ -4,29 +4,28 @@ import (
 	"testing"
 )
 
-const root = "isv:percona"
-
 func TestClassify(t *testing.T) {
 	cases := []struct {
 		project string
 		want    ProjectKind
 	}{
-		{"isv:percona:ppg:17", KindDev},
-		{"isv:percona:ppg:17:containers:ubi9", KindDev},
-		{"isv:percona:ppg:releases:17", KindRelease},
-		{"isv:percona:ppg:releases:17:containers:ubi9", KindRelease},
-		{"isv:percona:PR:pr-42:ppg:17", KindPR},
-		{"isv:percona:PR:pr-42:ppg:17:containers:ubi9", KindPR},
-		{"isv:percona:ppg:common", KindPPGCommon},
-		{"isv:percona:ppg:common:deps", KindPPGCommon},
-		{"isv:percona:ppgcommon", KindPPGCommon},
-		{"isv:percona:common", KindCommon},
-		{"isv:percona:common:containers:ubi9", KindCommon},
+		{"ppg:17", KindDev},
+		{"ppg:17:containers:ubi9", KindDev},
+		{"ppg:releases:17", KindRelease},
+		{"ppg:releases:17:containers:ubi9", KindRelease},
+		{"PR:pr-42:ppg:17", KindPR},
+		{"PR:pr-42:ppg:17:containers:ubi9", KindPR},
+		{"ppg:common", KindPPGCommon},
+		{"ppg:common:deps", KindPPGCommon},
+		{"ppgcommon", KindPPGCommon},
+		{"common", KindCommon},
+		{"common:containers:ubi9", KindCommon},
 		{"isv:other:project", KindUnknown},
 		{"isv:percona", KindUnknown},
+		{"isv:percona:ppg:17", KindUnknown},
 	}
 	for _, c := range cases {
-		if got := Classify(root, c.project); got != c.want {
+		if got := Classify(c.project); got != c.want {
 			t.Errorf("Classify(%q) = %v, want %v", c.project, got, c.want)
 		}
 	}
@@ -58,17 +57,17 @@ func TestProjectTags(t *testing.T) {
 		project string
 		want    []string
 	}{
-		{"isv:percona:ppg:17", []string{"ppg"}},
-		{"isv:percona:ppg:17:containers:ubi9", []string{"ppg"}},
-		{"isv:percona:ppg:releases:17", []string{"ppg", "release"}},
-		{"isv:percona:PR:pr-42:ppg:17", []string{"ppg", "pr"}},
-		{"isv:percona:ppg:common", []string{"ppg", "common"}},
-		{"isv:percona:ppgcommon", []string{"ppg", "common"}},
-		{"isv:percona:common", []string{"common"}},
+		{"ppg:17", []string{"ppg"}},
+		{"ppg:17:containers:ubi9", []string{"ppg"}},
+		{"ppg:releases:17", []string{"ppg", "release"}},
+		{"PR:pr-42:ppg:17", []string{"ppg", "pr"}},
+		{"ppg:common", []string{"ppg", "common"}},
+		{"ppgcommon", []string{"ppg", "common"}},
+		{"common", []string{"common"}},
 		{"isv:other", []string{}},
 	}
 	for _, c := range cases {
-		got := ProjectTags(root, c.project)
+		got := ProjectTags(c.project)
 		if len(got) != len(c.want) {
 			t.Errorf("ProjectTags(%q) = %v, want %v", c.project, got, c.want)
 			continue

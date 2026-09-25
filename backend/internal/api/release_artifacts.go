@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"sort"
@@ -131,7 +130,7 @@ func (c *releaseArtifactsCache) Get(ctx context.Context, key string, fetch func(
 	return response, err
 }
 
-func releaseArtifactsHandler(db *sql.DB, fleet *obs.Fleet, root string, cache *releaseArtifactsCache) http.HandlerFunc {
+func releaseArtifactsHandler(db *sql.DB, fleet *obs.Fleet, cache *releaseArtifactsCache) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if fleet == nil {
 			http.Error(w, "OBS client not configured", http.StatusServiceUnavailable)
@@ -144,7 +143,7 @@ func releaseArtifactsHandler(db *sql.DB, fleet *obs.Fleet, root string, cache *r
 		}
 
 		response, err := cache.Get(r.Context(), version, func(ctx context.Context) (ReleaseArtifactsResponse, error) {
-			return buildReleaseArtifacts(ctx, fleet, root, version)
+			return buildReleaseArtifacts(ctx, fleet, version)
 		})
 		if err != nil {
 			http.Error(w, "failed to fetch release artifacts: "+err.Error(), http.StatusBadGateway)
@@ -179,8 +178,8 @@ func attachReleaseCveScans(db *sql.DB, images []ReleaseContainerArtifact) {
 	}
 }
 
-func buildReleaseArtifacts(ctx context.Context, client *obs.Fleet, root, version string) (ReleaseArtifactsResponse, error) {
-	project := fmt.Sprintf("%s:ppg:releases:%s", root, version)
+func buildReleaseArtifacts(ctx context.Context, client *obs.Fleet, version string) (ReleaseArtifactsResponse, error) {
+	project := "ppg:releases:" + version
 	binaries, err := client.ProjectBinaryList(ctx, project)
 	if err != nil {
 		return ReleaseArtifactsResponse{}, err

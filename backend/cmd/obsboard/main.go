@@ -49,10 +49,27 @@ func run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	obsClient := obs.NewClient(cfg.OBS.BaseURL, cfg.OBS.Username, cfg.OBS.Password)
-	obsClient.SetMinuteBudget(cfg.OBS.MinuteRequestBudget)
-	fleet := obs.SingleFleet(obsClient, cfg.OBSRoot)
-	fleet.Default().MQURL = cfg.MQ.URL
+	legacySlug := cfg.Instances[0].Slug
+	for _, ic := range cfg.Instances {
+		if ic.Root == cfg.LegacyRoot {
+			legacySlug = ic.Slug
+			break
+		}
+	}
+	instances := make([]*obs.Instance, 0, len(cfg.Instances))
+	for _, ic := range cfg.Instances {
+		c := obs.NewClient(ic.APIURL, ic.Username, ic.Password)
+		c.SetMinuteBudget(ic.MinuteRequestBudget)
+		instances = append(instances, obs.NewInstance(obs.InstanceInfo{
+			Name: ic.Name, Slug: ic.Slug, Root: ic.Root,
+			WebURL: ic.WebURL, DownloadURL: ic.DownloadURL, Registry: ic.Registry,
+			MQURL: ic.MQ.URL, MQExchange: ic.MQ.Exchange, MQRoutingPrefix: ic.MQ.RoutingPrefix,
+		}, c))
+	}
+	fleet := obs.NewFleet(instances...)
+	if err := store.MigrateLogicalNames(db, cfg.LegacyRoot, legacySlug); err != nil {
+		return fmt.Errorf("migrate logical names: %w", err)
+	}
 	h := hub.New()
 	gate := presence.New(cfg.Idle.Enabled, cfg.Idle.Linger)
 
@@ -90,11 +107,11 @@ func run() error {
 	pool.Start(ctx)
 	ws.StartScheduler(ctx)
 
-	poller := obs.NewPoller(fleet, db, cfg.Poller.Interval, h, ws, cfg.OBSRoot, gate)
+	poller := obs.NewPoller(fleet, db, cfg.Poller.Interval, h, ws, gate)
 
 	go poller.Run(ctx)
 	for _, inst := range fleet.Instances() {
-		go mq.NewConsumer(inst, fleet, db, h, ws, cfg.OBSRoot).Run(ctx)
+		go mq.NewConsumer(inst, fleet, db, h, ws).Run(ctx)
 	}
 	go runPruner(ctx, db, cfg.Poller.Interval, cfg.Store.EventRetention, cfg.Store.MetricsRetention)
 
@@ -117,7 +134,7 @@ func run() error {
 	}
 	go reporter.Run(ctx)
 
-	router := api.NewRouter(db, h, fleet, cfg.OBSRoot, ws, telemetryEnabled, cfg.Telemetry.Interval, gate)
+	router := api.NewRouter(db, h, fleet, ws, telemetryEnabled, cfg.Telemetry.Interval, gate)
 
 	go fleet.RunHealthWatch(ctx, 15*time.Second, func(slug string, health obs.Health) {
 		h.Notify(hub.InstanceHealth(map[string]any{"slug": slug, "health": health}))

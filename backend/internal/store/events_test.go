@@ -19,11 +19,11 @@ func TestAppendQueryPruneEvents(t *testing.T) {
 		ID:      "evt_01",
 		Type:    model.EventFailed,
 		Tags:    []string{"ppg"},
-		Project: "isv:percona:ppg:17",
+		Project: "ppg:17",
 		Package: "pg_tde",
 		What:    "build failed",
 		Why:     "openssl bump",
-		URL:     "https://build.opensuse.org/package/show/isv:percona:ppg:17/pg_tde",
+		URL:     "https://build.opensuse.org/package/show/ppg:17/pg_tde",
 		At:      now,
 	}
 	if err := AppendEvent(db, e); err != nil {
@@ -31,7 +31,7 @@ func TestAppendQueryPruneEvents(t *testing.T) {
 	}
 
 	// Query in range — should find 1 event
-	events, err := QueryEvents(db, "isv:percona", now.Add(-time.Hour), now.Add(time.Hour))
+	events, err := QueryEvents(db, "", now.Add(-time.Hour), now.Add(time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestAppendQueryPruneEvents(t *testing.T) {
 	}
 
 	// Query out of range — should find 0 events
-	events, _ = QueryEvents(db, "isv:percona", now.Add(time.Hour), now.Add(2*time.Hour))
+	events, _ = QueryEvents(db, "", now.Add(time.Hour), now.Add(2*time.Hour))
 	if len(events) != 0 {
 		t.Errorf("expected 0 out of range, got %d", len(events))
 	}
@@ -52,7 +52,7 @@ func TestAppendQueryPruneEvents(t *testing.T) {
 	if err := PruneEvents(db, now.Add(time.Second)); err != nil {
 		t.Fatal(err)
 	}
-	events, _ = QueryEvents(db, "isv:percona", now.Add(-time.Hour), now.Add(time.Hour))
+	events, _ = QueryEvents(db, "", now.Add(-time.Hour), now.Add(time.Hour))
 	if len(events) != 0 {
 		t.Errorf("expected 0 after prune, got %d", len(events))
 	}
@@ -70,20 +70,20 @@ func TestEventVersionRoundtrip(t *testing.T) {
 		ID:      "evt_01JTEST",
 		Type:    model.EventSucceeded,
 		Tags:    []string{"ppg"},
-		Project: "isv:percona:ppg:17",
+		Project: "ppg:17",
 		Package: "percona-pg_tde",
 		Repo:    "UBI_9",
 		Arch:    "x86_64",
 		What:    "percona-pg_tde succeeded",
 		Why:     "",
 		Version: "17.5-1",
-		URL:     "https://build.opensuse.org/package/show/isv:percona:ppg:17/percona-pg_tde",
+		URL:     "https://build.opensuse.org/package/show/ppg:17/percona-pg_tde",
 		At:      now,
 	}
 	if err := AppendEvent(db, evt); err != nil {
 		t.Fatal(err)
 	}
-	evts, err := QueryEvents(db, "isv:percona", now.Add(-time.Second), now.Add(time.Second))
+	evts, err := QueryEvents(db, "", now.Add(-time.Second), now.Add(time.Second))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,19 +99,19 @@ func TestEventVersionRoundtrip(t *testing.T) {
 		ID:      "evt_02JTEST",
 		Type:    model.EventBuildStarted,
 		Tags:    []string{"ppg"},
-		Project: "isv:percona:ppg:17",
+		Project: "ppg:17",
 		Package: "percona-pg_tde",
 		Repo:    "UBI_9",
 		Arch:    "x86_64",
 		What:    "percona-pg_tde build started",
 		Why:     "source change",
-		URL:     "https://build.opensuse.org/package/live_build_log/isv:percona:ppg:17/percona-pg_tde/UBI_9/x86_64",
+		URL:     "https://build.opensuse.org/package/live_build_log/ppg:17/percona-pg_tde/UBI_9/x86_64",
 		At:      now.Add(-time.Minute),
 	}
 	if err := AppendEvent(db, evt2); err != nil {
 		t.Fatal(err)
 	}
-	evts2, err := QueryEvents(db, "isv:percona", now.Add(-2*time.Minute), now.Add(time.Second))
+	evts2, err := QueryEvents(db, "", now.Add(-2*time.Minute), now.Add(time.Second))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,22 +140,22 @@ func TestQueryPRBuildEventsCoversWholePR(t *testing.T) {
 	events := []*model.Event{
 		{
 			ID: "evt_pr_ppg", Type: model.EventFailed, Tags: []string{"ppg", "pr"},
-			Project: "isv:percona:PR:pr-104:ppg:17", Package: "pg_tde",
+			Project: "PR:pr-104:ppg:17", Package: "pg_tde",
 			What: "build failed", URL: "https://build.opensuse.org/x", At: now,
 		},
 		{
 			ID: "evt_pr_common", Type: model.EventSucceeded, Tags: []string{"common", "pr"},
-			Project: "isv:percona:PR:pr-104:common", Package: "common_pkg",
+			Project: "PR:pr-104:common", Package: "common_pkg",
 			What: "build succeeded", URL: "https://build.opensuse.org/x", At: now.Add(-time.Second),
 		},
 		{
 			ID: "evt_other_subproject", Type: model.EventFailed,
-			Project: "isv:percona:PR:pr-104:other:17", Package: "other_pkg",
+			Project: "PR:pr-104:other:17", Package: "other_pkg",
 			What: "build failed", URL: "https://build.opensuse.org/x", At: now,
 		},
 		{
 			ID: "evt_other_pr", Type: model.EventFailed,
-			Project: "isv:percona:PR:pr-105:common", Package: "other_pr_pkg",
+			Project: "PR:pr-105:common", Package: "other_pr_pkg",
 			What: "build failed", URL: "https://build.opensuse.org/x", At: now,
 		},
 	}
@@ -165,7 +165,7 @@ func TestQueryPRBuildEventsCoversWholePR(t *testing.T) {
 		}
 	}
 
-	got, err := QueryPRBuildEvents(db, "isv:percona", "pr-104", now.Add(-time.Minute), now.Add(time.Minute))
+	got, err := QueryPRBuildEvents(db, "pr-104", now.Add(-time.Minute), now.Add(time.Minute))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,8 +196,12 @@ func TestEventInstanceRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, query := range map[string]func() ([]*model.Event, error){
-		"QueryEvents":    func() ([]*model.Event, error) { return QueryEvents(db, "PR:", now.Add(-time.Minute), now.Add(time.Minute)) },
-		"QueryEventsAny": func() ([]*model.Event, error) { return QueryEventsAny(db, []string{"PR:"}, now.Add(-time.Minute), now.Add(time.Minute)) },
+		"QueryEvents": func() ([]*model.Event, error) {
+			return QueryEvents(db, "PR:", now.Add(-time.Minute), now.Add(time.Minute))
+		},
+		"QueryEventsAny": func() ([]*model.Event, error) {
+			return QueryEventsAny(db, []string{"PR:"}, now.Add(-time.Minute), now.Add(time.Minute))
+		},
 	} {
 		got, err := query()
 		if err != nil || len(got) != 1 || got[0].Instance != "percona" {

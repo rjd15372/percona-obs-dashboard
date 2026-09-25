@@ -22,7 +22,7 @@ func TestMergePackageTargetPreservesDetailsForRepeatedState(t *testing.T) {
 	defer db.Close()
 
 	existing := &model.Package{
-		Project:      "isv:percona:PR:pr-33:ppg:17",
+		Project:      "PR:pr-33:ppg:17",
 		Name:         "pg_tde",
 		Tags:         []string{"ppg", "pr"},
 		RollupState:  model.RollupFinished,
@@ -38,9 +38,9 @@ func TestMergePackageTargetPreservesDetailsForRepeatedState(t *testing.T) {
 	}
 
 	fleet := obs.SingleFleet(nil, "isv:percona")
-	consumer := &Consumer{db: db, root: "isv:percona", inst: fleet.Default(), fleet: fleet, prefix: "opensuse.obs"}
+	consumer := &Consumer{db: db, inst: fleet.Default(), fleet: fleet, prefix: "opensuse.obs"}
 	merged := consumer.mergePackageTarget(mqMessage{
-		Project: "isv:percona:PR:pr-33:ppg:17",
+		Project: "PR:pr-33:ppg:17",
 		Package: "pg_tde",
 		Repo:    "images",
 		Arch:    "x86_64",
@@ -70,12 +70,13 @@ func TestBuildUnchangedWakesWorkingSet(t *testing.T) {
 	defer db.Close()
 	ws := workingset.New(4, 30*time.Second, 5*time.Minute, 4)
 	h := hubpkg.New()
-	fleet := obs.SingleFleet(nil, "isv:percona")
-	c := NewConsumer(fleet.Default(), fleet, db, h, ws, "isv:percona")
+	inst := obs.NewInstance(obs.InstanceInfo{Name: "openSUSE", Slug: "opensuse", Root: "isv:percona", WebURL: "https://build.opensuse.org", MQRoutingPrefix: "opensuse.obs"}, nil)
+	fleet := obs.NewFleet(inst)
+	c := NewConsumer(fleet.Default(), fleet, db, h, ws)
 
 	// Seed a stored package with a building target (as if parked).
 	pkg := &model.Package{
-		Project: "isv:percona:ppg:17", Name: "pkg-a",
+		Project: "ppg:17", Name: "pkg-a",
 		RollupState: model.RollupBuilding,
 		Targets:     []model.Target{{Repo: "repo", Arch: "x86_64", State: "building", BuildReason: "meta change"}},
 		UpdatedAt:   time.Now().UTC(),
@@ -119,12 +120,13 @@ func TestRepoPublishedWakesOnlyMatchingRepo(t *testing.T) {
 	}
 	defer db.Close()
 	ws := workingset.New(4, 30*time.Second, 5*time.Minute, 4)
-	fleet := obs.SingleFleet(nil, "isv:percona")
-	c := NewConsumer(fleet.Default(), fleet, db, hubpkg.New(), ws, "isv:percona")
+	inst := obs.NewInstance(obs.InstanceInfo{Name: "openSUSE", Slug: "opensuse", Root: "isv:percona", WebURL: "https://build.opensuse.org", MQRoutingPrefix: "opensuse.obs"}, nil)
+	fleet := obs.NewFleet(inst)
+	c := NewConsumer(fleet.Default(), fleet, db, hubpkg.New(), ws)
 
 	seed := func(name, repo string, published bool) {
 		pkg := &model.Package{
-			Project: "isv:percona:ppg:17", Name: name,
+			Project: "ppg:17", Name: name,
 			RollupState: model.RollupSucceeded,
 			Targets:     []model.Target{{Repo: repo, Arch: "x86_64", State: "succeeded", Published: published}},
 			UpdatedAt:   time.Now().UTC(),
@@ -174,7 +176,7 @@ func TestConsumerCustomPrefixStampsInstance(t *testing.T) {
 	defer db.Close()
 	fleet, _, y := twoInstanceFleet()
 	ws := workingset.New(64, time.Minute, time.Minute, 4)
-	c := NewConsumer(y, fleet, db, hubpkg.New(), ws, "percona")
+	c := NewConsumer(y, fleet, db, hubpkg.New(), ws)
 
 	body, _ := json.Marshal(map[string]string{"project": "percona:ppg:17", "package": "pg", "repository": "Debian_12", "arch": "aarch64"})
 	c.handle(context.Background(), amqp.Delivery{RoutingKey: "percona.obs.package.build_fail", Body: body})
@@ -199,7 +201,7 @@ func TestConsumerDropsOutOfRootProjects(t *testing.T) {
 	}
 	defer db.Close()
 	fleet, _, y := twoInstanceFleet()
-	c := NewConsumer(y, fleet, db, hubpkg.New(), workingset.New(64, time.Minute, time.Minute, 4), "percona")
+	c := NewConsumer(y, fleet, db, hubpkg.New(), workingset.New(64, time.Minute, time.Minute, 4))
 	body, _ := json.Marshal(map[string]string{"project": "home:someone:ppg", "package": "pg", "repository": "R", "arch": "a"})
 	c.handle(context.Background(), amqp.Delivery{RoutingKey: "percona.obs.package.build_fail", Body: body})
 	pkgs, _ := store.QueryPackages(db, "")
@@ -227,7 +229,7 @@ func TestConsumerProjectDeleteIsInstanceScoped(t *testing.T) {
 	if err := store.UpsertPackageState(db, pkg, now); err != nil {
 		t.Fatal(err)
 	}
-	c := NewConsumer(y, fleet, db, hubpkg.New(), workingset.New(64, time.Minute, time.Minute, 4), "percona")
+	c := NewConsumer(y, fleet, db, hubpkg.New(), workingset.New(64, time.Minute, time.Minute, 4))
 	body, _ := json.Marshal(map[string]string{"project": "percona:ppg:17"})
 	c.handle(context.Background(), amqp.Delivery{RoutingKey: "percona.obs.project.delete", Body: body})
 

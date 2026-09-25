@@ -101,9 +101,9 @@ func scanEventRows(rows *sql.Rows) ([]*model.Event, error) {
 }
 
 // QueryPRBuildEvents returns events for all packages under a PR (every subproject),
-// matching the whole-PR project prefix root:PR:<pr>.
-func QueryPRBuildEvents(db *sql.DB, root, pr string, from, to time.Time) ([]*model.Event, error) {
-	p := root + ":PR:" + pr
+// matching the whole-PR project prefix PR:<pr>.
+func QueryPRBuildEvents(db *sql.DB, pr string, from, to time.Time) ([]*model.Event, error) {
+	p := "PR:" + pr
 	rows, err := db.Query(`
 		SELECT id, type, tags, project, package,
 		       COALESCE(repo,''), COALESCE(arch,''),

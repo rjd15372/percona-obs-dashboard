@@ -21,7 +21,7 @@ type PresenceGate interface {
 }
 
 // NewRouter creates the chi router with all API routes registered.
-func NewRouter(db *sql.DB, h *hub.Hub, fleet *obs.Fleet, root string, ws Statter, telemetryEnabled *atomic.Bool, telemetryInterval time.Duration, gate PresenceGate) http.Handler {
+func NewRouter(db *sql.DB, h *hub.Hub, fleet *obs.Fleet, ws Statter, telemetryEnabled *atomic.Bool, telemetryInterval time.Duration, gate PresenceGate) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
@@ -37,23 +37,23 @@ func NewRouter(db *sql.DB, h *hub.Hub, fleet *obs.Fleet, root string, ws Statter
 	overview := newOverviewCache(60 * time.Second)
 
 	r.Route("/api/products/{product}/{tier}/{version}", func(r chi.Router) {
-		r.Get("/packages", packagesHandler(db, root))
+		r.Get("/packages", packagesHandler(db))
 		r.Get("/events", eventsHandler(db))
 		r.Get("/repos", reposHandler(db))
 	})
 
 	r.Route("/api/releases/ppg/{version}", func(r chi.Router) {
-		r.Get("/packages", releasesPackagesHandler(db, root))
-		r.Get("/repos", releasesReposHandler(db, root))
-		r.Get("/artifacts", releaseArtifactsHandler(db, fleet, root, releaseArtifacts))
+		r.Get("/packages", releasesPackagesHandler(db))
+		r.Get("/repos", releasesReposHandler(db))
+		r.Get("/artifacts", releaseArtifactsHandler(db, fleet, releaseArtifacts))
 	})
 
 	r.Get("/api/pr/packages", prPackagesHandler(db))
 
 	r.Route("/api/pr/{pr}/{version}", func(r chi.Router) {
-		r.Get("/packages", prContextPackagesHandler(db, root))
-		r.Get("/events", prContextEventsHandler(db, root))
-		r.Get("/repos", prReposHandler(db, root))
+		r.Get("/packages", prContextPackagesHandler(db))
+		r.Get("/events", prContextEventsHandler(db))
+		r.Get("/repos", prReposHandler(db))
 	})
 
 	r.Get("/api/stream", streamHandler(h))
@@ -69,7 +69,7 @@ func NewRouter(db *sql.DB, h *hub.Hub, fleet *obs.Fleet, root string, ws Statter
 
 	r.Get("/api/metrics", metricsHandler(fleet, ws, h, db, gate))
 
-	r.Get("/api/overview", overviewHandler(db, root, fleet.Default().Slug, overview))
+	r.Get("/api/overview", overviewHandler(db, fleet.Default().Slug, overview))
 	r.Get("/api/cve/scans", cveScansHandler(db))
 
 	return r
