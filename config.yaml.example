@@ -9,6 +9,35 @@ obs:
 mq:
   url: "amqps://opensuse:opensuse@rabbit.opensuse.org:5671/"
 
+# Multiple OBS instances. When present, obs_instances replaces the single
+# obs/mq/obs_root settings above (those remain the one-instance fallback).
+# Repos of one package may be split across instances; the dashboard merges
+# them by the project path relative to each instance's root.
+# Credentials can come from env: OBS_<SLUG>_USERNAME / OBS_<SLUG>_PASSWORD,
+# where SLUG is the name lowercased with non-alphanumerics as '_' and then
+# uppercased (e.g. "Percona OBS" → OBS_PERCONA_OBS_USERNAME).
+#obs_instances:
+#  - name: openSUSE
+#    root: "isv:percona"
+#    api_url: "https://api.opensuse.org"
+#    web_url: "https://build.opensuse.org"
+#    download_url: "https://download.opensuse.org/repositories"
+#    registry: "registry.opensuse.org"
+#    minute_request_budget: 60
+#    mq:
+#      url: "amqps://opensuse:opensuse@rabbit.opensuse.org:5671/"
+#      exchange: "pubsub"            # default
+#      routing_prefix: "opensuse.obs" # default
+#  - name: Percona
+#    root: "percona"
+#    api_url: "https://api.obs.example.com"
+#    web_url: "https://obs.example.com"
+#    download_url: "https://download.obs.example.com/repositories"
+#    registry: "registry.obs.example.com"
+#    mq:
+#      url: "amqps://user:pass@rabbit.obs.example.com:5671/"
+#      routing_prefix: "percona.obs"
+
 poller:
   interval: "5m"
 

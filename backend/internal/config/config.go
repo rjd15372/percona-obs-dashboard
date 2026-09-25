@@ -11,9 +11,6 @@ import (
 )
 
 type Config struct {
-	OBSRoot    string
-	OBS        OBSConfig
-	MQ         MQConfig
 	Poller     PollerConfig
 	Store      StoreConfig
 	Server     ServerConfig
@@ -30,15 +27,10 @@ type Config struct {
 	LegacyRoot string
 }
 
-type OBSConfig struct {
-	Username            string
-	Password            string
-	BaseURL             string
-	MinuteRequestBudget int
-}
-
-type MQConfig struct {
-	URL string
+// legacyConfig holds the pre-obs_instances single-instance keys.
+type legacyConfig struct {
+	root, baseURL, username, password, mqURL string
+	budget                                   int
 }
 
 // MQInstanceConfig is one instance's AMQP event bus.
@@ -121,7 +113,7 @@ type IdleConfig struct {
 	Linger  time.Duration
 }
 
-func loadInstances(v *viper.Viper, cfg *Config) ([]InstanceConfig, error) {
+func loadInstances(v *viper.Viper, legacy legacyConfig) ([]InstanceConfig, error) {
 	var raw []rawInstance
 	if v.IsSet("obs_instances") {
 		if err := v.UnmarshalKey("obs_instances", &raw); err != nil {
@@ -129,21 +121,21 @@ func loadInstances(v *viper.Viper, cfg *Config) ([]InstanceConfig, error) {
 		}
 	}
 	if len(raw) == 0 {
-		if cfg.OBS.Username == "" {
+		if legacy.username == "" {
 			return nil, fmt.Errorf("OBS_USERNAME is required")
 		}
 		return []InstanceConfig{{
 			Name:                "openSUSE",
 			Slug:                "opensuse",
-			Root:                cfg.OBSRoot,
-			APIURL:              cfg.OBS.BaseURL,
+			Root:                legacy.root,
+			APIURL:              legacy.baseURL,
 			WebURL:              "https://build.opensuse.org",
 			DownloadURL:         "https://download.opensuse.org/repositories",
 			Registry:            "registry.opensuse.org",
-			Username:            cfg.OBS.Username,
-			Password:            cfg.OBS.Password,
-			MinuteRequestBudget: cfg.OBS.MinuteRequestBudget,
-			MQ:                  MQInstanceConfig{URL: cfg.MQ.URL, Exchange: "pubsub", RoutingPrefix: "opensuse.obs"},
+			Username:            legacy.username,
+			Password:            legacy.password,
+			MinuteRequestBudget: legacy.budget,
+			MQ:                  MQInstanceConfig{URL: legacy.mqURL, Exchange: "pubsub", RoutingPrefix: "opensuse.obs"},
 		}}, nil
 	}
 
@@ -302,15 +294,16 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("invalid IDLE_LINGER %q: %w", v.GetString("idle.linger"), err)
 	}
 
+	legacy := legacyConfig{
+		root:     v.GetString("obs_root"),
+		baseURL:  strings.TrimRight(v.GetString("obs.base_url"), "/"),
+		username: v.GetString("obs.username"),
+		password: v.GetString("obs.password"),
+		budget:   v.GetInt("obs.minute_request_budget"),
+		mqURL:    v.GetString("mq.url"),
+	}
+
 	cfg := &Config{
-		OBSRoot: v.GetString("obs_root"),
-		OBS: OBSConfig{
-			Username:            v.GetString("obs.username"),
-			Password:            v.GetString("obs.password"),
-			BaseURL:             strings.TrimRight(v.GetString("obs.base_url"), "/"),
-			MinuteRequestBudget: v.GetInt("obs.minute_request_budget"),
-		},
-		MQ:     MQConfig{URL: v.GetString("mq.url")},
 		Poller: PollerConfig{Interval: pollInterval},
 		Store: StoreConfig{
 			DBPath:           v.GetString("store.db_path"),
@@ -342,12 +335,12 @@ func Load() (*Config, error) {
 		},
 	}
 
-	instances, err := loadInstances(v, cfg)
+	instances, err := loadInstances(v, legacy)
 	if err != nil {
 		return nil, err
 	}
 	cfg.Instances = instances
-	cfg.LegacyRoot = cfg.OBSRoot
+	cfg.LegacyRoot = legacy.root
 
 	return cfg, nil
 }

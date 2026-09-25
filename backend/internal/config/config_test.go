@@ -74,8 +74,8 @@ func TestTrafficReductionDefaults(t *testing.T) {
 	if cfg.WorkerPool.BatchThreshold != 4 {
 		t.Errorf("BatchThreshold = %d, want 4", cfg.WorkerPool.BatchThreshold)
 	}
-	if cfg.OBS.MinuteRequestBudget != 60 {
-		t.Errorf("MinuteRequestBudget = %d, want 60", cfg.OBS.MinuteRequestBudget)
+	if cfg.Instances[0].MinuteRequestBudget != 60 {
+		t.Errorf("MinuteRequestBudget = %d, want 60", cfg.Instances[0].MinuteRequestBudget)
 	}
 }
 
@@ -175,8 +175,8 @@ func TestTrafficReductionEnvOverride(t *testing.T) {
 	if cfg.WorkerPool.BatchThreshold != 8 {
 		t.Errorf("BatchThreshold = %d, want 8", cfg.WorkerPool.BatchThreshold)
 	}
-	if cfg.OBS.MinuteRequestBudget != 30 {
-		t.Errorf("MinuteRequestBudget = %d, want 30", cfg.OBS.MinuteRequestBudget)
+	if cfg.Instances[0].MinuteRequestBudget != 30 {
+		t.Errorf("MinuteRequestBudget = %d, want 30", cfg.Instances[0].MinuteRequestBudget)
 	}
 }
 
