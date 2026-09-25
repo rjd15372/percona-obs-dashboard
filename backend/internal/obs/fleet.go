@@ -159,12 +159,17 @@ func (f *Fleet) Owner(project, repo string) *Instance {
 	return f.bySlug[slug]
 }
 
-// SeedOwners records repo owners from stored targets (startup).
+// SeedOwners records repo owners and project membership from stored
+// targets (startup). Seeded membership makes an instance that is down at
+// startup still count as a host of its projects, so its targets are carried
+// forward rather than dropped; Discover's SetMembers replaces it once the
+// instance answers.
 func (f *Fleet) SeedOwners(pkgs []*model.Package) {
 	for _, p := range pkgs {
 		for _, t := range p.Targets {
-			if t.Instance != "" {
+			if t.Instance != "" && f.bySlug[t.Instance] != nil {
 				f.SetOwner(p.Project, t.Repo, t.Instance)
+				f.AddMember(t.Instance, p.Project)
 			}
 		}
 	}

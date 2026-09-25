@@ -303,6 +303,129 @@ func TestPollerCarriesForwardFailedInstance(t *testing.T) {
 	}
 }
 
+// An instance that fails discovery (e.g. down at startup, so it never set
+// membership) must be treated as down for the tick: its packages in shared
+// projects are carried forward, never garbage-collected.
+func TestPollerCarriesForwardInstanceDownAtDiscovery(t *testing.T) {
+	db, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	x := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/search/project/id"):
+			w.Write([]byte(`<collection><project name="isv:percona:ppg:17"/></collection>`))
+		case r.URL.Path == "/build/isv:percona:ppg:17/_result":
+			w.Write([]byte(`<resultlist><result repository="RHEL_9" arch="x86_64" state="building"><status package="pg" code="building"/></result></resultlist>`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer x.Close()
+	y := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "down", http.StatusBadGateway)
+	}))
+	defer y.Close()
+	fleet := NewFleet(
+		NewInstance(InstanceInfo{Slug: "opensuse", Root: "isv:percona"}, NewClient(x.URL, "u", "p")),
+		NewInstance(InstanceInfo{Slug: "percona", Root: "percona"}, NewClient(y.URL, "u", "p")),
+	)
+	now := time.Now().UTC()
+	debOnly := &model.Package{Project: "ppg:17", Name: "deb-only", RollupState: model.RollupFailed, UpdatedAt: now,
+		Targets: []model.Target{{Repo: "Debian_12", Arch: "aarch64", State: "failed", Instance: "percona"}}}
+	mixed := &model.Package{Project: "ppg:17", Name: "pg", RollupState: model.RollupFailed, UpdatedAt: now,
+		Targets: []model.Target{
+			{Repo: "RHEL_9", Arch: "x86_64", State: "succeeded", Instance: "opensuse"},
+			{Repo: "Debian_12", Arch: "aarch64", State: "failed", Instance: "percona"},
+		}}
+	for _, pkg := range []*model.Package{debOnly, mixed} {
+		if err := store.UpsertPackageState(db, pkg, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ws := workingset.New(64, time.Minute, time.Minute, 4)
+	p := NewPoller(fleet, db, time.Minute, hubpkg.New(), ws, nil)
+	p.tick(context.Background())
+
+	got, err := store.GetPackage(db, "ppg:17", "deb-only")
+	if err != nil || got == nil {
+		t.Fatalf("package on the undiscovered instance was garbage-collected (err=%v)", err)
+	}
+	if len(got.Targets) != 1 || got.Targets[0].State != "failed" || got.Targets[0].Instance != "percona" {
+		t.Errorf("carried package changed: %+v", got.Targets)
+	}
+	pg, err := store.GetPackage(db, "ppg:17", "pg")
+	if err != nil || pg == nil {
+		t.Fatalf("mixed package missing (err=%v)", err)
+	}
+	byRepo := map[string]model.Target{}
+	for _, tg := range pg.Targets {
+		byRepo[tg.Repo] = tg
+	}
+	if len(pg.Targets) != 2 || byRepo["Debian_12"].State != "failed" || byRepo["RHEL_9"].State != "building" {
+		t.Errorf("mixed package: want fresh RHEL_9 + carried Debian_12, got %+v", pg.Targets)
+	}
+}
+
+// An instance that answers discovery-failed but still serves _result must not
+// get its fresh targets duplicated by carry-forward.
+func TestPollerNoDuplicateWhenUndiscoveredInstanceAnswersResults(t *testing.T) {
+	db, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	x := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/search/project/id"):
+			w.Write([]byte(`<collection><project name="isv:percona:ppg:17"/></collection>`))
+		case r.URL.Path == "/build/isv:percona:ppg:17/_result":
+			w.Write([]byte(`<resultlist><result repository="RHEL_9" arch="x86_64" state="building"><status package="pg" code="building"/></result></resultlist>`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer x.Close()
+	y := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/build/percona:ppg:17/_result" {
+			w.Write([]byte(`<resultlist><result repository="Debian_12" arch="aarch64" state="building"><status package="pg" code="succeeded"/></result></resultlist>`))
+			return
+		}
+		http.Error(w, "down", http.StatusBadGateway)
+	}))
+	defer y.Close()
+	fleet := NewFleet(
+		NewInstance(InstanceInfo{Slug: "opensuse", Root: "isv:percona"}, NewClient(x.URL, "u", "p")),
+		NewInstance(InstanceInfo{Slug: "percona", Root: "percona"}, NewClient(y.URL, "u", "p")),
+	)
+	now := time.Now().UTC()
+	mixed := &model.Package{Project: "ppg:17", Name: "pg", RollupState: model.RollupFailed, UpdatedAt: now,
+		Targets: []model.Target{
+			{Repo: "RHEL_9", Arch: "x86_64", State: "succeeded", Instance: "opensuse"},
+			{Repo: "Debian_12", Arch: "aarch64", State: "failed", Instance: "percona"},
+		}}
+	if err := store.UpsertPackageState(db, mixed, now); err != nil {
+		t.Fatal(err)
+	}
+	fleet.SeedOwners([]*model.Package{mixed})
+	p := NewPoller(fleet, db, time.Minute, hubpkg.New(), workingset.New(64, time.Minute, time.Minute, 4), nil)
+	p.tick(context.Background())
+
+	pg, err := store.GetPackage(db, "ppg:17", "pg")
+	if err != nil || pg == nil {
+		t.Fatalf("mixed package missing (err=%v)", err)
+	}
+	if len(pg.Targets) != 2 {
+		t.Fatalf("want 2 targets (no duplicate), got %+v", pg.Targets)
+	}
+	for _, tg := range pg.Targets {
+		if tg.Repo == "Debian_12" && tg.State != "succeeded" {
+			t.Errorf("Debian_12 must be the fresh state, got %+v", tg)
+		}
+	}
+}
+
 func waitFor(t *testing.T, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)

@@ -103,6 +103,7 @@ func (p *Poller) tick(ctx context.Context) {
 			slog.Warn("poller: build results", "project", project, "err", err)
 			continue
 		}
+		failed = withUndiscovered(failed, answered, results, p.client.Instances())
 		down := make(map[string]bool, len(failed))
 		for _, s := range failed {
 			down[s] = true
@@ -220,6 +221,31 @@ func (p *Poller) tick(ctx context.Context) {
 			}
 		}
 	}
+}
+
+// withUndiscovered adds to failed every instance that did not answer
+// discovery this tick and returned no build states for the project. Such an
+// instance's membership may be stale or empty (e.g. down since startup), so
+// its absence from results must not read as "packages removed": its targets
+// are carried forward and its packages are exempt from stale-package GC.
+func withUndiscovered(failed []string, answered map[string]bool, results []PackageBuildState, all []*Instance) []string {
+	if len(answered) >= len(all) {
+		return failed
+	}
+	seen := make(map[string]bool, len(failed)+len(all))
+	for _, s := range failed {
+		seen[s] = true
+	}
+	for _, r := range results {
+		seen[r.Instance] = true
+	}
+	out := append([]string(nil), failed...)
+	for _, in := range all {
+		if !answered[in.Slug] && !seen[in.Slug] {
+			out = append(out, in.Slug)
+		}
+	}
+	return out
 }
 
 // confirmedGone reports whether every instance that owned a target of

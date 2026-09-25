@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	"github.com/percona/obs-dashboard/internal/model"
 )
 
 // fakeOBS serves canned XML per path prefix; unknown paths 404.
@@ -261,6 +263,45 @@ func TestFleetDiscover(t *testing.T) {
 	}
 	if hs := f.hosts("ppg:18"); len(hs) != 1 || hs[0].Slug != "y" {
 		t.Error("membership of an instance that failed discovery must be kept")
+	}
+}
+
+// SeedOwners must seed membership from stored targets, so an instance that
+// is down at startup (never answers Discover) still counts as a host.
+func TestFleetSeedOwnersSeedsMembership(t *testing.T) {
+	x := newFakeOBS(t, map[string]string{"/search/project/id": `<collection><project name="isv:percona:ppg:17"/></collection>`})
+	y := newFakeOBS(t, map[string]string{"/search/project/id": `<collection></collection>`})
+	f := fleetOf(t, x, y)
+	f.SeedOwners([]*model.Package{
+		{Project: "ppg:17", Targets: []model.Target{{Repo: "Debian_12", Arch: "aarch64", Instance: "y"}}},
+		{Project: "ppg:18", Targets: []model.Target{{Repo: "RHEL_9", Arch: "x86_64"}}},
+	})
+	if hs := f.hosts("ppg:17"); len(hs) != 1 || hs[0].Slug != "y" {
+		t.Errorf("ppg:17 hosts = %v, want [y] from seeded membership", hs)
+	}
+	if !f.IsHosted("ppg:17") {
+		t.Error("seeded project must be hosted")
+	}
+	if f.IsHosted("ppg:18") {
+		t.Error("unstamped targets must not seed membership")
+	}
+
+	// y is down: Discover keeps y's seeded membership; x's answer adds x.
+	y.fail.Store(true)
+	if _, answered, err := f.Discover(context.Background()); err != nil || answered["y"] {
+		t.Fatalf("err=%v answered=%v", err, answered)
+	}
+	if hs := f.hosts("ppg:17"); len(hs) != 2 {
+		t.Errorf("ppg:17 hosts after partial discover = %v, want [x y]", hs)
+	}
+
+	// y answers without ppg:17: its seeded membership is replaced.
+	y.fail.Store(false)
+	if _, _, err := f.Discover(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if hs := f.hosts("ppg:17"); len(hs) != 1 || hs[0].Slug != "x" {
+		t.Errorf("ppg:17 hosts after full discover = %v, want [x]", hs)
 	}
 }
 

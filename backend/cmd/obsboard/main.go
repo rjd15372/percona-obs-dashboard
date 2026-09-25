@@ -86,7 +86,14 @@ func run() error {
 	ws := workingset.New(cfg.WorkerPool.QueueSize, cfg.WorkerPool.PollInterval,
 		cfg.WorkerPool.BackoffMax, cfg.WorkerPool.BatchThreshold)
 	ws.Seed(activePkgs)
-	fleet.SeedOwners(activePkgs)
+	// Seed repo owners and membership from every stored package (settled
+	// ones too) before the poller's first tick, so packages living on an
+	// instance that is down at startup are carried forward, not dropped.
+	storedPkgs, err := store.QueryPackages(db, "")
+	if err != nil {
+		return fmt.Errorf("seed instance membership: %w", err)
+	}
+	fleet.SeedOwners(storedPkgs)
 
 	devTasks := []worker.Task{
 		obs.PackageTypeTask{},
