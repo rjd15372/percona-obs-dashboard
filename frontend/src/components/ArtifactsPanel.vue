@@ -236,6 +236,7 @@ const packageRows = computed<PackageRow[]>(() => {
       arch: pkg.arch,
       binaries: pkg.binaries,
       builtAt: pkg.built_at,
+      instance: pkg.instance,
     }))
 })
 
@@ -255,6 +256,7 @@ const containerImages = computed<ContainerImage[]>(() => {
     mtime: img.mtime,
     builtAt: img.built_at,
     cveScans: img.cve_scans ?? [],
+    instance: img.instance,
   }))
 })
 
@@ -282,6 +284,7 @@ const tarballs = computed<Tarball[]>(() => {
         rollupState: 'succeeded',
         published: true,
         builtAt: t.built_at,
+        instance: t.instance,
       })
     }
   }
@@ -315,6 +318,7 @@ interface ReleasePackageArtifact {
   arch: string
   binaries: ArtifactBinary[]
   built_at: string
+  instance?: string
 }
 
 interface ReleaseContainerArtifact {
@@ -327,6 +331,7 @@ interface ReleaseContainerArtifact {
   mtime: number
   built_at: string
   cve_scans?: CveScan[]
+  instance?: string
 }
 
 interface ReleaseTarballArtifact {
@@ -336,6 +341,7 @@ interface ReleaseTarballArtifact {
   repo: string
   arch: string
   built_at: string
+  instance?: string
 }
 
 interface ReleaseArtifactsResponse {

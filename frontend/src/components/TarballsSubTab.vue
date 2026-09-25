@@ -3,11 +3,15 @@ import { computed } from 'vue'
 import type { Tarball } from '../composables/useArtifacts'
 import { tarballRepoOrder, tarballDownloadUrl } from '../lib/tarballs'
 import { formatArtifactTime } from '../lib/cve'
+import { useInstances } from '../composables/useInstances'
+import { downloadBase } from '../lib/instances'
 
 const props = defineProps<{
   tarballs: Tarball[]
   loading?: boolean
 }>()
+
+const { instanceFor } = useInstances()
 
 // Group tarballs by ssl repo, sorted ssl1.1 < ssl3 < ssl3.5.
 const groups = computed(() => {
@@ -115,14 +119,14 @@ function rebuildBadge(t: Tarball): { label: string; cls: string } | null {
             </div>
 
             <!-- Download (per arch) — only when version is known, so the
-                 constructed download.opensuse.org URL is never partial. -->
+                 constructed instance download URL is never partial. -->
             <div v-if="tarball.version && tarball.arches.length > 0" class="px-[18px] py-3 border-b border-border">
               <div class="section-label">DOWNLOAD</div>
               <div class="flex flex-wrap gap-[6px] mt-2">
                 <a
                   v-for="arch in tarball.arches"
                   :key="arch"
-                  :href="tarballDownloadUrl(tarball.project, tarball.repo, tarball.name, tarball.version, arch)"
+                  :href="tarballDownloadUrl(downloadBase(instanceFor(tarball.instance), tarball.project, tarball.repo), tarball.repo, tarball.name, tarball.version, arch) || undefined"
                   target="_blank"
                   rel="noopener"
                   class="inline-flex items-center gap-[5px] font-mono text-[11px] px-[9px] py-[4px] rounded-[6px] bg-brand-purple-tint text-brand-purple font-bold no-underline"

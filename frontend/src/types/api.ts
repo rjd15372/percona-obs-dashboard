@@ -27,6 +27,26 @@ export interface Target {
   build_reason?: string
   build_reason_packages?: string[]
   published?: boolean
+  instance?: string
+}
+
+export interface InstanceHealth {
+  ok: boolean
+  last_success?: string
+  last_error?: string
+  last_error_at?: string
+  consecutive_failures: number
+  mq_connected: boolean
+}
+
+export interface ObsInstance {
+  name: string
+  slug: string
+  root: string        // prefix for logical names; '' = names are already instance names
+  web_url: string
+  download_url: string
+  registry: string
+  health: InstanceHealth
 }
 
 export interface CveFinding {
@@ -88,4 +108,5 @@ export interface Event {
   version?: string
   url: string
   at: string // ISO 8601
+  instance?: string
 }

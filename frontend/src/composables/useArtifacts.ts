@@ -3,6 +3,8 @@ import type { MaybeRef } from 'vue'
 import type { Package, Target, CveScan, Context } from '../types/api'
 import { matchesVersionKey } from '../lib/versions'
 import { isTarballTarget } from '../lib/tarballs'
+import { useInstances } from './useInstances'
+import { registryRef } from '../lib/instances'
 
 export interface RepoInfo {
   obs: string
@@ -30,6 +32,7 @@ export interface PackageRow {
   builtAt?: string
   mtime?: number
   isRebuilding?: boolean
+  instance?: string
 }
 
 export interface ContainerImage {
@@ -46,6 +49,7 @@ export interface ContainerImage {
   builtAt?: string
   isRebuilding?: boolean
   cveScans: CveScan[]
+  instance?: string
 }
 
 export interface Tarball {
@@ -58,6 +62,7 @@ export interface Tarball {
   rollupState: string
   published: boolean
   builtAt: string     // latest target started_at for this repo ("" if none)
+  instance?: string
 }
 
 function baseOsFromRepo(repo?: string): string {
@@ -98,6 +103,7 @@ export function useArtifacts(
   artArch: MaybeRef<string>,
   context: MaybeRef<Context>,
 ) {
+  const { instanceFor } = useInstances()
   // matchesProject: does an OBS project belong to this context at the
   // selected version key? Plain keys own the version root + absorbed
   // subprojects; extension keys ("17:extras") own that subtree; contexts
@@ -135,6 +141,7 @@ export function useArtifacts(
         published: target.published === true,
         repo,
         arch,
+        instance: target.instance,
       })
     }
     return rows
@@ -160,8 +167,8 @@ export function useArtifacts(
         const effectiveRepos = repos.length > 0 ? repos : ['images']
         return effectiveRepos.map(repo => {
           const baseOs = deriveBaseOs(pkg.project, repo)
-          const registryPath = pkg.project.toLowerCase().split(':').join('/')
-          const registry = `registry.opensuse.org/${registryPath}/${repo}/${pkg.name}`
+          const inst = instanceFor(targets.find(t => t.repo === repo)?.instance)
+          const registry = registryRef(inst, pkg.project, repo, pkg.name)
           const pullCmd = pullTag
             ? `docker pull ${registry}:${pullTag}`
             : `docker pull ${registry}`
@@ -177,6 +184,7 @@ export function useArtifacts(
             rollupState: pkg.rollup_state ?? '',
             published,
             cveScans: (pkg.cve_scans ?? []).filter((s: CveScan) => s.repo === repo),
+            instance: targets.find(t => t.repo === repo)?.instance,
           }
         })
       })
@@ -222,6 +230,7 @@ export function useArtifacts(
             rollupState: pkg.rollup_state ?? '',
             published: repoTargets.some((t: Target) => t.published === true),
             builtAt,
+            instance: repoTargets.find((t: Target) => t.instance)?.instance,
           }
         })
       })

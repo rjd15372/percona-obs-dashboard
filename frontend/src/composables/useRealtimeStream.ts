@@ -1,6 +1,7 @@
 import { onMounted, onUnmounted, type Ref } from 'vue'
-import type { Package, PRGroup, Event, Target } from '../types/api'
+import type { Package, PRGroup, Event, Target, InstanceHealth } from '../types/api'
 import { projectInContext } from '../lib/project'
+import { applyInstanceHealth } from './useInstances'
 
 const SEVERITY: Record<string, number> = {
   broken: 5, failed: 4, unresolvable: 3, blocked: 2,
@@ -129,6 +130,9 @@ export function useRealtimeStream(
         if (events.value.length > 200) {
           events.value.length = 200
         }
+      } else if (msg.type === 'instance_health') {
+        const { slug, health } = msg.data as { slug: string; health: InstanceHealth }
+        applyInstanceHealth(slug, health)
       }
     }
 

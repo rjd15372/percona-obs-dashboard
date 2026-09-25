@@ -1,8 +1,17 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { Package } from '../types/api'
+import type { Package, ObsInstance } from '../types/api'
+import { useInstances } from '../composables/useInstances'
+import { projectUrl, packageUrl } from '../lib/instances'
 
 const props = defineProps<{ packages: Package[] }>()
+
+const { instances, packageInstances } = useInstances()
+
+function groupInstances(pkgs: Package[]): ObsInstance[] {
+  const slugs = new Set(pkgs.flatMap(p => packageInstances(p).map(i => i.slug)))
+  return instances.value.filter(i => slugs.has(i.slug))
+}
 
 const groups = computed(() => {
   const map = new Map<string, Package[]>()
@@ -24,13 +33,6 @@ function fullyPublished(pkg: Package): boolean {
   return pkg.rollup_state === 'published' || pkg.settled === true
 }
 
-function projectUrl(project: string): string {
-  return `https://build.opensuse.org/project/show/${project}`
-}
-
-function packageUrl(project: string, name: string): string {
-  return `https://build.opensuse.org/package/show/${project}/${name}`
-}
 </script>
 
 <template>
@@ -47,19 +49,19 @@ function packageUrl(project: string, name: string): string {
       class="flex flex-col gap-[7px]"
       :style="{ borderTop: index > 0 ? '1px solid var(--border)' : '', paddingTop: index > 0 ? '10px' : '' }"
     >
-      <!-- Group header: full OBS project path linking to project page -->
-      <a
-        :href="projectUrl(group.project)"
-        target="_blank"
-        rel="noopener"
-        class="project-link font-mono text-[11px] text-text-muted no-underline inline-flex items-center gap-[3px]"
-      >{{ group.project }} ↗</a>
+      <!-- Group header: full OBS project path linking to project page, one anchor per hosting instance -->
+      <div class="flex items-center gap-[10px] flex-wrap">
+        <a v-for="inst in groupInstances(group.pkgs)" :key="inst.slug"
+           :href="projectUrl(inst, group.project) || undefined" target="_blank" rel="noopener"
+           class="project-link font-mono text-[11px] text-text-muted no-underline inline-flex items-center gap-[3px]"
+        >{{ group.project }}<template v-if="groupInstances(group.pkgs).length > 1"> · {{ inst.name }}</template> ↗</a>
+      </div>
       <!-- Package pills linking to individual OBS package pages -->
       <div class="flex gap-[7px] flex-wrap">
         <a
           v-for="pkg in group.pkgs"
           :key="pkg.name"
-          :href="packageUrl(group.project, pkg.name)"
+          :href="packageUrl(packageInstances(pkg)[0], group.project, pkg.name) || undefined"
           target="_blank"
           rel="noopener"
           class="pkg-pill inline-flex items-center gap-[6px] py-[4px] px-[10px] rounded-[7px] no-underline"

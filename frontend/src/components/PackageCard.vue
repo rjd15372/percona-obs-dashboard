@@ -4,6 +4,10 @@ import type { Package, Target } from '../types/api'
 import { displayVersion, TAG_LABEL } from '../composables/useEventDisplay'
 import { useRebuild } from '../composables/useRebuild'
 import { isTarballRepo } from '../lib/tarballs'
+import { useInstances } from '../composables/useInstances'
+import { packageUrl, liveLogUrl } from '../lib/instances'
+
+const { instanceFor, packageInstances } = useInstances()
 
 const props = defineProps<{ pkg: Package; spotlightStates?: string[] }>()
 
@@ -156,7 +160,10 @@ const hiddenCount = computed(() => Math.max(0, failingTargets.value.length - INI
 const rollupColor = computed(() => STATE_COLOR[props.pkg.rollup_state] ?? 'var(--text-muted)')
 const rollupBg = computed(() => STATE_BG[props.pkg.rollup_state] ?? 'var(--blocked-tint)')
 const versionLabel = computed(() => displayVersion(props.pkg.version, props.pkg.is_container ?? false))
-const obsUrl = computed(() => `https://build.opensuse.org/package/show/${props.pkg.project}/${props.pkg.name}`)
+
+const obsLinks = computed(() => packageInstances(props.pkg).map(inst => ({
+  name: inst.name, url: packageUrl(inst, props.pkg.project, props.pkg.name),
+})))
 
 function elapsedTime(iso: string | undefined): string | null {
   if (!iso) return null
@@ -179,8 +186,8 @@ const stateAge = computed((): string | null => {
   return elapsed ? `for ${elapsed}` : null
 })
 
-function logUrl(repo: string, arch: string): string {
-  return `https://build.opensuse.org/package/live_build_log/${props.pkg.project}/${props.pkg.name}/${repo}/${arch}`
+function logUrl(t: Target): string {
+  return liveLogUrl(instanceFor(t.instance), props.pkg.project, props.pkg.name, t.repo, t.arch)
 }
 
 function targetAge(t: Target): string | null {
@@ -210,7 +217,12 @@ const isDimmed = computed(() => !!props.spotlightStates?.length && !props.spotli
         :style="{ color: rollupColor, background: rollupBg }"
       >{{ STATE_LABEL[pkg.rollup_state] ?? pkg.rollup_state }}</span>
       <span v-if="stateAge" class="ml-auto text-[10.5px] text-text-muted font-mono whitespace-nowrap flex-shrink-0">{{ stateAge }}</span>
-      <a :href="obsUrl" target="_blank" rel="noopener" :style="{ marginLeft: stateAge ? '0' : 'auto' }" class="text-[11.5px] font-bold text-brand-purple no-underline whitespace-nowrap flex-shrink-0">OBS ↗</a>
+      <template v-for="(link, i) in obsLinks" :key="link.name">
+        <a :href="link.url || undefined" target="_blank" rel="noopener"
+           :style="{ marginLeft: i === 0 && !stateAge ? 'auto' : '0' }"
+           class="text-[11.5px] font-bold text-brand-purple no-underline whitespace-nowrap flex-shrink-0"
+        >{{ obsLinks.length > 1 ? `${link.name} ↗` : 'OBS ↗' }}</a>
+      </template>
     </div>
 
     <!-- Row 2: package name -->
@@ -266,7 +278,7 @@ const isDimmed = computed(() => !!props.spotlightStates?.length && !props.spotli
               {{ STATE_LABEL[t.state] ?? t.state }}<template v-if="targetAge(t)"> · {{ targetAge(t) }}</template>
             </span>
             <a
-              :href="logUrl(t.repo, t.arch)"
+              :href="logUrl(t) || undefined"
               target="_blank"
               rel="noopener"
               class="text-[10.5px] font-bold text-brand-purple flex-shrink-0 no-underline"

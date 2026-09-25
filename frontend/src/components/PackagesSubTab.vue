@@ -3,6 +3,8 @@ import { computed, reactive } from 'vue'
 import type { ArtifactBinary, PackageRow, RepoInfo } from '../composables/useArtifacts'
 import { distroGroup } from '../composables/useArtifacts'
 import { formatArtifactTime } from '../lib/cve'
+import { useInstances } from '../composables/useInstances'
+import { obsProject, downloadBase } from '../lib/instances'
 
 const props = defineProps<{
   packageRows: PackageRow[]
@@ -44,26 +46,30 @@ const showPackageList = computed(() => props.selectedRepo !== null || props.pack
 
 // ----- snippet -----
 
+const { instanceFor } = useInstances()
+
 const snippet = computed(() => {
   const repo = props.selectedRepo
   if (!repo) return ''
-  const obsProject = props.packageRows[0]?.project ?? `ppg:${props.version}`
-  const obsProjectUrl = obsProject.split(':').join(':/')
-  const baseUrl = `https://download.opensuse.org/repositories/${obsProjectUrl}/${repo.obs}/`
-  const projectId = obsProject.split(':').join('_')
+  const project = props.packageRows[0]?.project ?? `ppg:${props.version}`
+  const inst = instanceFor(props.packageRows[0]?.instance)
+  if (!inst) return ''
+  const obsProjectName = obsProject(inst, project) // repo alias / file names, as today
+  const baseUrl = downloadBase(inst, project, repo.obs)
+  const projectId = obsProjectName.split(':').join('_')
 
   if (repo.obs.startsWith('openSUSE')) {
     return `zypper addrepo \\
   ${baseUrl} \\
-  ${obsProject}
+  ${obsProjectName}
 zypper --gpg-auto-import-keys refresh`
   }
 
   if (repo.type === 'rpm') {
     return `rpm --import ${baseUrl}repodata/repomd.xml.key
 tee /etc/yum.repos.d/${projectId}.repo << 'EOF'
-[${obsProject}]
-name=${obsProject} - ${repo.obs}
+[${obsProjectName}]
+name=${obsProjectName} - ${repo.obs}
 baseurl=${baseUrl}
 enabled=1
 gpgcheck=0
@@ -71,7 +77,7 @@ EOF`
   }
 
   return `echo 'deb ${baseUrl} /' \\
-  | tee /etc/apt/sources.list.d/${obsProject}.list
+  | tee /etc/apt/sources.list.d/${obsProjectName}.list
 curl -fsSL ${baseUrl}Release.key \\
   | gpg --dearmor | tee /etc/apt/trusted.gpg.d/${projectId}.gpg > /dev/null
 apt update`
@@ -115,8 +121,8 @@ async function toggleRow(row: PackageRow) {
 }
 
 function downloadUrl(row: PackageRow, filename: string): string {
-  const obsProjectUrl = row.project.split(':').join(':/')
-  return `https://download.opensuse.org/repositories/${obsProjectUrl}/${row.repo.obs}/${row.arch}/${filename}`
+  const base = downloadBase(instanceFor(row.instance), row.project, row.repo.obs)
+  return base ? `${base}${row.arch}/${filename}` : ''
 }
 
 // ----- labels -----
@@ -356,7 +362,7 @@ function canExpand(row: PackageRow): boolean {
                   </div>
                   <a
                     class="text-[12px] py-[3px] px-[10px] rounded-md bg-brand-purple text-white no-underline whitespace-nowrap font-medium shrink-0"
-                    :href="downloadUrl(row, binary.filename)"
+                    :href="downloadUrl(row, binary.filename) || undefined"
                     target="_blank"
                   >&#x2193; Download</a>
                 </div>

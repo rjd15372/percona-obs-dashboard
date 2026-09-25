@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import type { PRGroup, Package } from '../types/api'
+import { useInstances } from '../composables/useInstances'
+import { packageUrl, projectUrl } from '../lib/instances'
 
 defineProps<{ groups: PRGroup[] }>()
+
+const { instanceFor, packageInstances } = useInstances()
 
 const STATE_COLOR: Record<string, string> = {
   succeeded: 'var(--ok)',
@@ -60,11 +64,11 @@ function subprojectLabel(project: string): string {
 }
 
 function obsUrl(pkg: Package): string {
-  return `https://build.opensuse.org/package/show/${pkg.project}/${pkg.name}`
+  return packageUrl(packageInstances(pkg)[0], pkg.project, pkg.name)
 }
 
 function prProjectUrl(pr: string): string {
-  return `https://build.opensuse.org/project/show/PR:pr-${pr}`
+  return projectUrl(instanceFor(), `PR:pr-${pr}`)
 }
 </script>
 
@@ -105,7 +109,7 @@ function prProjectUrl(pr: string): string {
           </span>
 
           <a
-            :href="prProjectUrl(group.pr)"
+            :href="prProjectUrl(group.pr) || undefined"
             target="_blank"
             rel="noopener"
             class="ml-auto text-[11.5px] font-bold text-brand-purple no-underline whitespace-nowrap flex-shrink-0"
@@ -148,7 +152,7 @@ function prProjectUrl(pr: string): string {
 
             <!-- OBS link -->
             <a
-              :href="obsUrl(pkg)"
+              :href="obsUrl(pkg) || undefined"
               target="_blank"
               rel="noopener"
               class="text-[10.5px] font-bold text-brand-purple no-underline flex-shrink-0"
