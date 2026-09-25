@@ -6,3 +6,6 @@ data/*.db
 data/*.db-journal
 .env
 backend/obsboard
+
+# Claude Code worktrees
+.claude/worktrees/
