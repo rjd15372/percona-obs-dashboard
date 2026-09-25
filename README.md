@@ -73,3 +73,17 @@ task down-prod    # stop the production stack
 The production build compiles the frontend into static assets and embeds them
 in a single Go binary inside a minimal Alpine image. Persistent state lives in
 `./data` (bind-mounted into the container).
+
+### Upgrading to multi-instance
+
+The first start of a multi-instance build migrates the SQLite database in
+place: it strips the `<obs_root>:` prefix from every stored project name
+(`isv:percona:ppg:17` → `ppg:17`) and stamps the legacy instance on stored
+build targets and target events. The migration runs once and cannot be undone
+by an older binary, which would re-insert root-prefixed rows next to the
+migrated ones.
+
+- **Before rolling out**, stop the stack and back up the database
+  (`data/obsboard.db`, i.e. `DB_PATH` on the host).
+- **To roll back**, stop the stack, restore that backup, and start the older
+  image.
