@@ -40,8 +40,8 @@ export const CATEGORY_ORDER: ProjectCategory[] = ['Devel', 'Staging', 'Releases'
 
 export function categoryOf(project: string): ProjectCategory {
   if (isPRProject(project)) return 'PRs'
-  if (project.includes(':releases')) return 'Releases'
-  if (project.includes(':staging')) return 'Staging'
+  if (project.endsWith(':releases')) return 'Releases'
+  if (project.includes(':staging:')) return 'Staging'
   return 'Devel'
 }
 

@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch, onUnmounted } from 'vue'
 import { useMetrics } from '../composables/useMetrics'
+import { useInstances } from '../composables/useInstances'
 
 const expanded = ref(false)
 const { data, error, fetchedAt } = useMetrics(expanded)
+const { multi } = useInstances()
 
 // "updated Ns ago" ticks only while expanded; the last text stays frozen
 // when collapsed.
@@ -88,6 +90,8 @@ function fmtUptime(totalSeconds: number): string {
   if (m > 0) return `${m}m`
   return `${s}s`
 }
+
+const instanceStats = computed(() => data.value?.by_instance ?? [])
 </script>
 
 <template>
@@ -170,6 +174,23 @@ function fmtUptime(totalSeconds: number): string {
               <span v-else-if="tile.delta > 0" :style="{ color: 'var(--ok)' }">▲ {{ tile.delta }}%</span>
               <span v-else-if="tile.delta < 0" :style="{ color: 'var(--fail)' }">▼ {{ Math.abs(tile.delta) }}%</span>
               <span v-else class="text-text-secondary">0%</span>
+            </div>
+          </div>
+        </div>
+        <!-- By instance -->
+        <div v-if="multi && instanceStats.length > 0" class="mt-4">
+          <div class="text-[10.5px] font-bold uppercase tracking-[0.06em] text-text-muted mb-2">By instance</div>
+          <div class="flex flex-col gap-[6px] max-w-[560px]">
+            <div v-for="s in instanceStats" :key="s.slug" class="flex items-center gap-3 text-[12px]">
+              <span class="font-bold text-text-primary min-w-[120px]">{{ s.name }}</span>
+              <span class="font-mono tabular-nums text-text-secondary">{{ s.req_per_s.toFixed(2) }} req/s</span>
+              <span class="font-mono tabular-nums text-text-muted">{{ fmt(s.total) }} total</span>
+              <span
+                class="ml-auto text-[10.5px] font-bold px-2 py-[2px] rounded-[6px]"
+                :style="s.health.ok
+                  ? { color: 'var(--ok)', background: 'var(--ok-tint)' }
+                  : { color: 'var(--warn)', background: 'var(--warn-tint)' }"
+              >{{ s.health.ok ? 'OK' : 'unreachable' }}</span>
             </div>
           </div>
         </div>

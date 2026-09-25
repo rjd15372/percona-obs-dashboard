@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import type { WindowKey } from '../types/overview'
 import { useOverviewData } from '../composables/useOverviewData'
+import { useInstances } from '../composables/useInstances'
 import { PROJECT_ACCENTS } from '../lib/overview'
 import StatCard from './StatCard.vue'
 import CategoryBreakdown from './CategoryBreakdown.vue'
@@ -29,6 +30,18 @@ const {
   rebuildBars, projects,
   rebuildsByCategory, openCvesByCategory,
 } = useOverviewData(win)
+
+const { multi, instanceFor } = useInstances()
+
+const instanceRows = computed(() => (snapshot.value?.by_instance ?? []).map(r => ({
+  name: instanceFor(r.instance)?.name ?? r.instance,
+  segments: [
+    { label: 'ok', count: r.ok, colorVar: 'var(--ok)' },
+    { label: 'failing', count: r.failing, colorVar: 'var(--fail)' },
+    { label: 'building', count: r.building, colorVar: 'var(--info)' },
+    { label: 'blocked', count: r.blocked, colorVar: 'var(--blocked)' },
+  ],
+})))
 
 const WINDOWS: WindowKey[] = ['24h', '48h', '7d']
 
@@ -192,6 +205,16 @@ const cveSegments = computed(() => {
             <template v-else>no open CVEs</template>
           </template>
         </StatCard>
+      </div>
+
+      <div v-if="multi && instanceRows.length > 0" class="bg-bg-card border border-border rounded-[14px] p-[15px_20px] flex flex-col gap-3">
+        <span class="text-[11.5px] font-bold uppercase tracking-[0.05em] text-text-muted">By instance · live targets</span>
+        <div class="grid grid-cols-1 min-[760px]:grid-cols-2 gap-4">
+          <div v-for="row in instanceRows" :key="row.name" class="flex flex-col gap-[6px]">
+            <span class="text-[13px] font-bold text-text-primary">{{ row.name }}</span>
+            <CategoryBreakdown :segments="row.segments" />
+          </div>
+        </div>
       </div>
 
       <RebuildBarChart :bars="rebuildBars" :window-label="win" :accent-of="accentOf" />

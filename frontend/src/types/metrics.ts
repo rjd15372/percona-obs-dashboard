@@ -1,3 +1,12 @@
+export interface InstanceStatus {
+  name: string
+  slug: string
+  total: number
+  req_per_s: number
+  limiter: { Enabled: boolean; Budget: number; Remaining: number; Waits: number }
+  health: { ok: boolean; last_success?: string; consecutive_failures: number; mq_connected: boolean }
+}
+
 export interface MetricsSnapshot {
   obs: {
     total: number
@@ -13,4 +22,5 @@ export interface MetricsSnapshot {
   uptime_seconds: number
   sse_clients: number
   polling: string
+  by_instance?: InstanceStatus[]
 }

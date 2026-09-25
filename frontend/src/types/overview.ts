@@ -2,6 +2,14 @@ export type WindowKey = '24h' | '48h' | '7d'
 
 export interface OverviewCount { name: string; count: number }
 
+export interface OverviewInstance {
+  instance: string
+  ok: number
+  failing: number
+  building: number
+  blocked: number
+}
+
 export interface OverviewImage {
   project: string
   name: string
@@ -26,4 +34,5 @@ export interface OverviewSnapshot {
   previous_window_rebuild_total: number
   top_repo?: OverviewCount
   projects: OverviewProject[]
+  by_instance?: OverviewInstance[]
 }
