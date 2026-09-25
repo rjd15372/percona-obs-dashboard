@@ -148,4 +148,14 @@ func TestMetricsHandler(t *testing.T) {
 			t.Fatalf("obs.%s key missing from raw response", k)
 		}
 	}
+
+	if len(got.ByInstance) != 1 {
+		t.Fatalf("by_instance = %+v, want exactly 1 entry (single legacy instance)", got.ByInstance)
+	}
+	if got.ByInstance[0].Slug != "opensuse" || got.ByInstance[0].Name != "openSUSE" {
+		t.Fatalf("by_instance[0] = %+v, want slug=opensuse name=openSUSE", got.ByInstance[0])
+	}
+	if _, ok := raw["by_instance"]; !ok {
+		t.Fatalf("by_instance key missing from raw response")
+	}
 }

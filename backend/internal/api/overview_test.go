@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/percona/obs-dashboard/internal/model"
 	"github.com/percona/obs-dashboard/internal/store"
 )
 
@@ -117,6 +118,66 @@ func findProject(t *testing.T, s OverviewSnapshot, name string) OverviewProject 
 	return OverviewProject{}
 }
 
+func TestMergeInstanceCounts(t *testing.T) {
+	cases := []struct {
+		name        string
+		counts      []store.InstanceTargetCounts
+		defaultSlug string
+		want        []OverviewInstance
+	}{
+		{
+			name:        "empty instance folds into default slug",
+			counts:      []store.InstanceTargetCounts{{Instance: "", OK: 3, Failing: 1}},
+			defaultSlug: "opensuse",
+			want:        []OverviewInstance{{Instance: "opensuse", OK: 3, Failing: 1}},
+		},
+		{
+			name: "empty instance sums into default slug that already has stamped counts",
+			counts: []store.InstanceTargetCounts{
+				{Instance: "", OK: 3, Failing: 1},
+				{Instance: "opensuse", OK: 2, Building: 4},
+			},
+			defaultSlug: "opensuse",
+			want:        []OverviewInstance{{Instance: "opensuse", OK: 5, Failing: 1, Building: 4}},
+		},
+		{
+			name: "already-labeled instances pass through untouched",
+			counts: []store.InstanceTargetCounts{
+				{Instance: "percona", OK: 1, Blocked: 2},
+			},
+			defaultSlug: "opensuse",
+			want:        []OverviewInstance{{Instance: "percona", OK: 1, Blocked: 2}},
+		},
+		{
+			name: "output sorted by slug",
+			counts: []store.InstanceTargetCounts{
+				{Instance: "zzz", OK: 1},
+				{Instance: "aaa", OK: 2},
+				{Instance: "", Failing: 1},
+			},
+			defaultSlug: "mmm",
+			want: []OverviewInstance{
+				{Instance: "aaa", OK: 2},
+				{Instance: "mmm", Failing: 1},
+				{Instance: "zzz", OK: 1},
+			},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := mergeInstanceCounts(c.counts, c.defaultSlug)
+			if len(got) != len(c.want) {
+				t.Fatalf("got %+v, want %+v", got, c.want)
+			}
+			for i := range got {
+				if got[i] != c.want[i] {
+					t.Fatalf("got %+v, want %+v", got, c.want)
+				}
+			}
+		})
+	}
+}
+
 func TestOverviewHandlerWindowValidation(t *testing.T) {
 	db, err := store.Open(":memory:")
 	if err != nil {
@@ -133,6 +194,53 @@ func TestOverviewHandlerWindowValidation(t *testing.T) {
 		h(w, httptest.NewRequest(http.MethodGet, "/api/overview"+tc.q, nil))
 		if w.Code != tc.code {
 			t.Fatalf("window %q → %d, want %d", tc.q, w.Code, tc.code)
+		}
+	}
+}
+
+func TestOverviewHandlerByInstance(t *testing.T) {
+	db, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	now := time.Now().UTC()
+	pkgs := []*model.Package{
+		{Project: "ppg:17", Name: "a", RollupState: model.RollupSucceeded, UpdatedAt: now, Targets: []model.Target{
+			{Repo: "R", Arch: "x", State: "succeeded", Instance: "opensuse"},
+			{Repo: "D", Arch: "y", State: "failed", Instance: "percona"},
+		}},
+		// Unstamped target: pre-migration data, must fold into the default slug.
+		{Project: "ppg:18", Name: "b", RollupState: model.RollupSucceeded, UpdatedAt: now, Targets: []model.Target{
+			{Repo: "R2", Arch: "x", State: "succeeded"},
+		}},
+	}
+	for _, p := range pkgs {
+		if err := store.UpsertPackageState(db, p, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	h := overviewHandler(db, "isv:percona", "opensuse", newOverviewCache(time.Minute))
+	w := httptest.NewRecorder()
+	h(w, httptest.NewRequest(http.MethodGet, "/api/overview", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d", w.Code)
+	}
+	var s OverviewSnapshot
+	if err := json.NewDecoder(w.Body).Decode(&s); err != nil {
+		t.Fatal(err)
+	}
+	want := []OverviewInstance{
+		{Instance: "opensuse", OK: 2},
+		{Instance: "percona", Failing: 1},
+	}
+	if len(s.ByInstance) != len(want) {
+		t.Fatalf("by_instance = %+v, want %+v", s.ByInstance, want)
+	}
+	for i := range want {
+		if s.ByInstance[i] != want[i] {
+			t.Fatalf("by_instance = %+v, want %+v", s.ByInstance, want)
 		}
 	}
 }
