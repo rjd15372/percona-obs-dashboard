@@ -10,8 +10,10 @@ import (
 	"testing"
 	"time"
 
+	hubpkg "github.com/percona/obs-dashboard/internal/hub"
 	"github.com/percona/obs-dashboard/internal/model"
 	"github.com/percona/obs-dashboard/internal/store"
+	"github.com/percona/obs-dashboard/internal/workingset"
 )
 
 func TestPreservePublishedAcrossTransientStateChange(t *testing.T) {
@@ -173,11 +175,11 @@ func TestPollerFetchProjectResultsBypassesLimiter(t *testing.T) {
 		t.Fatalf("drain budget: %v", err)
 	}
 
-	p := &Poller{client: c}
+	p := &Poller{client: SingleFleet(c, "isv:percona")}
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 
-	if _, _, err := p.fetchProjectResults(ctx, "isv:percona:ppg:devel:17"); err != nil {
+	if _, _, _, err := p.fetchProjectResults(ctx, "isv:percona:ppg:devel:17"); err != nil {
 		t.Fatalf("fetch blocked by exhausted limiter (no bypass): %v", err)
 	}
 	if hits.Load() != 1 {
@@ -211,7 +213,7 @@ func TestPollerRunGatedByPresence(t *testing.T) {
 
 	g := &stubGate{wake: make(chan struct{}, 1)}
 	p := &Poller{
-		client:   NewClient(srv.URL, "u", "p"),
+		client:   SingleFleet(NewClient(srv.URL, "u", "p"), "isv:percona"),
 		db:       db,
 		interval: 25 * time.Millisecond,
 		root:     "isv:percona",
@@ -233,6 +235,73 @@ func TestPollerRunGatedByPresence(t *testing.T) {
 
 	g.active.Store(true) // active: ticks resume
 	waitFor(t, func() bool { return searchHits.Load() >= 3 })
+}
+
+func TestConfirmedGone(t *testing.T) {
+	x := LegacyInstance(nil, "isv:percona")
+	y := NewInstance(InstanceInfo{Slug: "percona", Root: "percona"}, nil)
+	all := []*Instance{x, y}
+	existing := []*model.Package{
+		{Project: "ppg:17", Targets: []model.Target{{Repo: "D", Arch: "a", Instance: "percona"}}},
+		{Project: "ppg:18", Targets: []model.Target{{Repo: "R", Arch: "a"}}},
+	}
+	if confirmedGone(existing, "ppg:17", map[string]bool{"opensuse": true}, all) {
+		t.Error("ppg:17 lives on percona, which did not answer")
+	}
+	if !confirmedGone(existing, "ppg:17", map[string]bool{"opensuse": true, "percona": true}, all) {
+		t.Error("all owners answered: gone")
+	}
+	if confirmedGone(existing, "ppg:18", map[string]bool{"opensuse": true}, all) {
+		t.Error("unstamped targets need every instance to answer")
+	}
+}
+
+func TestPollerCarriesForwardFailedInstance(t *testing.T) {
+	db, err := store.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	x := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/search/project/id"):
+			w.Write([]byte(`<collection><project name="isv:percona:ppg:17"/></collection>`))
+		case r.URL.Path == "/build/isv:percona:ppg:17/_result":
+			w.Write([]byte(`<resultlist><result repository="RHEL_9" arch="x86_64" state="building"><status package="pg" code="building"/></result></resultlist>`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer x.Close()
+	y := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/search/project/id") {
+			w.Write([]byte(`<collection><project name="percona:ppg:17"/></collection>`))
+			return
+		}
+		http.Error(w, "down", http.StatusBadGateway)
+	}))
+	defer y.Close()
+	fleet := NewFleet(
+		NewInstance(InstanceInfo{Slug: "opensuse", Root: "isv:percona"}, NewClient(x.URL, "u", "p")),
+		NewInstance(InstanceInfo{Slug: "percona", Root: "percona"}, NewClient(y.URL, "u", "p")),
+	)
+	now := time.Now().UTC()
+	stored := &model.Package{Project: "ppg:17", Name: "deb-only", RollupState: model.RollupFailed, UpdatedAt: now,
+		Targets: []model.Target{{Repo: "Debian_12", Arch: "aarch64", State: "failed", Instance: "percona"}}}
+	if err := store.UpsertPackageState(db, stored, now); err != nil {
+		t.Fatal(err)
+	}
+	ws := workingset.New(64, time.Minute, time.Minute, 4)
+	p := NewPoller(fleet, db, time.Minute, hubpkg.New(), ws, "", nil)
+	p.tick(context.Background())
+
+	got, err := store.GetPackage(db, "ppg:17", "deb-only")
+	if err != nil || got == nil {
+		t.Fatalf("package on the failed instance was garbage-collected (err=%v)", err)
+	}
+	if len(got.Targets) != 1 || got.Targets[0].State != "failed" {
+		t.Errorf("carried package changed: %+v", got.Targets)
+	}
 }
 
 func waitFor(t *testing.T, cond func() bool) {

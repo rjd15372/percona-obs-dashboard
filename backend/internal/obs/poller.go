@@ -22,7 +22,7 @@ type PollGate interface {
 
 // Poller periodically fetches OBS build results and reconciles them with the store.
 type Poller struct {
-	client   *Client
+	client   *Fleet
 	db       *sql.DB
 	interval time.Duration
 	root     string
@@ -31,7 +31,7 @@ type Poller struct {
 	gate     PollGate
 }
 
-func NewPoller(client *Client, db *sql.DB, interval time.Duration, h *hubpkg.Hub, ws *workingset.WorkingSet, root string, gate PollGate) *Poller {
+func NewPoller(client *Fleet, db *sql.DB, interval time.Duration, h *hubpkg.Hub, ws *workingset.WorkingSet, root string, gate PollGate) *Poller {
 	return &Poller{client: client, db: db, interval: interval, root: root, hub: h, ws: ws, gate: gate}
 }
 
@@ -64,14 +64,14 @@ func (p *Poller) Run(ctx context.Context) {
 // fetchProjectResults fetches one project's build results outside the
 // background rate limiter: the discovery pass is bounded (one call per live
 // project per interval) and must not queue behind working-set traffic.
-func (p *Poller) fetchProjectResults(ctx context.Context, project string) ([]PackageBuildState, map[string]string, error) {
+func (p *Poller) fetchProjectResults(ctx context.Context, project string) ([]PackageBuildState, map[string]string, []string, error) {
 	return p.client.BuildResults(Interactive(ctx), project)
 }
 
 func (p *Poller) tick(ctx context.Context) {
-	projects, err := p.discoverProjects(ctx, p.root)
+	projects, answered, err := p.client.Discover(ctx)
 	if err != nil {
-		slog.Error("poller: discover projects", "root", p.root, "err", err)
+		slog.Error("poller: discover projects", "err", err)
 		return
 	}
 
@@ -99,24 +99,47 @@ func (p *Poller) tick(ctx context.Context) {
 			continue
 		}
 
-		results, repoStates, err := p.fetchProjectResults(ctx, project)
+		results, repoStates, failed, err := p.fetchProjectResults(ctx, project)
 		if err != nil {
 			slog.Warn("poller: build results", "project", project, "err", err)
 			continue
+		}
+		down := make(map[string]bool, len(failed))
+		for _, s := range failed {
+			down[s] = true
 		}
 
 		byPkg := map[string][]PackageBuildState{}
 		for _, r := range results {
 			byPkg[r.Package] = append(byPkg[r.Package], r)
 		}
+		// Packages whose targets live on an unreachable instance stay in the
+		// pass so their targets are carried forward rather than GC'd.
+		for _, stored := range existing {
+			if stored.Project != project {
+				continue
+			}
+			if _, ok := byPkg[stored.Name]; ok {
+				continue
+			}
+			for _, t := range stored.Targets {
+				if down[t.Instance] {
+					byPkg[stored.Name] = nil
+					break
+				}
+			}
+		}
 
 		tags := ProjectTags(p.root, project)
 		for pkgName, targets := range byPkg {
-			pkg := buildPackage(project, pkgName, tags, targets)
-			pkg.IsRelease = kind == KindRelease
-
 			key := project + "/" + pkgName
 			prev := byKey[key]
+			var prevTargets []model.Target
+			if prev != nil {
+				prevTargets = prev.Targets
+			}
+			pkg := buildPackage(project, pkgName, tags, CarryForward(targets, prevTargets, failed, project, pkgName))
+			pkg.IsRelease = kind == KindRelease
 			preservePackageEnrichment(prev, pkg)
 
 			// Preserve published state: OBS build results only return "succeeded",
@@ -177,25 +200,54 @@ func (p *Poller) tick(ctx context.Context) {
 		}
 	}
 
-	// Garbage-collect packages for projects no longer in OBS.
+	// Garbage-collect packages for projects no longer in OBS — only when
+	// every instance that owned them answered discovery.
 	storedProjects := make(map[string]bool)
 	for _, pkg := range existing {
 		storedProjects[pkg.Project] = true
 	}
 	for proj := range storedProjects {
-		if !liveProjects[proj] {
-			slog.Info("poller: removing packages for deleted project", "project", proj)
-			if err := store.DeletePackagesByProject(p.db, proj); err != nil {
-				slog.Error("poller: delete packages", "project", proj, "err", err)
-			}
-			p.client.EvictPublishFlags(proj)
-			for _, pkg := range existing {
-				if pkg.Project == proj {
-					p.ws.Remove(proj + "/" + pkg.Name)
-				}
+		if liveProjects[proj] || !confirmedGone(existing, proj, answered, p.client.Instances()) {
+			continue
+		}
+		slog.Info("poller: removing packages for deleted project", "project", proj)
+		if err := store.DeletePackagesByProject(p.db, proj); err != nil {
+			slog.Error("poller: delete packages", "project", proj, "err", err)
+		}
+		p.client.EvictPublishFlags(proj)
+		for _, pkg := range existing {
+			if pkg.Project == proj {
+				p.ws.Remove(proj + "/" + pkg.Name)
 			}
 		}
 	}
+}
+
+// confirmedGone reports whether every instance that owned a target of
+// project answered discovery. Unstamped targets and target-less packages
+// require every instance to have answered.
+func confirmedGone(existing []*model.Package, project string, answered map[string]bool, all []*Instance) bool {
+	allAnswered := len(answered) >= len(all)
+	for _, pkg := range existing {
+		if pkg.Project != project {
+			continue
+		}
+		if len(pkg.Targets) == 0 && !allAnswered {
+			return false
+		}
+		for _, t := range pkg.Targets {
+			if t.Instance == "" {
+				if !allAnswered {
+					return false
+				}
+				continue
+			}
+			if !answered[t.Instance] {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func preservePackageEnrichment(prev, next *model.Package) {
@@ -300,12 +352,6 @@ func targetsChanged(prev *model.Package, next *model.Package) bool {
 		}
 	}
 	return false
-}
-
-// discoverProjects returns all OBS projects whose names start with root+":".
-// The root itself is not included — it is a namespace prefix, not a pollable project.
-func (p *Poller) discoverProjects(ctx context.Context, root string) ([]string, error) {
-	return p.client.SearchProjects(ctx, root)
 }
 
 // PRNumber extracts the PR number from a PR project path.
