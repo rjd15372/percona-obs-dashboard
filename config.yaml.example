@@ -34,7 +34,7 @@ mq:
 #    api_url: "https://obs.pg.labs.percona.com"
 #    web_url: "https://obs.pg.labs.percona.com"
 #    download_url: "https://download.obs.pg.labs.percona.com"
-#    registry: "registry.obs.pg.labs.percona.com"   # placeholder: real host not confirmed yet
+#    registry: "obs.pg.labs.percona.com"
 #    mq:
 #      url: "amqps://obs.pg.labs.percona.com:5671/obs"   # host, port and vhost (/obs)
 #      exchange: "obs.events"
