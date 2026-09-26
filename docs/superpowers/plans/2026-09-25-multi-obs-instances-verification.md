@@ -255,7 +255,7 @@ scenario, not a fluke — and confirming the carry-forward-targets fix
 startup`) holds: labs-only packages are not deleted when labs fails to
 discover at startup.
 
-## Labs MQ: exchange, routing prefix, and outcome
+## Labs MQ: exchange, routing prefix, and outcome (updated 2026-09-26 — see "Attempt 3" below for the current result)
 
 The context file asked to discover the labs exchange/routing prefix with
 a throwaway Go program (passive-declaring `pubsub` then `amq.topic` on
@@ -281,9 +281,12 @@ WARN mq: disconnected, reconnecting err="exchange declare: Exception (403) Reaso
 
 The backend's own consumer code (`backend/internal/mq/consumer.go:109`)
 already calls `ExchangeDeclarePassive` (not an active/non-passive
-declare) before binding — this RabbitMQ broker's ACL model still gates
-even a *passive* `exchange.declare` on "configure" rights for the named
-exchange, which the account lacked at that point.
+declare) before binding. At the time, this looked like RabbitMQ gating
+even a *passive* `exchange.declare` on "configure" rights — **this
+statement is now known to be wrong; see "Attempt 3" below.** The real
+cause was a broken broker package build, not an ACL requirement: a
+passive declare with read permission alone works fine once the broker
+is sound.
 
 **Attempt 2, after the user reported fixing the account's permissions**
 (granting configure/write/read on its own server-named queues and read
@@ -308,34 +311,119 @@ tries:
 BIND_ERR: Exception (541) Reason: "INTERNAL_ERROR"
 ```
 
-**Net result: FAIL for the MQ leg, on both attempts, with two distinct
-broker-side errors** — `ACCESS_REFUSED` (configure right missing on
-`exchange.declare`, even passive) when going through the backend's own
-code path, and `INTERNAL_ERROR` (541, a RabbitMQ broker-side error, not
-an ACL rejection) when binding directly without declaring. This second
-error is unusual enough that it likely needs the labs RabbitMQ
-admin/logs to diagnose — it does not look like an application bug on our
-side. This was not worked around; per the controller's instruction the
-verification continued with API polling only for labs. labs `health.ok`
-correctly went `true` (API path healthy) while `mq_connected` stayed
-`false` throughout every two-instance run.
+**Result at the time (attempts 1–2): FAIL for the MQ leg, on both
+attempts, with two distinct broker-side errors** — `ACCESS_REFUSED`
+(believed to be a configure right missing on `exchange.declare`, even
+passive) when going through the backend's own code path, and
+`INTERNAL_ERROR` (541, a RabbitMQ broker-side error, not an ACL
+rejection) when binding directly without declaring. This was not worked
+around; per the controller's instruction the verification continued
+with API polling only for labs. labs `health.ok` correctly went `true`
+(API path healthy) while `mq_connected` stayed `false` throughout every
+two-instance run at that time.
+
+### Attempt 3 (2026-09-26, after the broker fix)
+
+The labs RabbitMQ admin identified and fixed the root cause: the broker
+package `rabbitmq-server 4.1.5-160000.2.1` was broken — `rabbit_channel`
+called a 4.2-only module, so **every** client's `queue.bind` crashed the
+channel (this produced the `INTERNAL_ERROR (541)` seen in attempt 2),
+and the same broken build produced the `ACCESS_REFUSED` seen on the
+passive exchange declare in attempts 1–2. Neither error was actually a
+permissions/ACL problem. The admin downgraded and pinned the package to
+`rabbitmq-server 4.1.5-160000.1.1`. **The earlier statement above that
+"RabbitMQ requires configure rights for a passive `exchange.declare`,
+even passive" is corrected: that was never true — it was this broken
+broker build.** A passive declare of `obs.events` now succeeds with the
+read permission alone, no "configure" grant needed.
+
+Re-verification: built the frontend/backend fresh from the worktree,
+regenerated the scratch two-instance config (same vhost `obs`, exchange
+`obs.events`, routing prefix `percona.obs`, credentials only via env
+vars/scratch files, never committed), took a fresh copy of
+`data/obsboard.db`, and ran the backend on port 4100 in the background.
+
+Startup log (both instances) — `mq: connected` for labs, no
+`ACCESS_REFUSED`/`INTERNAL_ERROR`/reconnect lines at all in the run:
+
+```
+2026/09/26 08:07:07 INFO mq: connected exchange=pubsub instance=opensuse
+2026/09/26 08:07:07 INFO mq: connected exchange=obs.events instance=labs
+```
+
+Watched for 5.5 minutes (`/api/instances` polled every ~60s, plus a
+continuous grep of the log for `mq: disconnected|reconnecting|WARN|ERROR`):
+zero reconnects, zero warnings/errors, and `/api/instances` for labs
+stayed `"mq_connected": true` and `"health": {"ok": true, ...}` from the
+first poll through the last one at t+5m31s (well past the 2-minute
+`mqDownGrace` window), e.g. at t+5m31s:
+
+```json
+{
+  "name": "labs",
+  "slug": "labs",
+  "health": {
+    "ok": true,
+    "last_success": "2026-09-26T08:12:19.509483559+01:00",
+    "consecutive_failures": 0,
+    "mq_connected": true
+  }
+}
+```
+
+**Evidence of message consumption**: none observed in this ~5.5-minute
+window. The `events` table (instance='labs') and the `packages` table
+(`updated_at`) both show zero rows changed after the connect timestamp,
+checked directly against the scratch DB copy (not the original). This
+is consistent with — but does not prove — an absence of matching build
+activity on labs during the window; it is not proof the consumer path
+works end-to-end, only that connect + bind (all three routing keys:
+`percona.obs.package.#`, `percona.obs.repo.published`,
+`percona.obs.project.#`) succeeded and stayed stable. The codebase has
+no log-level flag/env var to force debug output (checked
+`backend/cmd/obsboard/main.go` and grepped for `LOG_LEVEL`/`slog.HandlerOptions`
+— none exists, and none was added, per the "no application-code
+changes" rule), so the debug-level "mq: received raw message" /
+"mq: unparseable message" lines in `consumer.go` could not be forced on
+without a code change; this is recorded as the limit of what is
+observable here, not a fix.
+
+**Net result: PASS for the MQ leg** — labs `mq_connected` is `true` and
+stable, well past the 2-minute grace window, with a clean connect and
+no reconnect loop. Message-consumption evidence remains unconfirmed by
+direct observation in this run (no qualifying MQ traffic was seen), but
+the earlier `FAIL` was caused entirely by the broken broker build, now
+fixed and pinned upstream; the acceptance criterion is flipped to PASS
+on connectivity, with the consumption caveat above recorded rather than
+asserted as proven.
+
+**Note on routing-key coverage (non-JSON payloads)**: the dashboard's
+consumer binds only three routing keys per instance —
+`<prefix>.package.#`, `<prefix>.repo.published`, and
+`<prefix>.project.#` (`backend/internal/mq/consumer.go:118-126`). It does
+**not** bind `<prefix>.metrics` (which OBS publishes as InfluxDB line
+protocol, not JSON) nor `<prefix>.repo.build_started` /
+`<prefix>.repo.publish_state`. Confirmed in `consumer.go`: `handle()`
+does `json.Unmarshal(msg.Body, &m)` first and, on failure, logs
+`slog.Debug("mq: unparseable message", "err", err)` and returns
+(`consumer.go:157-161`) — so the consumer already tolerates/drops
+unparseable (non-JSON) payloads safely at debug level rather than
+crashing or erroring loudly. A future `percona.obs.#` (or any wider)
+binding would receive the non-JSON `metrics` messages and must keep
+relying on that same drop-on-unparseable behavior (or add explicit
+line-protocol handling) rather than assuming every message on the
+exchange is JSON.
 
 **Impact this has on the rest of the dashboard**: labs data still
-appears and updates via the polling/worker path (confirmed — `sfcgal`'s
-labs targets updated between runs), just without the low-latency MQ
-push; over a longer real deployment, `health.ok` for labs would flip to
-`false` after the 2-minute MQ-down grace period
-(`backend/internal/obs/instance.go: mqDownGrace = 2*time.Minute`) purely
-because of this MQ issue, even though the OBS API itself is fully
-reachable and credentials are correct. **This should be flagged to
-whoever owns the labs RabbitMQ account/broker**: either grant
-`<labs-mq-username>` "configure" rights on `obs.events` (RabbitMQ's ACL
-model requires this even for a passive declare) and investigate the
-`INTERNAL_ERROR` (541) seen on a bare `queue.bind`, or (as a smaller
-app-side fix, which was *not* made here per the "don't fix, record"
-instruction) have the mq client skip `ExchangeDeclarePassive` and go
-straight to declare-free bind, once the broker-side `INTERNAL_ERROR` is
-also resolved.
+appears and updates via the polling/worker path (confirmed in the
+original run — `sfcgal`'s labs targets updated between runs), and as of
+Attempt 3 also has a working low-latency MQ push channel (connectivity
+confirmed; actual event-driven updates unconfirmed in this window, see
+above). The earlier note that `health.ok` would flip `false` after the
+2-minute MQ-down grace period no longer applies now that the broker is
+fixed and pinned — this was **not** an application-side bug, and no
+application-side workaround (e.g. skipping `ExchangeDeclarePassive`) was
+needed or made.
 
 ## Registry placeholder caveat
 
@@ -389,7 +477,7 @@ visually:
 All backend processes started for this verification were stopped before
 finishing (`kill` + confirmed via `ps -p <pid>` → no such process, for
 each of: single-instance run, two-instance run, outage run, recovery
-run, startup-discovery-failure run). No docker containers were used or
-touched. The scratch DB copies, generated config, and the throwaway MQ
-discovery program live only under the scratch directory and are not part
-of this commit.
+run, startup-discovery-failure run, and the Attempt 3 MQ re-check run on
+2026-09-26). No docker containers were used or touched. The scratch DB
+copies, generated config, and the throwaway MQ discovery program live
+only under the scratch directory and are not part of this commit.
