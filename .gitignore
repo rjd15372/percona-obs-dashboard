@@ -15,3 +15,6 @@ backend/obsboard
 
 # Deployment config holds credentials; only the *.example files are tracked
 config.yaml
+
+# Local/production DB and .env backups
+backups/
