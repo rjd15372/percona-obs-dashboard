@@ -12,3 +12,6 @@ backend/obsboard
 
 # Local test credentials (never commit)
 .cred
+
+# Deployment config holds credentials; only the *.example files are tracked
+config.yaml
