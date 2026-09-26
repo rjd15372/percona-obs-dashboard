@@ -9,3 +9,6 @@ backend/obsboard
 
 # Claude Code worktrees
 .claude/worktrees/
+
+# Local test credentials (never commit)
+.cred
