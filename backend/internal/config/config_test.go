@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -319,5 +320,101 @@ func TestSlug(t *testing.T) {
 		if got := Slug(in); got != want {
 			t.Errorf("Slug(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestMQDialURL(t *testing.T) {
+	cases := []struct {
+		name string
+		mq   MQInstanceConfig
+		want string
+	}{
+		{"no fields keeps URL", MQInstanceConfig{URL: "amqps://opensuse:opensuse@rabbit.opensuse.org:5671/"},
+			"amqps://opensuse:opensuse@rabbit.opensuse.org:5671/"},
+		{"fields injected, vhost kept", MQInstanceConfig{URL: "amqps://obs.example.com:5671/obs", Username: "obs-dashboard", Password: "s3cret"},
+			"amqps://obs-dashboard:s3cret@obs.example.com:5671/obs"},
+		{"fields replace URL credentials", MQInstanceConfig{URL: "amqps://old:oldpw@obs.example.com:5671/obs", Username: "new", Password: "newpw"},
+			"amqps://new:newpw@obs.example.com:5671/obs"},
+		{"password only keeps URL username", MQInstanceConfig{URL: "amqps://user:oldpw@obs.example.com:5671/obs", Password: "newpw"},
+			"amqps://user:newpw@obs.example.com:5671/obs"},
+		{"special characters are escaped", MQInstanceConfig{URL: "amqps://obs.example.com:5671/obs", Username: "u", Password: "p@ss/w:rd"},
+			"amqps://u:p%40ss%2Fw%3Ard@obs.example.com:5671/obs"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := c.mq.DialURL()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != c.want {
+				t.Errorf("DialURL() = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+func TestMQDialURLInvalidDoesNotLeakPassword(t *testing.T) {
+	_, err := MQInstanceConfig{URL: "amqps://u:topsecret@host:bad-port/obs"}.DialURL()
+	if err == nil {
+		t.Fatal("expected an error for an invalid mq.url")
+	}
+	if strings.Contains(err.Error(), "topsecret") {
+		t.Errorf("error leaks the password: %v", err)
+	}
+}
+
+const labsMQInstance = `
+obs_instances:
+  - name: labs
+    root: "isv:percona"
+    api_url: "https://obs.example.com"
+    web_url: "https://obs.example.com"
+    download_url: "https://download.obs.example.com"
+    registry: "registry.obs.example.com"
+    username: "u"
+    mq:
+      url: "amqps://obs.example.com:5671/obs"
+      exchange: "obs.events"
+      routing_prefix: "percona.obs"
+      username: "fileuser"
+      password: "filepass"
+`
+
+func TestLoadInstanceMQCredentials(t *testing.T) {
+	os.Setenv("CONFIG_FILE", writeConfig(t, labsMQInstance))
+	defer os.Unsetenv("CONFIG_FILE")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mq := cfg.Instances[0].MQ
+	if mq.Username != "fileuser" || mq.Password != "filepass" {
+		t.Errorf("file credentials = %q/%q", mq.Username, mq.Password)
+	}
+
+	os.Setenv("OBS_LABS_MQ_USERNAME", "envuser")
+	os.Setenv("OBS_LABS_MQ_PASSWORD", "envpass")
+	defer os.Unsetenv("OBS_LABS_MQ_USERNAME")
+	defer os.Unsetenv("OBS_LABS_MQ_PASSWORD")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := cfg.Instances[0].MQ.DialURL()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "amqps://envuser:envpass@obs.example.com:5671/obs" {
+		t.Errorf("env override dial URL = %q", got)
+	}
+}
+
+func TestLoadInstanceInvalidMQURL(t *testing.T) {
+	os.Setenv("CONFIG_FILE", writeConfig(t, strings.Replace(labsMQInstance,
+		`"amqps://obs.example.com:5671/obs"`, `"amqps://obs.example.com:bad/obs"`, 1)))
+	defer os.Unsetenv("CONFIG_FILE")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected a validation error for an invalid mq.url")
 	}
 }

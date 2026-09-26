@@ -60,10 +60,14 @@ func run() error {
 	for _, ic := range cfg.Instances {
 		c := obs.NewClient(ic.APIURL, ic.Username, ic.Password)
 		c.SetMinuteBudget(ic.MinuteRequestBudget)
+		mqURL, err := ic.MQ.DialURL()
+		if err != nil {
+			return fmt.Errorf("instance %s: %w", ic.Name, err)
+		}
 		instances = append(instances, obs.NewInstance(obs.InstanceInfo{
 			Name: ic.Name, Slug: ic.Slug, Root: ic.Root,
 			WebURL: ic.WebURL, DownloadURL: ic.DownloadURL, Registry: ic.Registry,
-			MQURL: ic.MQ.URL, MQExchange: ic.MQ.Exchange, MQRoutingPrefix: ic.MQ.RoutingPrefix,
+			MQURL: mqURL, MQExchange: ic.MQ.Exchange, MQRoutingPrefix: ic.MQ.RoutingPrefix,
 		}, c))
 	}
 	fleet := obs.NewFleet(instances...)

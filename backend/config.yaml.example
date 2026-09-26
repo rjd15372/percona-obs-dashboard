@@ -17,7 +17,8 @@ mq:
 # obs/mq/obs_root settings above (those remain the one-instance fallback).
 # Repos of one package may be split across instances; the dashboard merges
 # them by the project path relative to each instance's root.
-# Credentials can come from env: OBS_<SLUG>_USERNAME / OBS_<SLUG>_PASSWORD,
+# Credentials can come from env: OBS_<SLUG>_USERNAME / OBS_<SLUG>_PASSWORD
+# (OBS API) and OBS_<SLUG>_MQ_USERNAME / OBS_<SLUG>_MQ_PASSWORD (RabbitMQ),
 # where SLUG is the name lowercased with non-alphanumerics as '_' and then
 # uppercased (e.g. "Percona OBS" → OBS_PERCONA_OBS_USERNAME).
 #obs_instances:
@@ -32,15 +33,20 @@ mq:
 #      url: "amqps://opensuse:opensuse@rabbit.opensuse.org:5671/"
 #      exchange: "pubsub"            # default
 #      routing_prefix: "opensuse.obs" # default
-#  - name: Percona
-#    root: "percona"
-#    api_url: "https://api.obs.example.com"
-#    web_url: "https://obs.example.com"
-#    download_url: "https://download.obs.example.com/repositories"
-#    registry: "registry.obs.example.com"
+#  - name: labs
+#    root: "isv:percona"
+#    api_url: "https://obs.pg.labs.percona.com"
+#    web_url: "https://obs.pg.labs.percona.com"
+#    download_url: "https://download.obs.pg.labs.percona.com"
+#    registry: "registry.obs.pg.labs.percona.com"   # placeholder: real host not confirmed yet
 #    mq:
-#      url: "amqps://user:pass@rabbit.obs.example.com:5671/"
+#      url: "amqps://obs.pg.labs.percona.com:5671/obs"   # host, port and vhost (/obs)
+#      exchange: "obs.events"
 #      routing_prefix: "percona.obs"
+#      # Broker credentials: override any user:pass embedded in url. Prefer
+#      # the env vars OBS_LABS_MQ_USERNAME / OBS_LABS_MQ_PASSWORD for secrets.
+#      username: "obs-dashboard"
+#      # password: set via OBS_LABS_MQ_PASSWORD
 
 # Poller settings
 poller:

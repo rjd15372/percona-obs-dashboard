@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -33,11 +34,45 @@ type legacyConfig struct {
 	budget                                   int
 }
 
-// MQInstanceConfig is one instance's AMQP event bus.
+// MQInstanceConfig is one instance's AMQP event bus. Username and Password,
+// when set, override credentials embedded in URL (which carries host, port
+// and vhost).
 type MQInstanceConfig struct {
 	URL           string `mapstructure:"url"`
 	Exchange      string `mapstructure:"exchange"`
 	RoutingPrefix string `mapstructure:"routing_prefix"`
+	Username      string `mapstructure:"username"`
+	Password      string `mapstructure:"password"`
+}
+
+// DialURL returns URL with Username/Password applied as its user info; each
+// set field replaces the matching part embedded in URL. Errors never include
+// the URL, which may carry a password.
+func (m MQInstanceConfig) DialURL() (string, error) {
+	u, err := url.Parse(m.URL)
+	if err != nil {
+		return "", fmt.Errorf("mq.url is not a valid URL")
+	}
+	if m.Username == "" && m.Password == "" {
+		return m.URL, nil
+	}
+	user, pass, hasPass := "", "", false
+	if u.User != nil {
+		user = u.User.Username()
+		pass, hasPass = u.User.Password()
+	}
+	if m.Username != "" {
+		user = m.Username
+	}
+	if m.Password != "" {
+		pass, hasPass = m.Password, true
+	}
+	if hasPass {
+		u.User = url.UserPassword(user, pass)
+	} else {
+		u.User = url.User(user)
+	}
+	return u.String(), nil
 }
 
 // InstanceConfig describes one OBS instance.
@@ -159,6 +194,12 @@ func loadInstances(v *viper.Viper, legacy legacyConfig) ([]InstanceConfig, error
 		if p := os.Getenv(env + "_PASSWORD"); p != "" {
 			in.Password = p
 		}
+		if u := os.Getenv(env + "_MQ_USERNAME"); u != "" {
+			in.MQ.Username = u
+		}
+		if p := os.Getenv(env + "_MQ_PASSWORD"); p != "" {
+			in.MQ.Password = p
+		}
 		in.MinuteRequestBudget = 60
 		if r.MinuteRequestBudget != nil {
 			in.MinuteRequestBudget = *r.MinuteRequestBudget
@@ -183,6 +224,9 @@ func loadInstances(v *viper.Viper, legacy legacyConfig) ([]InstanceConfig, error
 		}
 		if in.Username == "" {
 			return nil, fmt.Errorf("%s: username is required (or set %s_USERNAME)", label, env)
+		}
+		if _, err := in.MQ.DialURL(); err != nil {
+			return nil, fmt.Errorf("%s: %w", label, err)
 		}
 		out = append(out, in)
 	}
