@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -495,15 +496,18 @@ func binaryBaseName(filename string) string {
 	return filename
 }
 
-// baseOSFromRepo maps a base-image build repo (ubi8/ubi9/noble/bookworm) to a
+// ubiRepoRe matches Red Hat UBI base-image repos of any major version
+// (ubi8, ubi9, ubi10, …), so a new UBI release needs no code change.
+var ubiRepoRe = regexp.MustCompile(`^ubi([0-9]+)$`)
+
+// baseOSFromRepo maps a base-image build repo (ubi<N>/noble/bookworm) to a
 // display label. Returns "" for the legacy "images" repo or an unknown repo,
 // so the caller falls back to parsing the project name.
 func baseOSFromRepo(repo string) string {
+	if m := ubiRepoRe.FindStringSubmatch(repo); m != nil {
+		return "UBI " + m[1]
+	}
 	switch repo {
-	case "ubi8":
-		return "UBI 8"
-	case "ubi9":
-		return "UBI 9"
 	case "noble":
 		return "Ubuntu 24.04 Noble"
 	case "bookworm":

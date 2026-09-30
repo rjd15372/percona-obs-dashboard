@@ -65,10 +65,14 @@ export interface Tarball {
   instance?: string
 }
 
+// Red Hat UBI base-image repos of any major version (ubi8, ubi9, ubi10, …),
+// so a new UBI release needs no code change. Mirrors the backend's ubiRepoRe.
+const UBI_REPO = /^ubi(\d+)$/
+
 function baseOsFromRepo(repo?: string): string {
+  const ubi = repo?.match(UBI_REPO)
+  if (ubi) return `UBI ${ubi[1]}`
   switch (repo) {
-    case 'ubi8': return 'UBI 8'
-    case 'ubi9': return 'UBI 9'
     case 'noble': return 'Ubuntu 24.04 Noble'
     case 'bookworm': return 'Debian 12 Bookworm'
     default: return ''

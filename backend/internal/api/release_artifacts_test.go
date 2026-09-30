@@ -129,7 +129,8 @@ func TestBinaryBaseName(t *testing.T) {
 
 func TestBaseOSFromRepo(t *testing.T) {
 	cases := map[string]string{
-		"ubi8": "UBI 8", "ubi9": "UBI 9",
+		"ubi8": "UBI 8", "ubi9": "UBI 9", "ubi10": "UBI 10", "ubi11": "UBI 11",
+		"ubi": "", "ubix": "", "ubi10-minimal": "",
 		"noble": "Ubuntu 24.04 Noble", "bookworm": "Debian 12 Bookworm",
 		"images": "", "": "", "weird": "",
 	}
@@ -144,6 +145,10 @@ func TestDeriveBaseOS(t *testing.T) {
 	// New layout: the repo carries the base image.
 	if got := deriveBaseOS("isv:percona:ppg:staging:17:containers", "ubi9"); got != "UBI 9" {
 		t.Errorf("new layout: got %q, want UBI 9", got)
+	}
+	// New layout with a UBI version the code has never seen before.
+	if got := deriveBaseOS("PR:pr-101:ppg:staging:17:containers", "ubi10"); got != "UBI 10" {
+		t.Errorf("ubi10: got %q, want UBI 10", got)
 	}
 	// Old layout: repo is "images", base image in the project name.
 	if got := deriveBaseOS("isv:percona:ppg:17:containers:ubi8", "images"); got != "UBI 8" {
