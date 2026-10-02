@@ -79,6 +79,20 @@ function baseOsFromRepo(repo?: string): string {
   }
 }
 
+const UBI_LABEL = /^UBI (\d+)$/
+
+// Display order for base-OS labels: UBI labels first by numeric version
+// (UBI 8, UBI 9, UBI 10), then every other label in plain string order.
+// Mirrors the backend's baseOSLess so release and live views agree.
+export function compareBaseOs(a: string, b: string): number {
+  const ua = a.match(UBI_LABEL)
+  const ub = b.match(UBI_LABEL)
+  if (ua && ub) return Number(ua[1]) - Number(ub[1])
+  if (ua) return -1
+  if (ub) return 1
+  return a < b ? -1 : a > b ? 1 : 0
+}
+
 export function deriveBaseOs(project: string, repo?: string): string {
   const fromRepo = baseOsFromRepo(repo)
   if (fromRepo) return fromRepo

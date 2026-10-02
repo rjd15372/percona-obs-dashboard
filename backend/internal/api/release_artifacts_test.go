@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -319,5 +321,35 @@ func TestSubprojectCandidatesIncludesFlatProject(t *testing.T) {
 	// Tarballs flat project present even with an empty search result.
 	if got := subprojectCandidates(base, "tarballs", nil); !eq(got, []string{base + ":tarballs"}) {
 		t.Fatalf("tarballs flat: got %v", got)
+	}
+}
+
+func TestBaseOSLess(t *testing.T) {
+	labels := []string{"Ubuntu 24.04 Noble", "UBI 10", "custom", "UBI 9", "Debian 12 Bookworm", "UBI 8"}
+	sort.Slice(labels, func(i, j int) bool { return baseOSLess(labels[i], labels[j]) })
+	want := []string{"UBI 8", "UBI 9", "UBI 10", "Debian 12 Bookworm", "Ubuntu 24.04 Noble", "custom"}
+	if strings.Join(labels, "|") != strings.Join(want, "|") {
+		t.Errorf("order = %v, want %v", labels, want)
+	}
+}
+
+func TestBuildReleaseContainerArtifactsOrdersUBIByVersion(t *testing.T) {
+	var bins []obs.BinaryArtifact
+	for _, repo := range []string{"ubi10", "ubi8", "ubi9"} {
+		bins = append(bins, obs.BinaryArtifact{Project: "ppg:releases:17:containers", Repo: repo, Arch: "x86_64",
+			Package: "pg", Filename: "pg.containerinfo"})
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r) // no tags needed for ordering
+	}))
+	defer srv.Close()
+	client := obs.SingleFleet(obs.NewClient(srv.URL, "u", "p"), "isv:percona")
+	got := buildReleaseContainerArtifacts(context.Background(), client, bins)
+	var order []string
+	for _, a := range got {
+		order = append(order, a.BaseOS)
+	}
+	if strings.Join(order, "|") != "UBI 8|UBI 9|UBI 10" {
+		t.Errorf("release container order = %v, want UBI 8, UBI 9, UBI 10", order)
 	}
 }

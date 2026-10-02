@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { ContainerImage } from '../composables/useArtifacts'
+import { compareBaseOs } from '../composables/useArtifacts'
 import type { CveScan } from '../types/api'
 import CveFindingsTable from './CveFindingsTable.vue'
 import { formatArtifactTime, cveDuration, latestScanTime } from '../lib/cve'
@@ -16,7 +17,8 @@ const emit = defineEmits<{
   'copy': [key: string, text: string]
 }>()
 
-// Group images by baseOs, preserving insertion order
+// Group images by baseOs (images keep their order within a group); sections
+// sort UBI by version (UBI 8, 9, 10), then other base OSes.
 const groups = computed(() => {
   const map = new Map<string, ContainerImage[]>()
   for (const img of props.containerImages) {
@@ -24,7 +26,9 @@ const groups = computed(() => {
     list.push(img)
     map.set(img.baseOs, list)
   }
-  return Array.from(map.entries()).map(([baseOs, images]) => ({ baseOs, images }))
+  return Array.from(map.entries())
+    .sort(([a], [b]) => compareBaseOs(a, b))
+    .map(([baseOs, images]) => ({ baseOs, images }))
 })
 
 const STATE_LABELS: Record<string, string> = {

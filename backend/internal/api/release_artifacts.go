@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -381,7 +382,7 @@ func buildReleaseContainerArtifacts(ctx context.Context, client *obs.Fleet, bina
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].BaseOS != out[j].BaseOS {
-			return out[i].BaseOS < out[j].BaseOS
+			return baseOSLess(out[i].BaseOS, out[j].BaseOS)
 		}
 		return out[i].ImageName < out[j].ImageName
 	})
@@ -514,6 +515,27 @@ func baseOSFromRepo(repo string) string {
 		return "Debian 12 Bookworm"
 	default:
 		return ""
+	}
+}
+
+// ubiLabelRe matches the "UBI <N>" labels produced by baseOSFromRepo.
+var ubiLabelRe = regexp.MustCompile(`^UBI ([0-9]+)$`)
+
+// baseOSLess orders base-OS labels for display: UBI labels first by numeric
+// version (UBI 8 < UBI 9 < UBI 10), then every other label alphabetically.
+func baseOSLess(a, b string) bool {
+	ma, mb := ubiLabelRe.FindStringSubmatch(a), ubiLabelRe.FindStringSubmatch(b)
+	switch {
+	case ma != nil && mb != nil:
+		va, _ := strconv.Atoi(ma[1])
+		vb, _ := strconv.Atoi(mb[1])
+		return va < vb
+	case ma != nil:
+		return true
+	case mb != nil:
+		return false
+	default:
+		return a < b
 	}
 }
 
