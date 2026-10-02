@@ -1021,3 +1021,51 @@ func TestBuildStateTaskKeepsPublishedOnCarriedTarget(t *testing.T) {
 		t.Fatalf("carried target must keep Published: %+v", pkg.Targets)
 	}
 }
+
+// Released containers have their builds disabled after release and, in the
+// per-base-image layout, live in ubi8/ubi9/… repos (not the legacy "images"
+// repo). The release fallback must still discover those targets, fetch the
+// tags and promote the package to published so it gets CVE-scanned.
+func TestContainerTagsTaskReleaseDisabledPerBaseImageRepos(t *testing.T) {
+	var tagRepos []string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/_result"):
+			fmt.Fprint(w, `<resultlist>
+				<result repository="ubi8" arch="x86_64" state="published"><status package="percona-pgbouncer" code="disabled"/></result>
+				<result repository="ubi9" arch="x86_64" state="published"><status package="percona-pgbouncer" code="disabled"/></result>
+			</resultlist>`)
+		case strings.HasSuffix(r.URL.Path, ".containerinfo"):
+			fmt.Fprint(w, `{"tags":["percona-pgbouncer:1.24.1-1","percona-pgbouncer:latest"]}`)
+		default:
+			tagRepos = append(tagRepos, strings.Split(r.URL.Path, "/")[3])
+			fmt.Fprint(w, `<binarylist><binary filename="percona-pgbouncer.x86_64-1.containerinfo" size="1" mtime="1"/></binarylist>`)
+		}
+	}))
+	defer ts.Close()
+
+	c := obs.SingleFleet(obs.NewClient(ts.URL, "u", "p"), "isv:percona")
+	pkg := &model.Package{
+		Project:     "isv:percona:ppg:releases:17:containers",
+		Name:        "percona-pgbouncer",
+		IsRelease:   true,
+		RollupState: model.RollupSucceeded,
+		IsContainer: boolPtr(true),
+		UpdatedAt:   time.Now().UTC(),
+	}
+	if err := (obs.ContainerTagsTask{}).Run(context.Background(), c, pkg, nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(pkg.Targets) != 2 {
+		t.Fatalf("expected the ubi8 and ubi9 targets to be discovered, got %+v", pkg.Targets)
+	}
+	if len(pkg.ContainerTags) != 2 || pkg.ContainerTags[1] != "latest" {
+		t.Errorf("expected tags to be fetched, got %v", pkg.ContainerTags)
+	}
+	if pkg.RollupState != model.RollupPublished {
+		t.Errorf("expected rollup published (so the CVE scanner picks it up), got %s", pkg.RollupState)
+	}
+	if len(tagRepos) == 0 {
+		t.Error("expected the containerinfo listing to be fetched from a discovered repo")
+	}
+}

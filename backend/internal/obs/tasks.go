@@ -380,8 +380,11 @@ func (t ContainerTagsTask) Run(ctx context.Context, client *Fleet, pkg *model.Pa
 			slog.Warn("obs: container tags: query release targets", "pkg", pkg.Name, "err", err)
 			return nil
 		}
+		// Every repo of a release container is a base-image repo: the
+		// legacy "images" repo or, in the per-base-image layout, ubi8/ubi9/….
+		// Excluded repo/arch combinations never produce an image, so skip them.
 		for _, r := range results {
-			if r.Repo == "images" {
+			if r.State != "excluded" {
 				targets = append(targets, model.Target{Repo: r.Repo, Arch: r.Arch, State: r.State, Instance: r.Instance})
 			}
 		}
