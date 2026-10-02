@@ -2,7 +2,7 @@
 import { computed, reactive } from 'vue'
 import type { OverviewProject } from '../types/overview'
 import type { CveScan } from '../types/api'
-import { oldestOpenLabel, oldestOpenColor, groupByCategory } from '../lib/overview'
+import { oldestOpenLabel, oldestOpenColor, groupByCategory, formatFixHours } from '../lib/overview'
 import { latestScanTime } from '../lib/cve'
 import CveFindingsTable from './CveFindingsTable.vue'
 
@@ -45,10 +45,10 @@ function computeAggregate(p: OverviewProject): Aggregate {
   const critical = p.images.reduce((s, i) => s + i.critical, 0)
   const high = p.images.reduce((s, i) => s + i.high, 0)
   const oldest = p.images.reduce((m, i) => Math.max(m, i.oldest_open_days), 0)
-  const fixes = p.images
-    .filter(i => i.critical + i.high > 0 && i.avg_fix_days > 0)
-    .map(i => i.avg_fix_days)
-  const avgFix = fixes.length > 0 ? Math.round(fixes.reduce((a, b) => a + b, 0) / fixes.length) : null
+  // Images with at least one closed episode, whether or not they are
+  // vulnerable right now (a fixed image is exactly what fix time measures).
+  const fixes = p.images.filter(i => i.avg_fix_hours > 0).map(i => i.avg_fix_hours)
+  const avgFix = fixes.length > 0 ? fixes.reduce((a, b) => a + b, 0) / fixes.length : null
   return { critical, high, oldest, avgFix }
 }
 
@@ -195,7 +195,7 @@ function reportScans(key: string): CveScan[] | null {
           :style="{ color: oldestOpenColor(aggregate(p.project).oldest, aggregate(p.project).critical + aggregate(p.project).high > 0) }"
         >{{ oldestOpenLabel(aggregate(p.project).oldest, aggregate(p.project).critical + aggregate(p.project).high > 0) }}</span>
         <span class="font-mono text-text-secondary justify-self-end">
-          {{ aggregate(p.project).avgFix === null ? '—' : `${aggregate(p.project).avgFix}d` }}
+          {{ formatFixHours(aggregate(p.project).avgFix ?? 0) }}
         </span>
       </button>
 
@@ -236,7 +236,7 @@ function reportScans(key: string): CveScan[] | null {
               :style="{ color: oldestOpenColor(img.oldest_open_days, img.critical + img.high > 0) }"
             >{{ oldestOpenLabel(img.oldest_open_days, img.critical + img.high > 0) }}</span>
             <span class="font-mono text-[12.5px] text-text-muted justify-self-end">
-              {{ img.avg_fix_days === 0 ? '—' : `${img.avg_fix_days}d` }}
+              {{ formatFixHours(img.avg_fix_hours) }}
             </span>
           </button>
 

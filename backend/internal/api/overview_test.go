@@ -87,11 +87,11 @@ func TestOverviewSnapshotBuilder(t *testing.T) {
 	if p17.Images[0].Project != "ppg:17:containers:ubi9" {
 		t.Fatalf("img-x project = %+v", p17.Images[0])
 	}
-	if p17.Images[0].OldestOpenDays != 34 || p17.Images[0].AvgFixDays != 10 { // mean(9,11)=10
+	if p17.Images[0].OldestOpenDays != 34 || p17.Images[0].AvgFixHours != 240 { // mean(9d,11d)=10d
 		t.Fatalf("img-x ages = %+v", p17.Images[0])
 	}
 	rel := findProject(t, s, "ppg:releases")
-	if rel.Rebuilds != 0 || rel.Images[0].OldestOpenDays != 0 || rel.Images[0].AvgFixDays != 0 {
+	if rel.Rebuilds != 0 || rel.Images[0].OldestOpenDays != 0 || rel.Images[0].AvgFixHours != 0 {
 		t.Fatalf("releases = %+v", rel)
 	}
 	findProject(t, s, "common")
@@ -342,5 +342,40 @@ func TestOverviewSnapshotSplitsByRepo(t *testing.T) {
 	}
 	if byOS["UBI 9"].OldestOpenDays != 5 {
 		t.Fatalf("ubi9 oldest_open_days = %d, want 5", byOS["UBI 9"].OldestOpenDays)
+	}
+}
+
+func TestOverviewFixTimeSplitsReleasedAndStagingAndSkipsPRs(t *testing.T) {
+	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
+	at := func(h int) time.Time { return now.Add(-time.Duration(h) * time.Hour) }
+	scans := []store.OverviewCveScan{
+		{Project: "ppg:staging:17:containers", Package: "img-s", Repo: "ubi9", Arch: "x86_64"},
+	}
+	periods := []store.OverviewCvePeriod{
+		{Project: "ppg:releases:17:containers", Package: "img-r", Repo: "ubi9", CveSince: at(100), CleanSince: at(52)}, // 48h
+		{Project: "ppg:releases:18:containers", Package: "img-r", Repo: "ubi8", CveSince: at(30), CleanSince: at(6)},  // 24h
+		{Project: "ppg:staging:17:containers", Package: "img-s", Repo: "ubi9", CveSince: at(10), CleanSince: at(4)},   // 6h
+		{Project: "PR:pr-101:ppg:staging:17:containers", Package: "img-p", Repo: "ubi9", CveSince: at(8), CleanSince: at(7)},
+		{Project: "ppg:devel:17:containers", Package: "img-d", Repo: "ubi9", CveSince: at(9), CleanSince: at(3)},
+	}
+
+	s := buildOverviewSnapshot("24h", now, nil, nil, scans, periods)
+
+	if s.FixTime.Released.Episodes != 2 || s.FixTime.Released.AvgHours != 36 {
+		t.Errorf("released = %+v, want 2 episodes averaging 36h", s.FixTime.Released)
+	}
+	if s.FixTime.Staging.Episodes != 1 || s.FixTime.Staging.AvgHours != 6 {
+		t.Errorf("staging = %+v, want 1 episode of 6h (PR and devel excluded)", s.FixTime.Staging)
+	}
+	img := findProject(t, s, "ppg:staging:17").Images[0]
+	if img.AvgFixHours != 6 {
+		t.Errorf("per-image avg_fix_hours = %v, want 6 (sub-day fixes must not round to 0)", img.AvgFixHours)
+	}
+}
+
+func TestOverviewFixTimeEmpty(t *testing.T) {
+	s := buildOverviewSnapshot("24h", time.Now(), nil, nil, nil, nil)
+	if s.FixTime.Released.Episodes != 0 || s.FixTime.Staging.Episodes != 0 {
+		t.Errorf("fix_time = %+v, want zero episodes", s.FixTime)
 	}
 }

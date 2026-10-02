@@ -73,13 +73,9 @@ export function useOverviewData(window: Ref<WindowKey>) {
   const totalHigh = computed(() => allImages.value.reduce((s, i) => s + i.high, 0))
   const affectedImageCount = computed(() =>
     allImages.value.filter(i => i.critical + i.high > 0).length)
-  const avgFixDays = computed(() => {
-    const days = allImages.value
-      .filter(i => i.critical + i.high > 0 && i.avg_fix_days > 0)
-      .map(i => i.avg_fix_days)
-    if (days.length === 0) return 0
-    return Math.round(days.reduce((a, b) => a + b) / days.length)
-  })
+  // Mean time to fix over every closed CVE episode, split by release stage
+  // (computed server-side; PR and devel images excluded).
+  const fixTime = computed(() => snapshot.value?.fix_time ?? null)
   const oldestOpenDays = computed(() =>
     allImages.value.reduce((m, i) => Math.max(m, i.oldest_open_days), 0))
   const rebuildBars = computed<RebuildBar[]>(() => {
@@ -112,7 +108,7 @@ export function useOverviewData(window: Ref<WindowKey>) {
   return {
     snapshot, loading, error,
     totalRebuilds, rebuildDeltaPct, topPackage, topRepo,
-    totalCritical, totalHigh, affectedImageCount, avgFixDays, oldestOpenDays,
+    totalCritical, totalHigh, affectedImageCount, fixTime, oldestOpenDays,
     rebuildBars, projects,
     rebuildsByCategory, openCvesByCategory,
   }

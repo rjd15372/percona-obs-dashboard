@@ -18,7 +18,7 @@ export interface OverviewImage {
   critical: number
   high: number
   oldest_open_days: number   // 0 = none open / unknown
-  avg_fix_days: number       // 0 = no closed episodes yet
+  avg_fix_hours: number      // mean of closed episodes; 0 = none yet
 }
 
 export interface OverviewProject {
@@ -28,6 +28,17 @@ export interface OverviewProject {
   images: OverviewImage[]
 }
 
+export interface OverviewFixStat {
+  avg_hours: number // 0 when episodes === 0
+  episodes: number
+}
+
+// CVE fix times by release stage; PR and devel images are excluded.
+export interface OverviewFixTime {
+  released: OverviewFixStat
+  staging: OverviewFixStat
+}
+
 export interface OverviewSnapshot {
   window: WindowKey
   generated_at: string
@@ -35,4 +46,5 @@ export interface OverviewSnapshot {
   top_repo?: OverviewCount
   projects: OverviewProject[]
   by_instance?: OverviewInstance[]
+  fix_time?: OverviewFixTime
 }

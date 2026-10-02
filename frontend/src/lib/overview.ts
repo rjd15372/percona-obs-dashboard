@@ -57,3 +57,15 @@ export function groupByCategory<T>(
     }))
     .filter(g => g.items.length > 0)
 }
+
+// Formats a CVE fix duration given in hours: "<1h", "6h", "2d", "2d 4h";
+// "—" when there is no data (0 or negative).
+export function formatFixHours(hours: number): string {
+  if (!(hours > 0)) return '—'
+  if (hours < 1) return '<1h'
+  const total = Math.round(hours)
+  if (total < 24) return `${total}h`
+  const d = Math.floor(total / 24)
+  const h = total % 24
+  return h === 0 ? `${d}d` : `${d}d ${h}h`
+}

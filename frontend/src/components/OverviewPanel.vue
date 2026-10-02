@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import type { WindowKey } from '../types/overview'
 import { useOverviewData } from '../composables/useOverviewData'
 import { useInstances } from '../composables/useInstances'
-import { PROJECT_ACCENTS } from '../lib/overview'
+import { PROJECT_ACCENTS, formatFixHours } from '../lib/overview'
 import StatCard from './StatCard.vue'
 import CategoryBreakdown from './CategoryBreakdown.vue'
 import RebuildBarChart from './RebuildBarChart.vue'
@@ -26,7 +26,7 @@ const win = computed<WindowKey>({
 const {
   snapshot, loading, error,
   totalRebuilds, rebuildDeltaPct, topPackage, topRepo,
-  totalCritical, totalHigh, affectedImageCount, avgFixDays, oldestOpenDays,
+  totalCritical, totalHigh, affectedImageCount, fixTime, oldestOpenDays,
   rebuildBars, projects,
   rebuildsByCategory, openCvesByCategory,
 } = useOverviewData(win)
@@ -190,9 +190,19 @@ const cveSegments = computed(() => {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5"/><path d="M9 2h6"/></svg>
           </template>
           <template #value>
-            <div class="flex items-baseline gap-[10px]">
-              <span class="text-[34px] font-extrabold leading-none tracking-[-0.02em] tabular-nums">{{ avgFixDays || '—' }}</span>
-              <span v-if="avgFixDays" class="text-[14px] text-text-muted">days</span>
+            <div class="flex flex-col gap-[6px]">
+              <div
+                v-for="row in [
+                  { label: 'Released', stat: fixTime?.released },
+                  { label: 'Staging', stat: fixTime?.staging },
+                ]"
+                :key="row.label"
+                class="flex items-baseline gap-[8px]"
+              >
+                <span class="text-[11px] font-bold uppercase tracking-[0.05em] text-text-muted w-[68px]">{{ row.label }}</span>
+                <span class="text-[22px] font-extrabold leading-none tabular-nums">{{ formatFixHours(row.stat?.avg_hours ?? 0) }}</span>
+                <span v-if="row.stat?.episodes" class="text-[11.5px] text-text-muted">{{ row.stat.episodes }} fix{{ row.stat.episodes !== 1 ? 'es' : '' }}</span>
+              </div>
             </div>
           </template>
           <template #footnote>

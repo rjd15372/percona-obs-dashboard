@@ -55,6 +55,18 @@ func logicalProject(project string) string {
 	return ""
 }
 
+// meanHours returns the arithmetic mean of hours, or 0 for none.
+func meanHours(hours []float64) float64 {
+	if len(hours) == 0 {
+		return 0
+	}
+	sum := 0.0
+	for _, h := range hours {
+		sum += h
+	}
+	return sum / float64(len(hours))
+}
+
 // tierRow builds the Overview row name for a tier version root and its
 // subproject tail: containers are absorbed into the version row; any other
 // direct subproject gets its own row.
@@ -74,14 +86,28 @@ type OverviewCount struct {
 }
 
 type OverviewImage struct {
-	Project        string `json:"project"` // raw OBS project (logical rows can aggregate several)
-	Name           string `json:"name"`
-	Repo           string `json:"repo"`
-	BaseOS         string `json:"base_os"`
-	Critical       int    `json:"critical"`
-	High           int    `json:"high"`
-	OldestOpenDays int    `json:"oldest_open_days"` // 0 = none open / unknown
-	AvgFixDays     int    `json:"avg_fix_days"`     // 0 = no closed episodes yet
+	Project        string  `json:"project"` // raw OBS project (logical rows can aggregate several)
+	Name           string  `json:"name"`
+	Repo           string  `json:"repo"`
+	BaseOS         string  `json:"base_os"`
+	Critical       int     `json:"critical"`
+	High           int     `json:"high"`
+	OldestOpenDays int     `json:"oldest_open_days"` // 0 = none open / unknown
+	AvgFixHours    float64 `json:"avg_fix_hours"`    // mean of closed episodes; 0 = none yet
+}
+
+// OverviewFixStat is the mean time from first vulnerable scan to clean scan
+// over every closed CVE episode of a group of images.
+type OverviewFixStat struct {
+	AvgHours float64 `json:"avg_hours"` // 0 when Episodes == 0
+	Episodes int     `json:"episodes"`
+}
+
+// OverviewFixTime splits CVE fix times by release stage. PR and devel
+// projects are excluded: they are in development.
+type OverviewFixTime struct {
+	Released OverviewFixStat `json:"released"`
+	Staging  OverviewFixStat `json:"staging"`
 }
 
 type OverviewProject struct {
@@ -98,6 +124,7 @@ type OverviewSnapshot struct {
 	TopRepo                    *OverviewCount     `json:"top_repo,omitempty"`
 	Projects                   []OverviewProject  `json:"projects"`
 	ByInstance                 []OverviewInstance `json:"by_instance"`
+	FixTime                    OverviewFixTime    `json:"fix_time"`
 }
 
 // OverviewInstance is one instance's live target tally.
@@ -118,8 +145,9 @@ var overviewWindows = map[string]time.Duration{
 // buildOverviewSnapshot assembles the snapshot from raw store rows.
 // Aggregation rules: rebuilds/top_package per logical project, top_repo global,
 // per-image CVE counts as max across archs, oldest_open_days from the oldest
-// non-nil CveSince among vulnerable archs, avg_fix_days as the rounded mean of
-// the image's closed episodes.
+// non-nil CveSince among vulnerable archs, avg_fix_hours as the mean of the
+// image's closed episodes, and fix_time as the mean over every closed episode
+// of released and staging images (PR and devel excluded).
 func buildOverviewSnapshot(window string, now time.Time,
 	cur, prev []store.BuildCompletion, scans []store.OverviewCveScan, periods []store.OverviewCvePeriod,
 ) OverviewSnapshot {
@@ -189,21 +217,25 @@ func buildOverviewSnapshot(window string, now time.Time,
 		imgAt[k].OldestOpenDays = int(now.Sub(*since).Hours() / 24)
 	}
 
-	fixDays := map[imgKey][]float64{}
+	fixHours := map[imgKey][]float64{}
+	var released, staging []float64
 	for _, p := range periods {
+		hours := p.CleanSince.Sub(p.CveSince).Hours()
 		k := imgKey{p.Project, p.Package, p.Repo}
-		fixDays[k] = append(fixDays[k], p.CleanSince.Sub(p.CveSince).Hours()/24)
+		fixHours[k] = append(fixHours[k], hours)
+		switch logical := logicalProject(p.Project); {
+		case logical == "ppg:releases":
+			released = append(released, hours)
+		case strings.HasPrefix(logical, "ppg:staging:"):
+			staging = append(staging, hours)
+		}
 	}
-	for k, days := range fixDays {
+	for k, hours := range fixHours {
 		img, ok := imgAt[k]
 		if !ok {
 			continue // period for an image with no current scan row
 		}
-		sum := 0.0
-		for _, d := range days {
-			sum += d
-		}
-		img.AvgFixDays = int(sum/float64(len(days)) + 0.5)
+		img.AvgFixHours = meanHours(hours)
 	}
 
 	for k, img := range imgAt {
@@ -247,6 +279,10 @@ func buildOverviewSnapshot(window string, now time.Time,
 		GeneratedAt:                now.Format(time.RFC3339),
 		PreviousWindowRebuildTotal: prevTotal,
 		Projects:                   projects,
+		FixTime: OverviewFixTime{
+			Released: OverviewFixStat{AvgHours: meanHours(released), Episodes: len(released)},
+			Staging:  OverviewFixStat{AvgHours: meanHours(staging), Episodes: len(staging)},
+		},
 	}
 	var topRepo string
 	for name, n := range repoCount {
