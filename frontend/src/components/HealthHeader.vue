@@ -15,6 +15,7 @@ const unresolvedCount = computed(() => props.packages.filter(p => p.rollup_state
 const blockedCount = computed(() => props.packages.filter(p => p.rollup_state === 'blocked').length)
 const buildingCount = computed(() => props.packages.filter(p => p.rollup_state === 'building').length)
 const finishingCount = computed(() => props.packages.filter(p => p.rollup_state === 'finished').length)
+const scheduledCount = computed(() => props.packages.filter(p => p.rollup_state === 'scheduled').length)
 const attentionCount = computed(() => total.value - okCount.value)
 const progressWidth = computed(() => total.value > 0 ? Math.round((okCount.value / total.value) * 100) : 0)
 const allGreen = computed(() => total.value > 0 && okCount.value === total.value)
@@ -31,6 +32,7 @@ const breakdown = computed(() => {
   if (blockedCount.value > 0) items.push({ count: blockedCount.value, label: 'blocked', states: ['blocked'], color: 'var(--blocked)', bg: 'var(--blocked-tint)' })
   if (buildingCount.value > 0) items.push({ count: buildingCount.value, label: 'building', states: ['building'], color: 'var(--info)', bg: 'var(--info-tint)' })
   if (finishingCount.value > 0) items.push({ count: finishingCount.value, label: 'finishing', states: ['finished'], color: 'var(--warn)', bg: 'var(--warn-tint)' })
+  if (scheduledCount.value > 0) items.push({ count: scheduledCount.value, label: 'scheduled', states: ['scheduled'], color: 'var(--info)', bg: 'var(--info-tint)' })
   return items
 })
 
