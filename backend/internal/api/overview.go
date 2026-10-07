@@ -17,8 +17,8 @@ import (
 // to: tier version roots (ppg:devel:<V>, ppg:staging:<V>) absorb their
 // :containers:* subprojects; any other direct subproject (extras, tde, …)
 // is its own row (absorbing its subtree) — matching the version selector's
-// <V>:<sub> granularity. The common trees, the releases tree, and each PR
-// collapse to one row each. The legacy two-tier shape ppg:<V> maps onto the
+// <V>:<sub> granularity, and the releases tree (ppg:releases:<V>) splits the
+// same way. The common trees and each PR collapse to one row each. The legacy two-tier shape ppg:<V> maps onto the
 // staging row — staging is the renamed continuation of ppg:<V>, so
 // pre-migration duration/event rows still inside the stats windows merge
 // into the staging rows instead of rendering ghost sections. Unknown shapes
@@ -40,9 +40,7 @@ func logicalProject(project string) string {
 		switch rel[1] {
 		case "common":
 			return "ppg:common"
-		case "releases":
-			return "ppg:releases"
-		case "devel", "staging":
+		case "releases", "devel", "staging":
 			if len(rel) < 3 {
 				return ""
 			}
@@ -224,7 +222,7 @@ func buildOverviewSnapshot(window string, now time.Time,
 		k := imgKey{p.Project, p.Package, p.Repo}
 		fixHours[k] = append(fixHours[k], hours)
 		switch logical := logicalProject(p.Project); {
-		case logical == "ppg:releases":
+		case strings.HasPrefix(logical, "ppg:releases:"):
 			released = append(released, hours)
 		case strings.HasPrefix(logical, "ppg:staging:"):
 			staging = append(staging, hours)

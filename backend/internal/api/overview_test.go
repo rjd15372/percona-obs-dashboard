@@ -34,7 +34,12 @@ func TestLogicalProject(t *testing.T) {
 		{"ppg:common", "ppg:common"},
 		{"ppg:common:deps", "ppg:common"},
 		{"common:containers:ubi8", "common"},
-		{"ppg:releases:17:containers:ubi9", "ppg:releases"},
+		// releases split per version like the tiers: containers absorbed,
+		// other subprojects get their own row, the bare root is excluded.
+		{"ppg:releases:17", "ppg:releases:17"},
+		{"ppg:releases:17:containers:ubi9", "ppg:releases:17"},
+		{"ppg:releases:18:tarballs:ssl3", "ppg:releases:18:tarballs"},
+		{"ppg:releases", ""},
 		{"PR:pr-124:ppg:staging:16:extras", "PR:pr-124"},
 		{"PR:pr-33:ppg:18:containers:ubi9", "PR:pr-33"},
 		{"isv:other:ppg:17", ""},
@@ -90,7 +95,7 @@ func TestOverviewSnapshotBuilder(t *testing.T) {
 	if p17.Images[0].OldestOpenDays != 34 || p17.Images[0].AvgFixHours != 240 { // mean(9d,11d)=10d
 		t.Fatalf("img-x ages = %+v", p17.Images[0])
 	}
-	rel := findProject(t, s, "ppg:releases")
+	rel := findProject(t, s, "ppg:releases:17")
 	if rel.Rebuilds != 0 || rel.Images[0].OldestOpenDays != 0 || rel.Images[0].AvgFixHours != 0 {
 		t.Fatalf("releases = %+v", rel)
 	}
@@ -353,8 +358,8 @@ func TestOverviewFixTimeSplitsReleasedAndStagingAndSkipsPRs(t *testing.T) {
 	}
 	periods := []store.OverviewCvePeriod{
 		{Project: "ppg:releases:17:containers", Package: "img-r", Repo: "ubi9", CveSince: at(100), CleanSince: at(52)}, // 48h
-		{Project: "ppg:releases:18:containers", Package: "img-r", Repo: "ubi8", CveSince: at(30), CleanSince: at(6)},  // 24h
-		{Project: "ppg:staging:17:containers", Package: "img-s", Repo: "ubi9", CveSince: at(10), CleanSince: at(4)},   // 6h
+		{Project: "ppg:releases:18:containers", Package: "img-r", Repo: "ubi8", CveSince: at(30), CleanSince: at(6)},   // 24h
+		{Project: "ppg:staging:17:containers", Package: "img-s", Repo: "ubi9", CveSince: at(10), CleanSince: at(4)},    // 6h
 		{Project: "PR:pr-101:ppg:staging:17:containers", Package: "img-p", Repo: "ubi9", CveSince: at(8), CleanSince: at(7)},
 		{Project: "ppg:devel:17:containers", Package: "img-d", Repo: "ubi9", CveSince: at(9), CleanSince: at(3)},
 	}
